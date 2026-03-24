@@ -1,0 +1,412 @@
+import { useEffect, useMemo, useState } from "react";
+import PageHeader from "../components/layout/PageHeader";
+import AIInsightPanel from "../components/shared/AIInsightPanel";
+import EmptyState from "../components/shared/EmptyState";
+import SectionCard from "../components/shared/SectionCard";
+import StatusBadge from "../components/shared/StatusBadge";
+import SummaryPanel from "../components/shared/SummaryPanel";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import {
+  getRetirementType,
+  listRetirementProviders,
+  listRetirementTypes,
+} from "../lib/domain/retirement";
+import {
+  createRetirementAssetWithAccount,
+  listRetirementAccounts,
+} from "../lib/supabase/retirementData";
+
+function formatCategoryLabel(majorCategory) {
+  const labels = {
+    employer_plan: "Employer Plan",
+    ira: "IRA",
+    pension: "Pension",
+    special_case: "Legacy / Special",
+  };
+
+  return labels[majorCategory] || "Retirement";
+}
+
+function getStatusTone(status) {
+  if (status === "active") return "good";
+  if (status === "inactive" || status === "terminated" || status === "frozen") return "warning";
+  return "info";
+}
+
+const RETIREMENT_TYPES = listRetirementTypes();
+const RETIREMENT_PROVIDERS = listRetirementProviders();
+
+const DEFAULT_FORM = {
+  retirement_type_key: "401k",
+  plan_name: "",
+  institution_name: "",
+  provider_key: "",
+  account_owner: "",
+  participant_name: "",
+  employer_name: "",
+  plan_status: "active",
+};
+
+export default function RetirementHubPage({ onNavigate }) {
+  const { householdState } = usePlatformShellData();
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState(DEFAULT_FORM);
+
+  useEffect(() => {
+    if (householdState.loading) return;
+    if (!householdState.context.householdId) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function loadAccounts() {
+      setLoading(true);
+      const result = await listRetirementAccounts(householdState.context.householdId);
+      if (!active) return;
+      setAccounts(result.data || []);
+      setLoadError(result.error?.message || "");
+      setLoading(false);
+    }
+
+    loadAccounts();
+    return () => {
+      active = false;
+    };
+  }, [householdState.loading, householdState.context.householdId]);
+
+  const summaryItems = useMemo(() => {
+    const majorCategoryCounts = accounts.reduce(
+      (accumulator, account) => {
+        const retirementType = getRetirementType(account.retirement_type_key);
+        const category = retirementType?.major_category || "other";
+        accumulator[category] = (accumulator[category] || 0) + 1;
+        return accumulator;
+      },
+      {}
+    );
+
+    const activeCount = accounts.filter((account) => account.plan_status === "active").length;
+
+    return [
+      {
+        label: "Retirement Accounts",
+        value: accounts.length,
+        helper: "Live retirement module records",
+      },
+      {
+        label: "Employer Plans",
+        value: majorCategoryCounts.employer_plan || 0,
+        helper: "401(k), 403(b), TSP, and related plans",
+      },
+      {
+        label: "IRAs",
+        value: majorCategoryCounts.ira || 0,
+        helper: "Traditional, Roth, rollover, and inherited IRA records",
+      },
+      {
+        label: "Pensions",
+        value: majorCategoryCounts.pension || 0,
+        helper: "Defined benefit and pension-style records",
+      },
+      {
+        label: "Active",
+        value: activeCount,
+        helper: `${accounts.length - activeCount} non-active records`,
+      },
+    ];
+  }, [accounts]);
+
+  const starterInsightCounts = useMemo(() => {
+    return accounts.reduce(
+      (accumulator, account) => {
+        const retirementType = getRetirementType(account.retirement_type_key);
+        const status = String(account.plan_status || "").toLowerCase();
+        if (retirementType?.benefit_based || account.is_benefit_based) {
+          accumulator.pensionStyle += 1;
+        }
+        if (
+          retirementType?.employer_sponsored &&
+          ["inactive", "terminated", "frozen", "payout_only"].includes(status)
+        ) {
+          accumulator.rolloverCandidates += 1;
+        }
+        return accumulator;
+      },
+      {
+        pensionStyle: 0,
+        rolloverCandidates: 0,
+      }
+    );
+  }, [accounts]);
+
+  async function refreshAccounts() {
+    if (!householdState.context.householdId) return;
+    const result = await listRetirementAccounts(householdState.context.householdId);
+    setAccounts(result.data || []);
+    setLoadError(result.error?.message || "");
+  }
+
+  async function handleCreateAccount(event) {
+    event.preventDefault();
+    if (!householdState.context.householdId || !form.retirement_type_key) return;
+
+    setCreating(true);
+    setCreateError("");
+
+    const result = await createRetirementAssetWithAccount({
+      household_id: householdState.context.householdId,
+      retirement_type_key: form.retirement_type_key,
+      plan_name: form.plan_name,
+      institution_name: form.institution_name,
+      provider_key: form.provider_key || null,
+      account_owner: form.account_owner,
+      participant_name: form.participant_name,
+      employer_name: form.employer_name,
+      plan_status: form.plan_status,
+    });
+
+    if (result.error) {
+      setCreateError(result.error.message || "Retirement account could not be created.");
+      setCreating(false);
+      return;
+    }
+
+    await refreshAccounts();
+    setForm(DEFAULT_FORM);
+    setCreating(false);
+  }
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Retirement"
+        title="Retirement Hub"
+        description="Live retirement registry for employer plans, IRAs, pensions, and future continuity intelligence."
+        actions={
+          <button
+            onClick={() => refreshAccounts()}
+            style={{
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: "10px",
+              padding: "10px 14px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Refresh Retirement Data
+          </button>
+        }
+      />
+
+      <SummaryPanel items={summaryItems} />
+
+      <div
+        style={{
+          marginTop: "24px",
+          display: "grid",
+          gridTemplateColumns: "1.35fr 1fr",
+          gap: "18px",
+          alignItems: "start",
+        }}
+      >
+        <SectionCard title="Retirement Accounts" subtitle="Live household retirement records linked into the broader platform asset layer.">
+          {householdState.loading || loading ? (
+            <div style={{ color: "#64748b" }}>Loading retirement accounts...</div>
+          ) : loadError ? (
+            <EmptyState title="Retirement data unavailable" description={loadError} />
+          ) : accounts.length === 0 ? (
+            <EmptyState
+              title="No retirement accounts yet"
+              description="Create the first retirement account to activate the Retirement Hub and prepare the module for documents, snapshots, analytics, and positions."
+            />
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {accounts.map((account) => {
+                const retirementType = getRetirementType(account.retirement_type_key);
+                const linkedAsset = account.assets || null;
+
+                return (
+                  <button
+                    key={account.id}
+                    onClick={() => onNavigate(`/retirement/detail/${account.id}`)}
+                    style={{
+                      textAlign: "left",
+                      width: "100%",
+                      border: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                      borderRadius: "14px",
+                      padding: "16px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+                          {account.plan_name || linkedAsset?.asset_name || "Retirement Account"}
+                        </div>
+                        <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6" }}>
+                          {retirementType?.display_name || account.retirement_type_key}
+                          {" | "}
+                          {account.institution_name || linkedAsset?.institution_name || "Institution pending"}
+                        </div>
+                      </div>
+                      <StatusBadge label={account.plan_status || "unknown"} tone={getStatusTone(account.plan_status)} />
+                    </div>
+
+                    <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <StatusBadge label={formatCategoryLabel(retirementType?.major_category)} tone="info" />
+                      <StatusBadge label={account.is_account_based ? "Account-Based" : "Not Account-Based"} tone="neutral" />
+                      <StatusBadge label={account.is_benefit_based ? "Benefit-Based" : "Not Benefit-Based"} tone="neutral" />
+                      <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: "10px",
+                        color: "#475569",
+                      }}
+                    >
+                      <div><strong>Owner:</strong> {account.account_owner || "Limited visibility"}</div>
+                      <div><strong>Participant:</strong> {account.participant_name || "Limited visibility"}</div>
+                      <div><strong>Employer:</strong> {account.employer_name || "Limited visibility"}</div>
+                      <div><strong>Asset Subcategory:</strong> {linkedAsset?.asset_subcategory || account.retirement_type_key}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </SectionCard>
+
+        <div style={{ display: "grid", gap: "18px" }}>
+          <SectionCard title="Create Retirement Account" subtitle="Minimal live create flow that writes both the generic asset row and the linked retirement account row.">
+            <form onSubmit={handleCreateAccount} style={{ display: "grid", gap: "12px" }}>
+              <select
+                value={form.retirement_type_key}
+                onChange={(event) => setForm((current) => ({ ...current, retirement_type_key: event.target.value }))}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              >
+                {RETIREMENT_TYPES.map((type) => (
+                  <option key={type.retirement_type_key} value={type.retirement_type_key}>
+                    {type.display_name} | {formatCategoryLabel(type.major_category)}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={form.plan_name}
+                onChange={(event) => setForm((current) => ({ ...current, plan_name: event.target.value }))}
+                placeholder="Plan or account name"
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+              />
+              <select
+                value={form.provider_key}
+                onChange={(event) => setForm((current) => ({ ...current, provider_key: event.target.value }))}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              >
+                <option value="">No provider registry match yet</option>
+                {RETIREMENT_PROVIDERS.map((provider) => (
+                  <option key={provider.institution_key} value={provider.institution_key}>
+                    {provider.display_name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={form.institution_name}
+                onChange={(event) => setForm((current) => ({ ...current, institution_name: event.target.value }))}
+                placeholder="Institution name"
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+              />
+              <input
+                value={form.account_owner}
+                onChange={(event) => setForm((current) => ({ ...current, account_owner: event.target.value }))}
+                placeholder="Account owner"
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+              />
+              <input
+                value={form.participant_name}
+                onChange={(event) => setForm((current) => ({ ...current, participant_name: event.target.value }))}
+                placeholder="Participant name"
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+              />
+              <input
+                value={form.employer_name}
+                onChange={(event) => setForm((current) => ({ ...current, employer_name: event.target.value }))}
+                placeholder="Employer name"
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
+              />
+              <select
+                value={form.plan_status}
+                onChange={(event) => setForm((current) => ({ ...current, plan_status: event.target.value }))}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              >
+                <option value="active">active</option>
+                <option value="inactive">inactive</option>
+                <option value="terminated">terminated</option>
+                <option value="frozen">frozen</option>
+                <option value="payout_only">payout_only</option>
+              </select>
+              <button
+                type="submit"
+                disabled={creating || !householdState.context.householdId}
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#0f172a",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {creating ? "Creating Retirement Account..." : "Create Retirement Account"}
+              </button>
+              {createError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{createError}</div> : null}
+              {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
+            </form>
+          </SectionCard>
+
+          <SectionCard title="Retirement Readiness">
+            <AIInsightPanel
+              title="Foundation Readiness"
+              summary={
+                accounts.length > 0
+                  ? "Retirement records are now live in the platform shell and ready for document intake, snapshots, starter analytics, and position-level enrichment."
+                  : "The retirement module is live-ready but still waiting for its first account record."
+              }
+              bullets={[
+                "Retirement account creation now writes both the generic asset row and the deep retirement row.",
+                `Pension-style accounts detected: ${starterInsightCounts.pensionStyle}`,
+                `Starter rollover review candidates: ${starterInsightCounts.rolloverCandidates}`,
+                "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",
+              ]}
+            />
+          </SectionCard>
+        </div>
+      </div>
+
+      {import.meta.env.DEV ? (
+        <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
+          Retirement Debug: household={householdState.context.householdId || "none"} | accounts={accounts.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,1768 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  answerHouseholdQuestion,
+  buildHouseholdRiskContinuityMap,
+  buildHouseholdReviewReport,
+} from "../lib/domain/platformIntelligence";
+import {
+  annotateReviewWorkflowItems,
+  buildHouseholdReviewDigest,
+  getHouseholdReviewDigestSnapshot,
+  getHouseholdReviewWorkflowState,
+  REVIEW_WORKFLOW_STATUSES,
+  saveHouseholdReviewDigestSnapshot,
+  saveHouseholdReviewWorkflowState,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { executeSmartAction } from "../lib/navigation/smartActions";
+
+function buttonStyle(primary = false) {
+  return {
+    padding: "10px 14px",
+    borderRadius: "12px",
+    border: primary ? "none" : "1px solid rgba(255,255,255,0.08)",
+    background: primary ? "#f8fafc" : "rgba(255,255,255,0.04)",
+    color: primary ? "#020617" : "#e2e8f0",
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: "13px",
+  };
+}
+
+function reportButtonStyle(active = false, primary = false) {
+  if (primary) return buttonStyle(true);
+  return {
+    ...buttonStyle(false),
+    border: active ? "1px solid rgba(147,197,253,0.45)" : "1px solid rgba(255,255,255,0.08)",
+    background: active ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.04)",
+    color: active ? "#dbeafe" : "#e2e8f0",
+  };
+}
+
+function displayValue(value) {
+  return value === null || value === undefined || value === "" ? "--" : value;
+}
+
+function parseDisplayNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parsed = Number(String(value).replace(/[$,%\s,]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "--";
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+function getContinuityStatus(score) {
+  if (score >= 80) {
+    return {
+      label: "Strong",
+      explanation: "Core continuity reads are connected across documents, access, and key records.",
+    };
+  }
+
+  if (score >= 55) {
+    return {
+      label: "Moderate",
+      explanation: "Coverage is usable, but several records still need validation or completion.",
+    };
+  }
+
+  return {
+    label: "At Risk",
+    explanation: "Important continuity reads are still missing across assets, statements, or charge visibility.",
+  };
+}
+
+function buildActionSignals(policyRows = [], fallbackPrompts = []) {
+  const signals = [];
+
+  policyRows.forEach((policy) => {
+    const label = policy.product || policy.carrier || "Saved policy";
+    const missingFields = Array.isArray(policy.missing_fields) ? policy.missing_fields : [];
+    const keyFinancialGaps = missingFields.filter((field) =>
+      ["accumulation_value", "cash_value", "cash_surrender_value", "death_benefit", "loan_balance"].includes(field)
+    );
+
+    if (keyFinancialGaps.length > 0) {
+      signals.push({
+        id: `${policy.policy_id || label}-financial-gaps`,
+        label: `Recover ${keyFinancialGaps.slice(0, 3).join(", ")}`,
+        summary: `${label}: recover ${keyFinancialGaps.slice(0, 3).join(", ")}.`,
+        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+      });
+    }
+
+    if (policy.coi_confidence === "weak") {
+      signals.push({
+        id: `${policy.policy_id || label}-coi-review`,
+        label: "Validate COI and charges",
+        summary: `${label}: validate COI and charge visibility.`,
+        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+        action_key: "open_insurance_hub",
+      });
+    }
+
+    if (!policy.latest_statement_date) {
+      signals.push({
+        id: `${policy.policy_id || label}-statement-date`,
+        label: "Resolve latest statement",
+        summary: `${label}: resolve the latest statement date.`,
+        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+        action_key: "open_insurance_hub",
+      });
+    }
+  });
+
+  const promptSignals = fallbackPrompts.map((item, index) => ({
+    id: `fallback-prompt-${index}`,
+    label: "Open recommended review",
+    summary: item,
+    route: resolveActionSignalRoute(item),
+  }));
+
+  const uniqueSignals = [];
+  const seen = new Set();
+  [...signals, ...promptSignals].forEach((item) => {
+    const key = `${item?.label || ""}|${item?.summary || ""}|${item?.route || ""}`;
+    if (!item || seen.has(key)) return;
+    seen.add(key);
+    uniqueSignals.push(item);
+  });
+
+  return uniqueSignals.slice(0, 5);
+}
+
+function buildDependencyActionSignals(dependencySignals = null) {
+  const candidates = dependencySignals?.action_candidates || [];
+  const flags = dependencySignals?.dependency_flags || [];
+
+  return flags.slice(0, 3).map((flag, index) => {
+    const matchedCandidate =
+      candidates.find((candidate) => candidate.source_flag === flag.key && candidate.route === flag.route) ||
+      candidates.find((candidate) => candidate.source_flag === flag.key) ||
+      null;
+
+    return {
+      id: `dependency-${flag.key}-${index}`,
+      label: flag.action_label || matchedCandidate?.label || flag.title || "Open review",
+      summary: flag.explanation,
+      route: flag.route || matchedCandidate?.route || resolveActionSignalRoute(flag.explanation),
+      action_key: matchedCandidate?.action_key || flag.suggested_smart_action_keys?.[0] || null,
+      severity: flag.severity || "moderate",
+    };
+  });
+}
+
+function resolveActionSignalRoute(signal = "") {
+  const text = String(signal || "").toLowerCase();
+
+  if (text.includes("homeowners") || text.includes("property") || text.includes("mortgage")) {
+    return "/property";
+  }
+  if (text.includes("retirement")) {
+    return "/retirement";
+  }
+  if (text.includes("banking") || text.includes("portal") || text.includes("access")) {
+    return text.includes("portal") || text.includes("access") ? "/portals" : "/banking";
+  }
+  if (text.includes("estate") || text.includes("trust") || text.includes("will")) {
+    return "/estate";
+  }
+  if (text.includes("health")) {
+    return "/insurance/health";
+  }
+  if (text.includes("auto")) {
+    return "/insurance/auto";
+  }
+  if (
+    text.includes("policy") ||
+    text.includes("coi") ||
+    text.includes("charge") ||
+    text.includes("statement") ||
+    text.includes("insurance")
+  ) {
+    return "/insurance";
+  }
+
+  return "/dashboard";
+}
+
+function getModuleStatus(count) {
+  if (count >= 3) return "Strong";
+  if (count >= 1) return "Moderate";
+  return "Weak";
+}
+
+function getStatusColors(status) {
+  if (status === "Strong") return { color: "#bbf7d0", background: "rgba(34,197,94,0.12)" };
+  if (status === "Moderate") return { color: "#fde68a", background: "rgba(245,158,11,0.12)" };
+  if (status === "Weak") return { color: "#fdba74", background: "rgba(249,115,22,0.12)" };
+  if (status === "At Risk") return { color: "#fca5a5", background: "rgba(239,68,68,0.12)" };
+  return { color: "#cbd5e1", background: "rgba(148,163,184,0.12)" };
+}
+
+function getReadableModuleStatus(scoreLikeValue, goodThreshold = 3, moderateThreshold = 1) {
+  if (scoreLikeValue >= goodThreshold) return "Strong";
+  if (scoreLikeValue >= moderateThreshold) return "Moderate";
+  return "Weak";
+}
+
+function buildAiIntroModuleCards({
+  savedPolicyCount = 0,
+  assetCounts = {},
+  propertySummary = {},
+  missingStatementCount = 0,
+  weakPolicyRows = [],
+}) {
+  const propertyCount = propertySummary.propertyCount || 0;
+  const mortgageCount = assetCounts.mortgage || 0;
+  const homeownersCount = propertySummary.homeownersCount || assetCounts.homeowners || 0;
+  const retirementCount = assetCounts.retirement || 0;
+  const healthCount = assetCounts.health_insurance || 0;
+  const autoCount = assetCounts.auto_insurance || 0;
+  const bankingCount = assetCounts.banking || 0;
+  const estateCount = assetCounts.estate || 0;
+
+  const homeStatus =
+    propertyCount > 0 && homeownersCount > 0
+      ? "Strong"
+      : propertyCount > 0 || mortgageCount > 0 || homeownersCount > 0
+        ? "Moderate"
+        : "Weak";
+  const lifeStatus =
+    savedPolicyCount > 0 && weakPolicyRows.length === 0 && missingStatementCount === 0
+      ? "Strong"
+      : savedPolicyCount > 0
+        ? "Moderate"
+        : "Weak";
+
+  return [
+    {
+      key: "home",
+      label: "Home",
+      route: "/property",
+      status: homeStatus,
+      summary:
+        homeStatus === "Strong"
+          ? "Property, mortgage, and homeowners protection are visible enough to review together."
+          : homeStatus === "Moderate"
+            ? "Some home records are visible, but the property stack is not fully connected yet."
+            : "Home visibility is still thin, so housing protection and debt are not easy to review together.",
+      metric: `${propertyCount} properties`,
+    },
+    {
+      key: "life",
+      label: "Life Insurance",
+      route: "/insurance",
+      status: lifeStatus,
+      summary:
+        lifeStatus === "Strong"
+          ? "Life policy continuity is readable and current statement support looks cleaner."
+          : lifeStatus === "Moderate"
+            ? "Life insurance is visible, but some policies still need better statement or charge support."
+            : "Life insurance records are not strong enough yet for a confident household read.",
+      metric: `${savedPolicyCount} policies`,
+    },
+    {
+      key: "health",
+      label: "Health",
+      route: "/insurance/health",
+      status: getReadableModuleStatus(healthCount),
+      summary:
+        healthCount > 0
+          ? "Health-plan records are present, but they still need deeper continuity and coverage review."
+          : "No meaningful health-plan visibility is loaded yet.",
+      metric: `${healthCount} plans`,
+    },
+    {
+      key: "auto",
+      label: "Auto",
+      route: "/insurance/auto",
+      status: getReadableModuleStatus(autoCount),
+      summary:
+        autoCount > 0
+          ? "Auto coverage is in the household record set, but policy depth can still improve."
+          : "Auto coverage is not clearly visible yet.",
+      metric: `${autoCount} auto policies`,
+    },
+    {
+      key: "retirement",
+      label: "Retirement",
+      route: "/retirement",
+      status: getReadableModuleStatus(retirementCount),
+      summary:
+        retirementCount > 0
+          ? "Retirement assets are present, but beneficiary and document depth still matter."
+          : "Retirement visibility is still limited, so long-term planning is not fully anchored here yet.",
+      metric: `${retirementCount} retirement accounts`,
+    },
+    {
+      key: "banking",
+      label: "Banking",
+      route: "/banking",
+      status: getReadableModuleStatus(bankingCount),
+      summary:
+        bankingCount > 0
+          ? "Banking records are visible, but access and portal continuity still matter."
+          : "Banking visibility is still light.",
+      metric: `${bankingCount} banking records`,
+    },
+    {
+      key: "estate",
+      label: "Estate",
+      route: "/estate",
+      status: getReadableModuleStatus(estateCount),
+      summary:
+        estateCount > 0
+          ? "Estate records exist, but document depth will determine how dependable the handoff is."
+          : "Estate planning records are still missing or too thin to rely on.",
+      metric: `${estateCount} estate records`,
+    },
+  ];
+}
+
+function buildAiHouseholdIntro({
+  continuityPercent,
+  continuityStatus,
+  moduleCards,
+  totalIssues,
+  totalAssets,
+}) {
+  const strongCount = moduleCards.filter((item) => item.status === "Strong").length;
+  const weakCount = moduleCards.filter((item) => item.status === "Weak").length;
+  const moderateCount = moduleCards.filter((item) => item.status === "Moderate").length;
+  const strongestAreas = moduleCards
+    .filter((item) => item.status === "Strong")
+    .slice(0, 3)
+    .map((item) => item.label.toLowerCase());
+  const weakestAreas = moduleCards
+    .filter((item) => item.status === "Weak")
+    .slice(0, 3)
+    .map((item) => item.label.toLowerCase());
+
+  let headline = "Your household picture is still being built.";
+  if (continuityPercent >= 80) {
+    headline = "Your household picture looks well connected at first glance.";
+  } else if (continuityPercent >= 55) {
+    headline = "Your household picture is usable, but still has a few weak spots.";
+  } else if (continuityPercent > 0) {
+    headline = "Your household picture is still too fragmented for a clean read.";
+  }
+
+  const body = [
+    totalAssets > 0
+      ? `Right now VaultedShield can see ${totalAssets} tracked household records across your major financial and protection areas.`
+      : "Right now VaultedShield is still waiting on enough household records to give a dependable full-picture read.",
+    strongestAreas.length > 0
+      ? `The strongest areas currently look like ${strongestAreas.join(", ")}.`
+      : "No area is fully strong yet, so this should still be read as a developing household file.",
+    weakestAreas.length > 0
+      ? `The weakest areas currently look like ${weakestAreas.join(", ")}, which is where missing records or weak support are most likely slowing the read down.`
+      : moderateCount > 0
+        ? "Most remaining gaps are moderate rather than severe, which means the foundation is there but still needs cleanup."
+        : "No major weak area is dominating the read right now.",
+    totalIssues > 0
+      ? `${totalIssues} active issues or weak-support signals are currently limiting a cleaner household-level read.`
+      : "No major review blockers are standing out from the current household evidence.",
+    `Overall this reads as ${continuityStatus.label.toLowerCase()} continuity support.`,
+  ].join(" ");
+
+  return {
+    headline,
+    body,
+    strongCount,
+    moderateCount,
+    weakCount,
+  };
+}
+
+function renderReportFactsGrid(items = [], columns = 3) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fit, minmax(${Math.max(180, Math.floor(720 / Math.max(columns, 1)))}px, 1fr))`,
+        gap: "12px",
+      }}
+    >
+      {items.map((item) => (
+        <div
+          key={`${item.label}-${item.value}`}
+          style={{
+            padding: "14px 16px",
+            borderRadius: "14px",
+            background: "#ffffff",
+            border: "1px solid rgba(148, 163, 184, 0.18)",
+          }}
+        >
+          <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            {item.label}
+          </div>
+          <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a", lineHeight: "1.6" }}>
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderReportSection(section) {
+  if (!section) return null;
+
+  return (
+    <div
+      key={section.id || section.title}
+      style={{
+        padding: "22px 24px",
+        borderRadius: "18px",
+        background: "#f8fafc",
+        border: "1px solid rgba(148, 163, 184, 0.18)",
+        display: "grid",
+        gap: "14px",
+      }}
+    >
+      <div>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{section.title}</div>
+        {section.summary ? <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.8" }}>{section.summary}</div> : null}
+      </div>
+
+      {Array.isArray(section.items) && section.items.length > 0 ? renderReportFactsGrid(section.items, section.columns || 3) : null}
+
+      {section.kind === "bullets" && Array.isArray(section.bullets) && section.bullets.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+          {section.bullets.map((bullet) => (
+            <li key={bullet}>{bullet}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {section.kind === "table" ? (
+        section.rows?.length > 0 ? (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: "820px", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {section.columns.map((column) => (
+                    <th
+                      key={column.key}
+                      style={{
+                        textAlign: "left",
+                        padding: "0 0 10px",
+                        fontSize: "11px",
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        borderBottom: "1px solid #e2e8f0",
+                      }}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {section.rows.map((row, index) => (
+                  <tr key={`${section.id || section.title}-${index}`}>
+                    {section.columns.map((column) => (
+                      <td
+                        key={column.key}
+                        style={{
+                          padding: "12px 0",
+                          borderTop: index === 0 ? "none" : "1px solid rgba(226, 232, 240, 0.8)",
+                          color: "#0f172a",
+                          verticalAlign: "top",
+                        }}
+                      >
+                        {row[column.key]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ color: "#475569" }}>{section.empty_message || "No table rows available."}</div>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function HouseholdReportView({ report, onPrint }) {
+  if (!report) return null;
+
+  return (
+    <section
+      style={{
+        display: "grid",
+        gap: "18px",
+        padding: "26px 28px",
+        borderRadius: "24px",
+        background: "#ffffff",
+        border: "1px solid rgba(15, 23, 42, 0.08)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "16px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+          padding: "18px 20px",
+          borderRadius: "18px",
+          background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+          border: "1px solid rgba(147, 197, 253, 0.28)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "6px" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            Household Report
+          </div>
+          <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>{report.title}</div>
+          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "820px" }}>{report.subtitle}</div>
+        </div>
+        <button type="button" onClick={onPrint} style={buttonStyle(true)}>
+          Print Report
+        </button>
+      </div>
+      {report.sections.map((section) => renderReportSection(section))}
+    </section>
+  );
+}
+
+export default function DashboardPage({ onNavigate }) {
+  const {
+    householdState,
+    counts,
+    intelligence,
+    intelligenceBundle,
+    savedPolicies,
+    insuranceRows: savedPolicyRows,
+    errors,
+    loadingStates,
+  } = usePlatformShellData();
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
+  const [reviewDigestSnapshot, setReviewDigestSnapshot] = useState(null);
+  const [showHouseholdReport, setShowHouseholdReport] = useState(false);
+  const [assistantQuestion, setAssistantQuestion] = useState("");
+  const [assistantHistory, setAssistantHistory] = useState([]);
+  const savedPolicyCount = savedPolicies.length;
+  const loadError = errors.householdData || "";
+  const policyCompareError = errors.insurancePortfolio || "";
+
+  useEffect(() => {
+    setReviewWorkflowState(
+      getHouseholdReviewWorkflowState(householdState.context.householdId)
+    );
+    setReviewDigestSnapshot(
+      getHouseholdReviewDigestSnapshot(householdState.context.householdId)
+    );
+  }, [householdState.context.householdId]);
+
+  const assetCounts = intelligenceBundle?.assetCountsByCategory || {};
+  const propertySummary = intelligenceBundle?.propertyStackSummary || {};
+  const continuityPercent = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        ((intelligence?.document_completeness?.score_value || 0) +
+          (intelligence?.emergency_readiness?.score_value || 0) +
+          (intelligence?.portal_continuity?.score_value || 0)) /
+          3
+      )
+    )
+  );
+  const continuityStatus = getContinuityStatus(continuityPercent);
+  const deathBenefitValues = savedPolicyRows
+    .map((policy) => parseDisplayNumber(policy.death_benefit))
+    .filter((value) => value !== null);
+  const coiValues = savedPolicyRows
+    .map((policy) => parseDisplayNumber(policy.total_coi))
+    .filter((value) => value !== null);
+  const visibleChargeValues = savedPolicyRows
+    .map((policy) => parseDisplayNumber(policy.total_visible_charges))
+    .filter((value) => value !== null);
+  const missingFieldPolicies = savedPolicyRows.filter(
+    (policy) => Array.isArray(policy.missing_fields) && policy.missing_fields.length > 0
+  );
+  const weakPolicyRows = savedPolicyRows.filter((policy) => policy.coi_confidence === "weak");
+  const missingStatementCount = savedPolicyRows.filter((policy) => !policy.latest_statement_date).length;
+  const totalIssues =
+    missingFieldPolicies.length + weakPolicyRows.length + missingStatementCount;
+  const totalProtectionCoverage = deathBenefitValues.reduce((sum, value) => sum + value, 0);
+  const totalCoi = coiValues.reduce((sum, value) => sum + value, 0);
+  const totalVisibleCharges = visibleChargeValues.reduce((sum, value) => sum + value, 0);
+  const highestCostPolicy = savedPolicyRows.reduce((best, policy) => {
+    const current = parseDisplayNumber(policy.total_coi);
+    const currentBest = best ? parseDisplayNumber(best.total_coi) : null;
+    if (current === null) return best;
+    if (currentBest === null || current > currentBest) return policy;
+    return best;
+  }, null);
+  const weakestConfidencePolicy = weakPolicyRows[0] || null;
+  const totalAssets = (counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0) + savedPolicyCount;
+  const householdMap = useMemo(
+    () => buildHouseholdRiskContinuityMap(intelligenceBundle || {}, intelligence, savedPolicyRows || []),
+    [intelligenceBundle, intelligence, savedPolicyRows]
+  );
+  const topActions = useMemo(
+    () => [
+      ...buildDependencyActionSignals(householdMap?.dependency_signals),
+      ...buildActionSignals(savedPolicyRows || [], intelligence?.missing_item_prompts || []),
+    ].slice(0, 5),
+    [householdMap, savedPolicyRows, intelligence]
+  );
+  const queueItems = useMemo(
+    () => annotateReviewWorkflowItems(householdMap?.review_priorities || [], reviewWorkflowState || {}),
+    [householdMap, reviewWorkflowState]
+  );
+  const changedSinceReviewItems = queueItems.filter((item) => item.changed_since_review);
+  const activeQueueItems = queueItems.filter(
+    (item) => item.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item.changed_since_review
+  );
+  const reviewedQueueItems = queueItems.filter(
+    (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key && !item.changed_since_review
+  );
+  const pendingDocumentsCount = queueItems.filter(
+    (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+  ).length;
+  const followUpCount = queueItems.filter(
+    (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+  ).length;
+  const reviewDigest = useMemo(
+    () => buildHouseholdReviewDigest(queueItems || [], reviewDigestSnapshot),
+    [queueItems, reviewDigestSnapshot]
+  );
+  const householdReviewReport = useMemo(
+    () =>
+      showHouseholdReport
+        ? buildHouseholdReviewReport({
+            bundle: intelligenceBundle || {},
+            intelligence,
+            householdMap,
+            queueItems,
+            reviewDigest,
+          })
+        : null,
+    [showHouseholdReport, intelligenceBundle, intelligence, householdMap, queueItems, reviewDigest]
+  );
+  const latestAssistantEntry = assistantHistory[assistantHistory.length - 1] || null;
+  const moduleRows = [
+    {
+      module: "Insurance",
+      status: getModuleStatus(savedPolicyCount),
+      insight: savedPolicyCount > 0 ? "Comparison and COI reads available." : "No saved policy set yet.",
+    },
+    {
+      module: "Property",
+      status: getModuleStatus(propertySummary.propertyCount ?? 0),
+      insight:
+        (propertySummary.propertiesWithValuationCount || 0) > 0
+          ? "Valuation and stack linkage active."
+          : "Property stack still building.",
+    },
+    {
+      module: "Retirement",
+      status: getModuleStatus(assetCounts.retirement || 0),
+      insight: "Needs beneficiary validation.",
+    },
+    {
+      module: "Banking",
+      status: getModuleStatus(assetCounts.banking || 0),
+      insight: "Needs portal recovery mapping.",
+    },
+    {
+      module: "Estate",
+      status: getModuleStatus(assetCounts.estate || 0),
+      insight: "Needs stronger document depth.",
+    },
+    {
+      module: "Warranties",
+      status: getModuleStatus(assetCounts.warranty || 0),
+      insight: "Needs proof-of-purchase review.",
+    },
+  ];
+  const aiIntroModuleCards = useMemo(
+    () =>
+      buildAiIntroModuleCards({
+        savedPolicyCount,
+        assetCounts,
+        propertySummary,
+        missingStatementCount,
+        weakPolicyRows,
+      }),
+    [savedPolicyCount, assetCounts, propertySummary, missingStatementCount, weakPolicyRows]
+  );
+  const aiHouseholdIntro = useMemo(
+    () =>
+      buildAiHouseholdIntro({
+        continuityPercent,
+        continuityStatus,
+        moduleCards: aiIntroModuleCards,
+        totalIssues,
+        totalAssets,
+      }),
+    [continuityPercent, continuityStatus, aiIntroModuleCards, totalIssues, totalAssets]
+  );
+  const showLoadingShell =
+    (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    const householdId = householdState.context.householdId;
+    if (!householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(householdId, nextState);
+  }
+
+  function handleRefreshDigestSnapshot() {
+    const householdId = householdState.context.householdId;
+    if (!householdId) return;
+    const snapshot = reviewDigest.current_snapshot;
+    setReviewDigestSnapshot(snapshot);
+    saveHouseholdReviewDigestSnapshot(householdId, snapshot);
+  }
+
+  function handlePrintHouseholdReport() {
+    setShowHouseholdReport(true);
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => window.print(), 80);
+    }
+  }
+
+  function handleAskHouseholdAssistant(questionText) {
+    const trimmed = String(questionText || "").trim();
+    if (!trimmed) return;
+
+    const response = answerHouseholdQuestion({
+      questionText: trimmed,
+      householdMap,
+      reviewDigest,
+      queueItems,
+      intelligence,
+      bundle: intelligenceBundle || {},
+    });
+
+    setAssistantHistory((current) => [
+      ...current,
+      {
+        id: `${Date.now()}-${current.length}`,
+        question: trimmed,
+        response,
+      },
+    ]);
+    setAssistantQuestion("");
+  }
+
+  const starterPrompts = [
+    "What should I review first?",
+    "What changed since last review?",
+    "Why is household readiness rated this way?",
+    "What is limiting continuity most?",
+    "Are my assets and protection aligned?",
+    "What parts of my household are under-supported?",
+    "How strong is the insurance side right now?",
+    "Are portal and access records in good shape?",
+  ];
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#020617",
+        color: "#e2e8f0",
+        padding: "32px",
+      }}
+    >
+      <div style={{ margin: "0 auto", maxWidth: "1180px", display: "grid", gap: "28px" }}>
+        {showLoadingShell ? (
+          <section
+            style={{
+              padding: "28px 30px",
+              borderRadius: "24px",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            Preparing dashboard workspace...
+          </section>
+        ) : null}
+        <header
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
+          <div style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
+            VaultedShield
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button style={buttonStyle(false)} onClick={() => onNavigate?.("/upload-center")}>
+              Upload
+            </button>
+            <button style={buttonStyle(true)} onClick={() => onNavigate?.("/portals")}>
+              Open Portal
+            </button>
+          </div>
+        </header>
+
+        <section
+          style={{
+            padding: "36px 40px",
+            borderRadius: "28px",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <div style={{ fontSize: "56px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
+            {intelligence ? `${continuityPercent}%` : "--"}
+          </div>
+          <div style={{ marginTop: "12px", fontSize: "18px", fontWeight: 600, color: "#f8fafc" }}>
+            {continuityStatus.label}
+          </div>
+          <div style={{ marginTop: "10px", maxWidth: "700px", fontSize: "15px", lineHeight: "1.7", color: "#94a3b8" }}>
+            {householdState.error || loadError
+              ? "Household context is limited, so continuity visibility is partial."
+              : continuityStatus.explanation}
+          </div>
+
+          <div
+            style={{
+              marginTop: "28px",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: "18px",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Assets</div>
+              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(totalAssets)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Protection</div>
+              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{totalProtectionCoverage > 0 ? formatCurrency(totalProtectionCoverage) : "--"}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Policies</div>
+              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(savedPolicyCount)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Issues</div>
+              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(totalIssues)}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "24px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setShowHouseholdReport((current) => !current)}
+              style={reportButtonStyle(showHouseholdReport, false)}
+            >
+              {showHouseholdReport ? "Hide Household Report" : "Open Household Report"}
+            </button>
+            <button type="button" onClick={handlePrintHouseholdReport} style={buttonStyle(true)}>
+              Print Household Report
+            </button>
+          </div>
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+            border: "1px solid rgba(255,255,255,0.06)",
+            display: "grid",
+            gap: "20px",
+          }}
+        >
+          <div style={{ display: "grid", gap: "10px" }}>
+            <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+              AI Household Intro
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: "#f8fafc", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+              {aiHouseholdIntro.headline}
+            </div>
+            <div style={{ maxWidth: "980px", fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
+              {householdState.error || loadError
+                ? "VaultedShield is still working with partial household context, so this intro should be read as provisional."
+                : aiHouseholdIntro.body}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,0.32)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Strong Areas</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#bbf7d0" }}>{aiHouseholdIntro.strongCount}</div>
+            </div>
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,0.32)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Watch Areas</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#fde68a" }}>{aiHouseholdIntro.moderateCount}</div>
+            </div>
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,0.32)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Weak Areas</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#fca5a5" }}>{aiHouseholdIntro.weakCount}</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            {aiIntroModuleCards.map((card) => {
+              const tone = getStatusColors(card.status);
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => onNavigate?.(card.route)}
+                  style={{
+                    padding: "18px",
+                    borderRadius: "18px",
+                    background: "rgba(15,23,42,0.36)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    display: "grid",
+                    gap: "10px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                    <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>{card.label}</div>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        background: tone.background,
+                        color: tone.color,
+                        fontSize: "12px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {card.status}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#93c5fd", fontWeight: 700 }}>{card.metric}</div>
+                  <div style={{ color: "#cbd5e1", lineHeight: "1.7", fontSize: "14px" }}>{card.summary}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "12px",
+              padding: "18px 20px",
+              borderRadius: "20px",
+              background: "rgba(15,23,42,0.28)",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>What To Do Next</div>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+                Top 3 Actions
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {(topActions.length > 0
+                ? topActions.slice(0, 3)
+                : [{
+                    id: "no-urgent-action",
+                    label: "No urgent action",
+                    summary: "No urgent cross-household action is standing out right now.",
+                    route: null,
+                    action_key: null,
+                  }]).map((item, index) => (
+                <button
+                  key={item.id || `${index}-${item.summary}`}
+                  type="button"
+                  onClick={() => {
+                    if (item.action_key || item.route) {
+                      executeSmartAction(
+                        {
+                          id: item.id,
+                          label: item.label,
+                          action_key: item.action_key,
+                          route: item.route,
+                        },
+                        { navigate: onNavigate }
+                      );
+                    }
+                  }}
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    alignItems: "flex-start",
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    textAlign: "left",
+                    cursor: item.route || item.action_key ? "pointer" : "default",
+                  }}
+                  disabled={!item.route && !item.action_key}
+                >
+                  <div
+                    style={{
+                      flex: "0 0 auto",
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "999px",
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(59,130,246,0.16)",
+                      color: "#dbeafe",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {index + 1}
+                  </div>
+                  <div style={{ display: "grid", gap: "4px", minWidth: 0 }}>
+                    <div style={{ color: "#f8fafc", fontSize: "14px", fontWeight: 700 }}>{item.label}</div>
+                    <div style={{ color: "#cbd5e1", lineHeight: "1.7", fontSize: "14px" }}>{item.summary}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {showHouseholdReport ? (
+          <HouseholdReportView report={householdReviewReport} onPrint={handlePrintHouseholdReport} />
+        ) : null}
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+            display: "grid",
+            gap: "18px",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Ask About This Household</div>
+            <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
+              Ask for a household-level read on priorities, continuity, changes since review, document strength, insurance support, or access readiness.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            {starterPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => handleAskHouseholdAssistant(prompt)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(147,197,253,0.18)",
+                  background: "rgba(59,130,246,0.10)",
+                  color: "#dbeafe",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                }}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px" }}>
+            <input
+              value={assistantQuestion}
+              onChange={(event) => setAssistantQuestion(event.target.value)}
+              placeholder="Ask a household review question"
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(15,23,42,0.55)",
+                color: "#e2e8f0",
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAskHouseholdAssistant(assistantQuestion);
+                }
+              }}
+            />
+            <button type="button" onClick={() => handleAskHouseholdAssistant(assistantQuestion)} style={buttonStyle(true)}>
+              Ask
+            </button>
+          </div>
+
+          {latestAssistantEntry ? (
+            <div
+              style={{
+                padding: "20px",
+                borderRadius: "20px",
+                background: "rgba(15,23,42,0.42)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "13px", color: "#93c5fd", fontWeight: 700 }}>Latest Answer</div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color:
+                      latestAssistantEntry.response.confidence_label === "strong"
+                        ? "#bbf7d0"
+                        : latestAssistantEntry.response.confidence_label === "moderate"
+                          ? "#fde68a"
+                          : "#cbd5e1",
+                    background:
+                      latestAssistantEntry.response.confidence_label === "strong"
+                        ? "rgba(34,197,94,0.12)"
+                        : latestAssistantEntry.response.confidence_label === "moderate"
+                          ? "rgba(245,158,11,0.12)"
+                          : "rgba(148,163,184,0.12)",
+                  }}
+                >
+                  {latestAssistantEntry.response.confidence_label}
+                </div>
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                {latestAssistantEntry.question}
+              </div>
+              <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#e2e8f0" }}>
+                {latestAssistantEntry.response.answer_text}
+              </div>
+              {latestAssistantEntry.response.evidence_points?.length > 0 ? (
+                <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#cbd5e1" }}>
+                  {latestAssistantEntry.response.evidence_points.map((point) => (
+                    <li key={point} style={{ lineHeight: "1.7" }}>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {(latestAssistantEntry.response.actions || []).length > 0 ? (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {latestAssistantEntry.response.actions.map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => executeSmartAction(action, { navigate: onNavigate })}
+                      style={buttonStyle(false)}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {(latestAssistantEntry.response.followup_prompts || []).map((prompt) => (
+                  <button
+                    key={prompt.id}
+                    type="button"
+                    onClick={() => handleAskHouseholdAssistant(prompt.label)}
+                    style={{
+                      padding: "7px 11px",
+                      borderRadius: "999px",
+                      border: "1px solid rgba(147,197,253,0.18)",
+                      background: "rgba(59,130,246,0.08)",
+                      color: "#dbeafe",
+                      cursor: "pointer",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                    }}
+                  >
+                    {prompt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {assistantHistory.length > 1 ? (
+            <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>This Session</div>
+              {assistantHistory.slice(-3).reverse().map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "16px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", color: "#93c5fd", fontWeight: 700 }}>{entry.question}</div>
+                  <div style={{ marginTop: "8px", fontSize: "14px", lineHeight: "1.7", color: "#cbd5e1" }}>
+                    {entry.response.answer_text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Review Digest</div>
+              <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
+                {reviewDigest.summary}
+              </div>
+            </div>
+            <button onClick={handleRefreshDigestSnapshot} style={buttonStyle(false)}>
+              Save Current Snapshot
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: "18px",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: "14px",
+            }}
+          >
+            {[
+              { label: "Reopened", value: reviewDigest.reopened_count },
+              { label: "Improved", value: reviewDigest.improved_count },
+              { label: "Active", value: reviewDigest.active_count },
+              {
+                label: "Last Snapshot",
+                value: reviewDigestSnapshot?.captured_at
+                  ? new Date(reviewDigestSnapshot.captured_at).toLocaleDateString("en-US")
+                  : "—",
+              },
+            ].map((metric) => (
+              <div
+                key={metric.label}
+                style={{
+                  padding: "16px 18px",
+                  borderRadius: "18px",
+                  background: "rgba(15,23,42,0.42)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                  {metric.label}
+                </div>
+                <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, letterSpacing: "-0.03em" }}>
+                  {displayValue(metric.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+            {(reviewDigest.bullets.length > 0
+              ? reviewDigest.bullets
+              : ["Save a review snapshot to start tracking what changed across the household queue."]).map((item) => (
+              <li key={item} style={{ lineHeight: "1.7" }}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Risk and Continuity Map</div>
+              <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
+                {householdMap.bottom_line}
+              </div>
+            </div>
+            <div
+              style={{
+                minWidth: "180px",
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(15,23,42,0.55)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                Household Readiness
+              </div>
+              <div style={{ marginTop: "6px", fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em" }}>
+                {displayValue(householdMap.overall_score)}
+              </div>
+              <div style={{ marginTop: "6px", fontSize: "14px", fontWeight: 600, color: "#f8fafc" }}>
+                {householdMap.overall_status}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "18px",
+            }}
+          >
+            {householdMap.focus_areas.map((area) => {
+              const tone = getStatusColors(area.status);
+              return (
+                <div
+                  key={area.key}
+                  style={{
+                    padding: "20px",
+                    borderRadius: "20px",
+                    background: "rgba(15,23,42,0.42)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                    <div style={{ fontSize: "17px", fontWeight: 700 }}>{area.title}</div>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: tone.color,
+                        background: tone.background,
+                      }}
+                    >
+                      {area.status}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                    <div style={{ fontSize: "30px", fontWeight: 800, letterSpacing: "-0.03em" }}>{area.score}</div>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                      score
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>{area.summary}</div>
+                  <div>
+                    <button
+                      onClick={() => area.route && onNavigate?.(area.route)}
+                      style={buttonStyle(false)}
+                    >
+                      {area.action_label || "Open review"}
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
+                    {area.metrics.map((metric) => (
+                      <div key={`${area.key}-${metric.label}`}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                          {metric.label}
+                        </div>
+                        <div style={{ marginTop: "6px", fontSize: "18px", fontWeight: 700 }}>
+                          {displayValue(metric.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              marginTop: "22px",
+              display: "grid",
+              gridTemplateColumns: "1.2fr 1fr",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                padding: "22px",
+                borderRadius: "20px",
+                background: "rgba(15,23,42,0.42)",
+                border: "1px solid rgba(255,255,255,0.05)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {[
+                      { label: "Active", value: activeQueueItems.length },
+                      { label: "Changed", value: changedSinceReviewItems.length },
+                      { label: "Pending Docs", value: pendingDocumentsCount },
+                      { label: "Follow Up", value: followUpCount },
+                      { label: "Reviewed", value: reviewedQueueItems.length },
+                  ].map((metric) => (
+                    <span
+                      key={metric.label}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: "#cbd5e1",
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      {metric.label}: {metric.value}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: "10px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
+                These are the most practical household review items currently limiting stronger continuity and cross-asset clarity.
+              </div>
+              <div style={{ marginTop: "16px", display: "grid", gap: "12px" }}>
+                {(activeQueueItems.length > 0 ? activeQueueItems : queueItems).map((item, index) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                        Priority {index + 1}
+                      </div>
+                      <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.label}</div>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: item.workflow_status === "reviewed" ? "#bbf7d0" : item.workflow_status === "pending_documents" ? "#fde68a" : item.workflow_status === "follow_up" ? "#fdba74" : "#cbd5e1",
+                          background: item.workflow_status === "reviewed" ? "rgba(34,197,94,0.12)" : item.workflow_status === "pending_documents" ? "rgba(245,158,11,0.12)" : item.workflow_status === "follow_up" ? "rgba(249,115,22,0.12)" : "rgba(148,163,184,0.12)",
+                        }}
+                      >
+                        {item.workflow_label}
+                      </span>
+                      {item.changed_since_review ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "5px 9px",
+                            borderRadius: "999px",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            color: "#93c5fd",
+                            background: "rgba(59,130,246,0.14)",
+                          }}
+                        >
+                          {item.changed_since_review_label}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div style={{ marginTop: "8px", fontSize: "14px", lineHeight: "1.7", color: "#cbd5e1" }}>
+                      {item.summary}
+                    </div>
+                    {item.changed_since_review && item.change_signal ? (
+                      <div style={{ marginTop: "8px", fontSize: "13px", lineHeight: "1.6", color: "#93c5fd" }}>
+                        {item.change_signal}
+                      </div>
+                    ) : null}
+                    <div style={{ marginTop: "12px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => item.route && onNavigate?.(item.route)}
+                        style={buttonStyle(false)}
+                      >
+                        {item.action_label || "Open review"}
+                      </button>
+                      <button
+                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                        style={buttonStyle(false)}
+                      >
+                        Pending Docs
+                      </button>
+                      <button
+                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                        style={buttonStyle(false)}
+                      >
+                        Follow Up
+                      </button>
+                      <button
+                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                        style={buttonStyle(false)}
+                      >
+                        {item.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {reviewedQueueItems.length > 0 ? (
+                <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Recently Reviewed</div>
+                  <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
+                    {reviewedQueueItems.slice(0, 3).map((item) => (
+                      <div
+                        key={`reviewed-${item.id}`}
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "14px",
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ fontSize: "14px", fontWeight: 600 }}>{item.label}</div>
+                          <button
+                            onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.open.key)}
+                            style={buttonStyle(false)}
+                          >
+                            Reopen
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "grid", gap: "18px" }}>
+              <div
+                style={{
+                  padding: "22px",
+                  borderRadius: "20px",
+                  background: "rgba(15,23,42,0.42)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Strength Signals</div>
+                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+                  {(householdMap.strength_signals.length > 0
+                    ? householdMap.strength_signals
+                    : ["Household strengths will become more visible as more linked records and review support are added."]).map((item) => (
+                    <li key={item} style={{ lineHeight: "1.7" }}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div
+                style={{
+                  padding: "22px",
+                  borderRadius: "20px",
+                  background: "rgba(15,23,42,0.42)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Visibility Gaps</div>
+                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+                  {(householdMap.visibility_gaps.length > 0
+                    ? householdMap.visibility_gaps
+                    : ["No major visibility gaps are currently standing out across the visible household records."]).map((item) => (
+                    <li key={item} style={{ lineHeight: "1.7" }}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>Action Required</div>
+          <div style={{ marginTop: "10px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
+            {householdState.error || loadError
+              ? "Platform visibility is limited until household data loads cleanly."
+              : topActions.length > 0
+                ? "The system is flagging a small number of concrete issues that block stronger continuity and comparison quality."
+                : "No major action items are currently active."}
+          </div>
+          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+            {(topActions.length > 0 ? topActions : ["No major action items are currently active."]).map((item) => (
+              <li key={typeof item === "string" ? item : item.id || item.label || item.summary} style={{ lineHeight: "1.7" }}>
+                {typeof item === "string" ? item : item.summary || item.label}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance Intelligence</div>
+          <div
+            style={{
+              marginTop: "18px",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: "18px",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Total COI Exposure</div>
+              <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 700 }}>{totalCoi > 0 ? formatCurrency(totalCoi) : "--"}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Highest Cost Policy</div>
+              <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 700 }}>{displayValue(highestCostPolicy?.product || highestCostPolicy?.carrier)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Weakest Confidence</div>
+              <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 700 }}>{displayValue(weakestConfidencePolicy?.product || weakestConfidencePolicy?.carrier)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Policies Needing Review</div>
+              <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 700 }}>{displayValue(missingFieldPolicies.length)}</div>
+            </div>
+          </div>
+          {policyCompareError ? (
+            <div style={{ marginTop: "16px", fontSize: "13px", color: "#94a3b8" }}>
+              {policyCompareError}
+            </div>
+          ) : null}
+        </section>
+
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>Module Overview</div>
+          <div style={{ marginTop: "18px", overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+              <thead>
+                <tr style={{ color: "#64748b", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Module</th>
+                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Status</th>
+                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Insight</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moduleRows.map((row) => {
+                  const tone = getStatusColors(row.status);
+                  return (
+                    <tr key={row.module} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "14px 0", fontWeight: 600 }}>{row.module}</td>
+                      <td style={{ padding: "14px 0" }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 10px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: tone.color,
+                            background: tone.background,
+                          }}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: "14px 0", color: "#94a3b8" }}>{row.insight}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {import.meta.env.DEV ? (
+          <div style={{ color: "#64748b", fontSize: "12px" }}>
+            household={householdState.context.householdId || "none"} | assets={counts?.assetCount ?? 0} | policies={savedPolicyCount} | weakCoi={weakPolicyRows.length} | missingStatements={missingStatementCount} | dependencyFlags={householdMap.dependency_signals?.dependency_flags?.length || 0} | dependencyPriority={householdMap.dependency_signals?.priority_issues?.length || 0} | totalCharges={totalVisibleCharges > 0 ? formatCurrency(totalVisibleCharges) : "--"} | error={loadError || policyCompareError || "none"}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

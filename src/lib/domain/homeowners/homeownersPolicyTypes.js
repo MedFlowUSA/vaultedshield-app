@@ -1,0 +1,122 @@
+export const HOMEOWNERS_POLICY_TYPE_REGISTRY = {
+  homeowners_standard: {
+    homeowners_policy_type_key: "homeowners_standard",
+    display_name: "Homeowners Standard",
+    major_category: "owner_occupied",
+    dwelling_type_bias: "single_family",
+    occupancy_type_bias: "primary_residence",
+    deductible_relevant: true,
+    liability_relevant: true,
+    mortgage_relevant: true,
+    common_document_labels: ["homeowners policy", "declarations page", "dwelling coverage"],
+    common_fields_expected: ["dwelling_coverage", "all_peril_deductible", "annual_premium", "property_address"],
+  },
+  condo_policy: {
+    homeowners_policy_type_key: "condo_policy",
+    display_name: "Condo Policy",
+    major_category: "owner_occupied",
+    dwelling_type_bias: "condominium",
+    occupancy_type_bias: "primary_residence",
+    deductible_relevant: true,
+    liability_relevant: true,
+    mortgage_relevant: true,
+    common_document_labels: ["condo policy", "unit owners policy", "ho-6"],
+    common_fields_expected: ["personal_property_coverage", "liability_coverage", "all_peril_deductible", "property_address"],
+  },
+  renters_policy: {
+    homeowners_policy_type_key: "renters_policy",
+    display_name: "Renters Policy",
+    major_category: "tenant_occupied",
+    dwelling_type_bias: "rental_unit",
+    occupancy_type_bias: "tenant",
+    deductible_relevant: true,
+    liability_relevant: true,
+    mortgage_relevant: false,
+    common_document_labels: ["renters policy", "tenant policy", "ho-4"],
+    common_fields_expected: ["personal_property_coverage", "liability_coverage", "annual_premium", "policy_status"],
+  },
+  landlord_policy: {
+    homeowners_policy_type_key: "landlord_policy",
+    display_name: "Landlord Policy",
+    major_category: "investment_property",
+    dwelling_type_bias: "rental_property",
+    occupancy_type_bias: "landlord",
+    deductible_relevant: true,
+    liability_relevant: true,
+    mortgage_relevant: true,
+    common_document_labels: ["landlord policy", "dwelling property", "rental dwelling"],
+    common_fields_expected: ["dwelling_coverage", "loss_of_use_coverage", "all_peril_deductible", "property_address"],
+  },
+  dwelling_fire_policy: {
+    homeowners_policy_type_key: "dwelling_fire_policy",
+    display_name: "Dwelling Fire Policy",
+    major_category: "property_specialty",
+    dwelling_type_bias: "single_family",
+    occupancy_type_bias: "varied",
+    deductible_relevant: true,
+    liability_relevant: false,
+    mortgage_relevant: true,
+    common_document_labels: ["dwelling fire", "dp-1", "dp-3"],
+    common_fields_expected: ["dwelling_coverage", "all_peril_deductible", "annual_premium", "policy_status"],
+  },
+  vacant_property_policy: {
+    homeowners_policy_type_key: "vacant_property_policy",
+    display_name: "Vacant Property Policy",
+    major_category: "property_specialty",
+    dwelling_type_bias: "vacant_home",
+    occupancy_type_bias: "vacant",
+    deductible_relevant: true,
+    liability_relevant: true,
+    mortgage_relevant: true,
+    common_document_labels: ["vacant property", "vacant home policy"],
+    common_fields_expected: ["dwelling_coverage", "all_peril_deductible", "inspection_required_indicator", "property_address"],
+  },
+  flood_policy_reference: {
+    homeowners_policy_type_key: "flood_policy_reference",
+    display_name: "Flood Policy Reference",
+    major_category: "property_reference",
+    dwelling_type_bias: "varied",
+    occupancy_type_bias: "varied",
+    deductible_relevant: true,
+    liability_relevant: false,
+    mortgage_relevant: true,
+    common_document_labels: ["flood insurance", "nfip", "flood reference"],
+    common_fields_expected: ["flood_reference", "property_address", "effective_date", "expiration_date"],
+  },
+  earthquake_policy_reference: {
+    homeowners_policy_type_key: "earthquake_policy_reference",
+    display_name: "Earthquake Policy Reference",
+    major_category: "property_reference",
+    dwelling_type_bias: "varied",
+    occupancy_type_bias: "varied",
+    deductible_relevant: true,
+    liability_relevant: false,
+    mortgage_relevant: true,
+    common_document_labels: ["earthquake insurance", "earthquake endorsement"],
+    common_fields_expected: ["earthquake_reference", "property_address", "effective_date", "expiration_date"],
+  },
+  umbrella_property_related_reference: {
+    homeowners_policy_type_key: "umbrella_property_related_reference",
+    display_name: "Umbrella Property-Related Reference",
+    major_category: "liability_reference",
+    dwelling_type_bias: "varied",
+    occupancy_type_bias: "varied",
+    deductible_relevant: false,
+    liability_relevant: true,
+    mortgage_relevant: false,
+    common_document_labels: ["umbrella", "excess liability", "property related liability"],
+    common_fields_expected: ["liability_coverage", "named_insured", "policy_status", "effective_date"],
+  },
+};
+
+export const HOMEOWNERS_POLICY_TYPE_KEYS = Object.freeze(
+  Object.keys(HOMEOWNERS_POLICY_TYPE_REGISTRY)
+);
+
+export function listHomeownersPolicyTypes() {
+  return Object.values(HOMEOWNERS_POLICY_TYPE_REGISTRY);
+}
+
+export function getHomeownersPolicyType(policyTypeKey) {
+  return HOMEOWNERS_POLICY_TYPE_REGISTRY[policyTypeKey] || null;
+}
