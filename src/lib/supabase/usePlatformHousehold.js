@@ -10,6 +10,9 @@ export function usePlatformHousehold() {
       householdId: null,
       source: "loading",
       bootstrapped: false,
+      currentAuthUserId: null,
+      ownershipMode: "loading",
+      guestFallbackActive: false,
     },
     error: "",
   });
@@ -21,13 +24,27 @@ export function usePlatformHousehold() {
       const result = await getOrCreateDefaultHousehold(authUser);
       if (!active) return;
 
+      if (import.meta.env.DEV) {
+        console.info("[VaultedShield] household ownership context", {
+          currentAuthUserId: authUser?.id || null,
+          householdId: result.context?.householdId || null,
+          ownershipMode: result.context?.ownershipMode || (authUser?.id ? "authenticated_owned" : "guest_shared"),
+          guestFallbackActive: Boolean(result.context?.guestFallbackActive),
+        });
+      }
+
       setState({
         loading: false,
         household: result.data || null,
-        context: result.context || {
+        context: {
           householdId: null,
           source: "unavailable",
           bootstrapped: false,
+          currentAuthUserId: authUser?.id || null,
+          ownershipMode: authUser?.id ? "authenticated_owned" : "guest_shared",
+          guestFallbackActive: !authUser?.id,
+          ...(result.context || {}),
+          currentAuthUserId: authUser?.id || null,
         },
         error: result.error?.message || "",
       });

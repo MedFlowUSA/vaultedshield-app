@@ -1,8 +1,8 @@
-import { getSupabaseClient, getSupabaseConfigurationMessage } from "./client";
+import { getSupabaseClient, getSupabaseConfigurationMessage } from "./client.js";
 import {
   buildDocumentSourceHash,
   uploadPlatformDocumentFile,
-} from "./documentStorage";
+} from "./documentStorage.js";
 
 // Broad platform tables support the modular shell:
 // - households, members, contacts, generic assets, documents, alerts, tasks, reports
@@ -180,14 +180,27 @@ export function setCurrentHouseholdContext(householdId) {
   return { householdId };
 }
 
-export async function listHouseholds() {
-  return listRecords("households", [], { orderBy: "updated_at" });
+export function isHouseholdOwnedByUser(household, ownerUserId) {
+  if (!household || !ownerUserId) return false;
+  return household.owner_user_id === ownerUserId || household.metadata?.auth_user_id === ownerUserId;
+}
+
+export async function listHouseholds(ownerUserId = null) {
+  const filters = ownerUserId ? [{ column: "owner_user_id", value: ownerUserId }] : [];
+  return listRecords("households", filters, { orderBy: "updated_at" });
+}
+
+async function listSharedHouseholds() {
+  return listRecords("households", [{ column: "owner_user_id", operator: "is", value: null }], {
+    orderBy: "updated_at",
+  });
 }
 
 export async function createHousehold(payload) {
   return insertRecord("households", {
     household_name: payload.household_name,
     household_status: payload.household_status || "active",
+    owner_user_id: payload.owner_user_id || null,
     notes: payload.notes || null,
     metadata: payload.metadata || {},
   });
@@ -199,6 +212,9 @@ export async function updateHousehold(householdId, payload) {
     household_status: payload.household_status,
     notes: payload.notes,
     metadata: payload.metadata,
+    ...(Object.prototype.hasOwnProperty.call(payload || {}, "owner_user_id")
+      ? { owner_user_id: payload.owner_user_id }
+      : {}),
   });
 }
 
@@ -206,6 +222,21 @@ async function findHouseholdForAuthUser(authUser) {
   const { supabase, error } = getClientOrError();
   if (error) return { data: null, error };
   if (!authUser?.id) return { data: null, error: null };
+
+  const { data: directData, error: directError } = await supabase
+    .from("households")
+    .select("*")
+    .eq("owner_user_id", authUser.id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (directData || directError) {
+    return {
+      data: directData || null,
+      error: normalizePlatformQueryError("households", directError),
+    };
+  }
 
   const { data, error: queryError } = await supabase
     .from("households")
@@ -234,26 +265,101 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
           householdId: null,
           source: "auth_lookup_failed",
           bootstrapped: false,
+          ownerUserId: authUser.id,
+          ownershipMode: "authenticated_owned",
+          guestFallbackActive: false,
         },
       };
     }
 
     if (authHouseholdResult.data?.id) {
+      if (!authHouseholdResult.data.owner_user_id) {
+        await updateHousehold(authHouseholdResult.data.id, {
+          household_name: authHouseholdResult.data.household_name,
+          household_status: authHouseholdResult.data.household_status,
+          owner_user_id: authUser.id,
+          notes: authHouseholdResult.data.notes,
+          metadata: {
+            ...(authHouseholdResult.data.metadata || {}),
+            auth_user_id: authUser.id,
+            auth_email: authUser.email || null,
+          },
+        });
+      }
       writeStoredHouseholdId(authHouseholdResult.data.id);
       return {
-        data: authHouseholdResult.data,
+        data: {
+          ...authHouseholdResult.data,
+          owner_user_id: authHouseholdResult.data.owner_user_id || authUser.id,
+        },
         error: null,
         context: {
           householdId: authHouseholdResult.data.id,
           source: "loaded_auth_household",
           bootstrapped: false,
+          ownerUserId: authUser.id,
+          ownershipMode: "authenticated_owned",
+          guestFallbackActive: false,
         },
       };
     }
+
+    const createResult = await createHousehold({
+      household_name: authUser?.user_metadata?.household_name || "VaultedShield Household",
+      household_status: "active",
+      owner_user_id: authUser.id,
+      notes: "Authenticated household workspace for the current VaultedShield user.",
+      metadata: {
+        bootstrap: true,
+        auth_user_id: authUser.id,
+        auth_email: authUser.email || null,
+      },
+    });
+
+    if (createResult.error || !createResult.data?.id) {
+      return {
+        data: null,
+        error: createResult.error || new Error("Authenticated household bootstrap failed"),
+        context: {
+          householdId: null,
+          source: "bootstrap_failed",
+          bootstrapped: false,
+          ownerUserId: authUser.id,
+          ownershipMode: "authenticated_owned",
+          guestFallbackActive: false,
+        },
+      };
+    }
+
+    await createHouseholdMember({
+      household_id: createResult.data.id,
+      full_name: authUser?.user_metadata?.full_name || authUser?.email || "Primary Household Member",
+      role_type: "self",
+      relationship_label: "Primary",
+      email: authUser?.email || null,
+      is_primary: true,
+      is_emergency_contact: true,
+      metadata: { bootstrap: true, auth_user_id: authUser.id },
+    });
+
+    writeStoredHouseholdId(createResult.data.id);
+
+    return {
+      data: createResult.data,
+      error: null,
+      context: {
+        householdId: createResult.data.id,
+        source: "bootstrapped_auth_household",
+        bootstrapped: true,
+        ownerUserId: authUser.id,
+        ownershipMode: "authenticated_owned",
+        guestFallbackActive: false,
+      },
+    };
   }
 
   if (storedHouseholdId) {
-    const households = await listHouseholds();
+    const households = await listSharedHouseholds();
     const matchingHousehold = households.data.find((row) => row.id === storedHouseholdId);
     if (matchingHousehold) {
       return {
@@ -263,12 +369,15 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
           householdId: matchingHousehold.id,
           source: "loaded_existing",
           bootstrapped: false,
+          ownerUserId: null,
+          ownershipMode: "guest_shared",
+          guestFallbackActive: true,
         },
       };
     }
   }
 
-  const householdsResult = await listHouseholds();
+  const householdsResult = await listSharedHouseholds();
   if (householdsResult.error) {
     return {
       data: null,
@@ -279,6 +388,9 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
           ? "missing_foundation_schema"
           : "supabase_unavailable",
         bootstrapped: false,
+        ownerUserId: null,
+        ownershipMode: "guest_shared",
+        guestFallbackActive: true,
       },
     };
   }
@@ -293,6 +405,9 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
         householdId: household.id,
         source: "loaded_existing",
         bootstrapped: false,
+        ownerUserId: null,
+        ownershipMode: "guest_shared",
+        guestFallbackActive: true,
       },
     };
   }
@@ -300,6 +415,7 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
   const createResult = await createHousehold({
     household_name: authUser?.user_metadata?.household_name || "VaultedShield Household",
     household_status: "active",
+    owner_user_id: null,
     notes: "Default bootstrap household for the platform shell.",
     metadata: {
       bootstrap: true,
@@ -316,6 +432,9 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
         householdId: null,
         source: "bootstrap_failed",
         bootstrapped: false,
+        ownerUserId: null,
+        ownershipMode: "guest_shared",
+        guestFallbackActive: true,
       },
     };
   }
@@ -339,6 +458,9 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
       householdId: createResult.data.id,
       source: "bootstrapped_default",
       bootstrapped: true,
+      ownerUserId: null,
+      ownershipMode: "guest_shared",
+      guestFallbackActive: true,
     },
   };
 }

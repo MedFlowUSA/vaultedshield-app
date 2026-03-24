@@ -128,6 +128,26 @@ function safeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+async function getCurrentVaultedPolicyScope() {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return { userId: null, mode: "guest_shared" };
+  }
+
+  const { data } = await supabase.auth.getUser();
+  const userId = data?.user?.id || null;
+  return {
+    userId,
+    mode: userId ? "authenticated_owned" : "guest_shared",
+  };
+}
+
+export function buildVaultedPolicyScopeFilter(userId) {
+  return userId
+    ? { column: "user_id", operator: "eq", value: userId }
+    : { column: "user_id", operator: "is", value: null };
+}
+
 function isRecognizedQuality(value) {
   return value === "strong" || value === "moderate" || value === "weak" || value === "failed";
 }
@@ -977,11 +997,13 @@ async function findVaultedPolicyByIdentity({ policyNumber, carrierKey }) {
     return { data: null, error: null };
   }
 
+  const scope = await getCurrentVaultedPolicyScope();
   const { data, error } = await supabase
     .from("vaulted_policies")
     .select("*")
     .eq("policy_number", policyNumber)
     .eq("carrier_key", carrierKey)
+    [scope.userId ? "eq" : "is"]("user_id", scope.userId)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -999,7 +1021,9 @@ export async function upsertVaultedPolicyFromAnalysis({
     return { data: null, error: new Error("Supabase not configured") };
   }
 
+  const scope = await getCurrentVaultedPolicyScope();
   const payload = {
+    user_id: scope.userId,
     policy_number: normalizedPolicy?.policy_identity?.policy_number || null,
     policy_number_masked: maskPolicyNumber(normalizedPolicy?.policy_identity?.policy_number),
     carrier_name: normalizedPolicy?.policy_identity?.carrier_name || null,
@@ -1262,14 +1286,17 @@ export async function listVaultedPolicies() {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const { data, error } = await supabase
-    .from("vaulted_policies")
-    .select(`
+  const scope = await getCurrentVaultedPolicyScope();
+  let query = supabase.from("vaulted_policies").select(`
       *,
       vaulted_policy_statements (statement_date),
       vaulted_policy_analytics (id, created_at)
     `)
     .order("updated_at", { ascending: false });
+
+  query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
+
+  const { data, error } = await query;
 
   return {
     data: safeArray(data).map((row) => ({
@@ -1287,19 +1314,34 @@ export async function getVaultedPolicyById(policyId) {
     return { data: null, error: new Error("Supabase not configured") };
   }
 
-  const { data, error } = await supabase
-    .from("vaulted_policies")
-    .select("*")
-    .eq("id", policyId)
-    .single();
+  const scope = await getCurrentVaultedPolicyScope();
+  let query = supabase.from("vaulted_policies").select("*").eq("id", policyId);
+  query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
+  const { data, error } = await query.single();
 
   return { data, error };
+}
+
+async function ensureAccessibleVaultedPolicy(policyId) {
+  const policyResult = await getVaultedPolicyById(policyId);
+  if (policyResult.error || !policyResult.data?.id) {
+    return {
+      data: null,
+      error: policyResult.error || new Error("Vaulted policy is not available in the current account scope."),
+    };
+  }
+  return policyResult;
 }
 
 export async function getVaultedPolicyDocuments(policyId) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
+  }
+
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  if (accessResult.error) {
+    return { data: [], error: accessResult.error };
   }
 
   const { data, error } = await supabase
@@ -1317,6 +1359,11 @@ export async function getVaultedPolicySnapshots(policyId) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  if (accessResult.error) {
+    return { data: [], error: accessResult.error };
+  }
+
   const { data, error } = await supabase
     .from("vaulted_policy_snapshots")
     .select("*")
@@ -1330,6 +1377,11 @@ export async function getVaultedPolicyAnalytics(policyId) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
+  }
+
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  if (accessResult.error) {
+    return { data: [], error: accessResult.error };
   }
 
   const { data, error } = await supabase
@@ -1347,6 +1399,11 @@ export async function getVaultedPolicyStatements(policyId) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  if (accessResult.error) {
+    return { data: [], error: accessResult.error };
+  }
+
   const { data, error } = await supabase
     .from("vaulted_policy_statements")
     .select("*")
@@ -1357,9 +1414,16 @@ export async function getVaultedPolicyStatements(policyId) {
 }
 
 export async function getVaultedPolicyBundle(policyId) {
-  const [policyResult, documentsResult, snapshotsResult, analyticsResult, statementsResult] =
+  const policyResult = await getVaultedPolicyById(policyId);
+  if (policyResult.error || !policyResult.data?.id) {
+    return {
+      data: null,
+      error: policyResult.error || new Error("Vaulted policy is not available in the current account scope."),
+    };
+  }
+
+  const [documentsResult, snapshotsResult, analyticsResult, statementsResult] =
     await Promise.all([
-      getVaultedPolicyById(policyId),
       getVaultedPolicyDocuments(policyId),
       getVaultedPolicySnapshots(policyId),
       getVaultedPolicyAnalytics(policyId),

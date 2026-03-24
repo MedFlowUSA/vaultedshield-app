@@ -16,6 +16,7 @@ import {
   sortStatementsChronologically,
 } from "../src/lib/parser/extractionEngine.js";
 import {
+  buildVaultedPolicyScopeFilter,
   buildInitialPersistenceStepResults,
   buildVaultedSnapshotPayload,
   isMissingUpsertConstraintError,
@@ -24,6 +25,7 @@ import {
   rehydrateVaultedPolicyBundle,
   sanitizeParserStructuredData,
 } from "../src/lib/supabase/vaultedPolicies.js";
+import { isHouseholdOwnedByUser } from "../src/lib/supabase/platformData.js";
 import { resolveCarrierParsingProfile } from "../src/lib/domain/parsing/carrierProfiles.js";
 import { detectPageType } from "../src/lib/domain/parsing/pageTypeDetection.js";
 import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconstruction.js";
@@ -634,6 +636,25 @@ runTest("buildInitialPersistenceStepResults creates stable diagnostics shape for
   assert.equal(diagnostics.statement_snapshots.length, 2);
   assert.equal(diagnostics.analytics.succeeded, false);
   assert.equal(diagnostics.statement_rows.count, 0);
+});
+
+runTest("isHouseholdOwnedByUser recognizes direct and legacy metadata ownership", () => {
+  assert.equal(isHouseholdOwnedByUser({ owner_user_id: "user-1", metadata: {} }, "user-1"), true);
+  assert.equal(isHouseholdOwnedByUser({ owner_user_id: null, metadata: { auth_user_id: "user-2" } }, "user-2"), true);
+  assert.equal(isHouseholdOwnedByUser({ owner_user_id: "user-1", metadata: {} }, "user-3"), false);
+});
+
+runTest("buildVaultedPolicyScopeFilter isolates authenticated and guest policy queries", () => {
+  assert.deepEqual(buildVaultedPolicyScopeFilter("user-1"), {
+    column: "user_id",
+    operator: "eq",
+    value: "user-1",
+  });
+  assert.deepEqual(buildVaultedPolicyScopeFilter(null), {
+    column: "user_id",
+    operator: "is",
+    value: null,
+  });
 });
 
 runTest("snapshot payload builder carries parser version and structured parser payload for new saves", () => {
