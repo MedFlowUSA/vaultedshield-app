@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { buildHouseholdIntelligence } from "../domain/platformIntelligence";
+import { resolvePlatformDataScope } from "./platformShellScope";
 import { getHouseholdIntelligenceBundle, getHouseholdPlatformCounts } from "../supabase/platformData";
 import { compareVaultedPolicies, listVaultedPolicies } from "../supabase/vaultedPolicies";
 import { usePlatformHousehold } from "../supabase/usePlatformHousehold";
@@ -24,22 +25,43 @@ function buildFallbackPolicyRows(savedPolicies = []) {
   }));
 }
 
-export function PlatformShellDataProvider({ children }) {
-  const householdState = usePlatformHousehold();
-  const householdId = householdState.context.householdId;
-  const [countsState, setCountsState] = useState({ data: null, error: "", loading: false });
-  const [bundleState, setBundleState] = useState({ data: null, error: "", loading: false });
-  const [insuranceState, setInsuranceState] = useState({
+function buildEmptyInsuranceState() {
+  return {
     savedPolicies: [],
     comparisonRows: [],
     error: "",
     loading: false,
     comparisonLoaded: false,
-  });
+    scopeSource: "unresolved",
+  };
+}
+
+export function PlatformShellDataProvider({ children, accessSession = null, authReady = true }) {
+  const householdState = usePlatformHousehold(accessSession, authReady);
+  const scope = resolvePlatformDataScope(accessSession, householdState);
+  const householdId = scope.householdId;
+  const authUserId = scope.authUserId;
+  const ownershipMode = scope.ownershipMode;
+  const guestFallbackActive = scope.guestFallbackActive;
+  const canLoadShellData = authReady && scope.canLoadShellData;
+  const scopeKey = `${authUserId || "guest"}:${householdId || "none"}:${ownershipMode}:${guestFallbackActive ? "guest" : "owned"}`;
+  const [countsState, setCountsState] = useState({ data: null, error: "", loading: false });
+  const [bundleState, setBundleState] = useState({ data: null, error: "", loading: false });
+  const [insuranceState, setInsuranceState] = useState(buildEmptyInsuranceState);
   const insuranceLoadRef = useRef({ requestKey: "", inFlight: false });
 
+  useEffect(() => {
+    insuranceLoadRef.current = { requestKey: "", inFlight: false };
+    setCountsState({ data: null, error: "", loading: false });
+    setBundleState({ data: null, error: "", loading: false });
+    setInsuranceState({
+      ...buildEmptyInsuranceState(),
+      scopeSource: scope.scopeSource,
+    });
+  }, [authUserId, canLoadShellData, scope.scopeSource, scopeKey]);
+
   const refreshHouseholdData = useCallback(async () => {
-    if (!householdId) {
+    if (!canLoadShellData) {
       setCountsState({ data: null, error: "", loading: false });
       setBundleState({ data: null, error: "", loading: false });
       return;
@@ -69,22 +91,19 @@ export function PlatformShellDataProvider({ children }) {
       setCountsState({ data: null, error: message, loading: false });
       setBundleState({ data: null, error: message, loading: false });
     }
-  }, [householdId]);
+  }, [canLoadShellData, householdId]);
 
   const refreshInsurancePortfolio = useCallback(
     async ({ force = false } = {}) => {
-      if (!householdId) {
+      if (!canLoadShellData) {
         setInsuranceState({
-          savedPolicies: [],
-          comparisonRows: [],
-          error: "",
-          loading: false,
-          comparisonLoaded: false,
+          ...buildEmptyInsuranceState(),
+          scopeSource: scope.scopeSource,
         });
         return;
       }
 
-      const requestKey = householdId;
+      const requestKey = scopeKey;
       if (!force) {
         if (insuranceLoadRef.current.inFlight && insuranceLoadRef.current.requestKey === requestKey) {
           return;
@@ -112,20 +131,19 @@ export function PlatformShellDataProvider({ children }) {
           error: policiesResult.error?.message || comparisonResult.error?.message || "",
           loading: false,
           comparisonLoaded: true,
+          scopeSource: authUserId ? "authenticated_query" : "guest_query",
         });
       } catch (error) {
         setInsuranceState({
-          savedPolicies: [],
-          comparisonRows: [],
+          ...buildEmptyInsuranceState(),
           error: error?.message || "Insurance portfolio could not be loaded.",
-          loading: false,
-          comparisonLoaded: false,
+          scopeSource: authUserId ? "authenticated_query" : "guest_query",
         });
       } finally {
         insuranceLoadRef.current = { requestKey, inFlight: false };
       }
     },
-    [householdId, insuranceState.comparisonLoaded]
+    [authUserId, canLoadShellData, insuranceState.comparisonLoaded, scope.scopeSource, scopeKey]
   );
 
   useEffect(() => {
@@ -156,6 +174,13 @@ export function PlatformShellDataProvider({ children }) {
       savedPolicies: insuranceState.savedPolicies,
       insuranceComparisonRows: insuranceState.comparisonRows,
       insuranceRows,
+      debug: {
+        authUserId,
+        householdId,
+        guestModeActive: !authUserId,
+        sharedFallbackActive: guestFallbackActive,
+        policyScopeSource: insuranceState.scopeSource,
+      },
       loadingStates: {
         household: householdState.loading,
         householdData: countsState.loading || bundleState.loading,
@@ -177,6 +202,8 @@ export function PlatformShellDataProvider({ children }) {
       intelligence,
       insuranceState,
       insuranceRows,
+      authUserId,
+      guestFallbackActive,
       refreshHouseholdData,
       refreshInsurancePortfolio,
     ]

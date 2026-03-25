@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
-import { listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 
 function actionStyle(primary = false) {
   return {
@@ -16,39 +16,13 @@ function actionStyle(primary = false) {
 }
 
 export default function LifePolicyDetailPage({ onNavigate }) {
-  const [savedPolicies, setSavedPolicies] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadPolicies() {
-      try {
-        setLoading(true);
-        setError("");
-        const { data, error: loadError } = await listVaultedPolicies();
-        if (!active) return;
-        if (loadError) {
-          throw loadError;
-        }
-        setSavedPolicies(data || []);
-      } catch (loadError) {
-        if (!active) return;
-        setSavedPolicies([]);
-        setError(loadError?.message || "Life policies could not be loaded.");
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadPolicies();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { savedPolicies, loadingStates, errors } = usePlatformShellData();
+  const loading = loadingStates.insurancePortfolio;
+  const error = errors.insurancePortfolio;
+  const sortedPolicies = useMemo(
+    () => [...savedPolicies].sort((left, right) => String(right.last_saved_at || "").localeCompare(String(left.last_saved_at || ""))),
+    [savedPolicies]
+  );
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
@@ -139,11 +113,11 @@ export default function LifePolicyDetailPage({ onNavigate }) {
           <div style={{ color: "#475569" }}>Loading saved life policies...</div>
         ) : error ? (
           <div style={{ color: "#991b1b" }}>{error}</div>
-        ) : savedPolicies.length === 0 ? (
+        ) : sortedPolicies.length === 0 ? (
           <div style={{ color: "#475569" }}>No saved life policies are available yet.</div>
         ) : (
           <div style={{ display: "grid", gap: "12px" }}>
-            {savedPolicies.map((policy) => (
+            {sortedPolicies.map((policy) => (
               <button
                 key={policy.id}
                 type="button"

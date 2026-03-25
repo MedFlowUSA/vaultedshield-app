@@ -3,6 +3,7 @@ export default function ContentContainer({ children }) {
     <main
       style={{
         flex: 1,
+        width: "100%",
         minHeight: "100vh",
         minWidth: 0,
         background:

@@ -210,7 +210,7 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
 
 export default function PlatformApp() {
   const { pathname, navigate } = useHashRoute();
-  const { isTablet } = useResponsiveLayout();
+  const { isMobile, isTablet } = useResponsiveLayout();
   const accessPortal = useAccessPortal();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const postAuthHome = "/insurance";
@@ -220,14 +220,15 @@ export default function PlatformApp() {
   const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup" || resolvedPathname === "/pricing";
   const hasRouteAccess = hasTierAccess(accessPortal.currentTier, route.minimumTier || "free");
   const intendedPath = !resolvedIsAuthRoute ? resolvedPathname : postAuthHome;
+  const useCompactShell = isTablet;
 
   useEffect(() => {
-    if (!isTablet) {
+    if (!useCompactShell) {
       setSidebarOpen(false);
       return;
     }
     setSidebarOpen(false);
-  }, [isTablet, resolvedPathname]);
+  }, [resolvedPathname, useCompactShell]);
 
   if (!accessPortal.authReady) {
     return (
@@ -276,9 +277,9 @@ export default function PlatformApp() {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#e2e8f0", position: "relative" }}>
-      <PlatformShellDataProvider>
-        {isTablet && sidebarOpen ? (
+    <PlatformShellDataProvider accessSession={accessPortal.session} authReady={accessPortal.authReady}>
+      <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative" }}>
+        {useCompactShell && sidebarOpen ? (
           <button
             type="button"
             aria-label="Close navigation overlay"
@@ -293,38 +294,54 @@ export default function PlatformApp() {
             }}
           />
         ) : null}
-        <Sidebar
-          currentPath={pathname}
-          onNavigate={navigate}
-          currentTier={accessPortal.currentTier}
-          currentPlanLabel={accessPortal.currentPlan.label}
-          onUpgrade={() => navigate("/pricing")}
-          isCompact={isTablet}
-          isOpen={!isTablet || sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-        <ContentContainer>
-          <TopNav
-            title={route.title}
-            subtitle="Modular family continuity and asset-intelligence shell"
+        {useCompactShell ? (
+          <Sidebar
+            currentPath={pathname}
             onNavigate={navigate}
+            currentTier={accessPortal.currentTier}
             currentPlanLabel={accessPortal.currentPlan.label}
-            householdName={accessPortal.session.householdName || "Working Household"}
-            onSignOut={() => {
-              accessPortal.signOut();
-              navigate("/login");
-            }}
-            showSidebarToggle={isTablet}
-            onToggleSidebar={() => setSidebarOpen((current) => !current)}
-            isCompact={isTablet}
+            onUpgrade={() => navigate("/pricing")}
+            isCompact
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
           />
-          <div style={{ padding: isTablet ? "18px 14px 24px" : "28px" }}>
-            <RouteErrorBoundary resetKey={resolvedPathname}>
-              {renderRoute(resolvedPathname, navigate, accessPortal, intendedPath)}
-            </RouteErrorBoundary>
-          </div>
-        </ContentContainer>
-      </PlatformShellDataProvider>
-    </div>
+        ) : null}
+        <div style={{ display: "flex", minHeight: "100vh" }}>
+          {!useCompactShell ? (
+            <Sidebar
+              currentPath={pathname}
+              onNavigate={navigate}
+              currentTier={accessPortal.currentTier}
+              currentPlanLabel={accessPortal.currentPlan.label}
+              onUpgrade={() => navigate("/pricing")}
+              isCompact={false}
+              isOpen
+              onClose={() => setSidebarOpen(false)}
+            />
+          ) : null}
+          <ContentContainer>
+            <TopNav
+              title={route.title}
+              subtitle="Modular family continuity and asset-intelligence shell"
+              onNavigate={navigate}
+              currentPlanLabel={accessPortal.currentPlan.label}
+              householdName={accessPortal.session.householdName || "Working Household"}
+              onSignOut={() => {
+                accessPortal.signOut();
+                navigate("/login");
+              }}
+              showSidebarToggle={useCompactShell}
+              onToggleSidebar={() => setSidebarOpen((current) => !current)}
+              isCompact={isMobile}
+            />
+            <div style={{ padding: isMobile ? "16px 12px 22px" : isTablet ? "18px 16px 24px" : "28px" }}>
+              <RouteErrorBoundary resetKey={resolvedPathname}>
+                {renderRoute(resolvedPathname, navigate, accessPortal, intendedPath)}
+              </RouteErrorBoundary>
+            </div>
+          </ContentContainer>
+        </div>
+      </div>
+    </PlatformShellDataProvider>
   );
 }

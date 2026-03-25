@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { resolveResponsiveLayout } from "./responsiveLayout";
 
 function getViewportWidth() {
   if (typeof window === "undefined") return 1280;
@@ -17,10 +18,5 @@ export default function useResponsiveLayout() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  return {
-    width,
-    isMobile: width < 768,
-    isTablet: width < 1100,
-    isDesktop: width >= 1100,
-  };
+  return resolveResponsiveLayout(width);
 }

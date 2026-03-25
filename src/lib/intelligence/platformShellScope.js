@@ -1,0 +1,24 @@
+export function resolvePlatformDataScope(accessSession = null, householdState = null) {
+  const householdId = householdState?.context?.householdId || null;
+  const ownershipMode = householdState?.context?.ownershipMode || "loading";
+  const guestFallbackActive = Boolean(householdState?.context?.guestFallbackActive);
+  const authUserId = accessSession?.isAuthenticated ? accessSession?.userId || null : null;
+  const isAuthenticatedScopeReady = !authUserId || (
+    householdId &&
+    ownershipMode === "authenticated_owned" &&
+    !guestFallbackActive
+  );
+
+  return {
+    authUserId,
+    householdId,
+    ownershipMode,
+    guestFallbackActive,
+    canLoadShellData: Boolean(householdId) && isAuthenticatedScopeReady && !householdState?.loading,
+    scopeSource: authUserId
+      ? isAuthenticatedScopeReady && !householdState?.loading
+        ? "authenticated_owned"
+        : "awaiting_owned_household"
+      : "guest_shared",
+  };
+}

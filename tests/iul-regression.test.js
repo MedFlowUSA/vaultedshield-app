@@ -26,10 +26,12 @@ import {
   sanitizeParserStructuredData,
 } from "../src/lib/supabase/vaultedPolicies.js";
 import { isHouseholdOwnedByUser } from "../src/lib/supabase/platformData.js";
+import { resolvePlatformDataScope } from "../src/lib/intelligence/platformShellScope.js";
 import { resolveCarrierParsingProfile } from "../src/lib/domain/parsing/carrierProfiles.js";
 import { detectPageType } from "../src/lib/domain/parsing/pageTypeDetection.js";
 import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconstruction.js";
 import { buildIulReaderModel } from "../src/features/iul-reader/readerModel.js";
+import { resolveResponsiveLayout } from "../src/lib/ui/responsiveLayout.js";
 
 function field(value, confidence = "high", displayValue = null) {
   return {
@@ -655,6 +657,59 @@ runTest("buildVaultedPolicyScopeFilter isolates authenticated and guest policy q
     operator: "is",
     value: null,
   });
+});
+
+runTest("resolvePlatformDataScope blocks authenticated shell loads until an owned household resolves", () => {
+  assert.deepEqual(
+    resolvePlatformDataScope(
+      { isAuthenticated: true, userId: "user-1" },
+      {
+        loading: true,
+        context: {
+          householdId: null,
+          ownershipMode: "loading",
+          guestFallbackActive: false,
+        },
+      }
+    ),
+    {
+      authUserId: "user-1",
+      householdId: null,
+      ownershipMode: "loading",
+      guestFallbackActive: false,
+      canLoadShellData: false,
+      scopeSource: "awaiting_owned_household",
+    }
+  );
+
+  assert.deepEqual(
+    resolvePlatformDataScope(
+      { isAuthenticated: true, userId: "user-1" },
+      {
+        loading: false,
+        context: {
+          householdId: "household-1",
+          ownershipMode: "authenticated_owned",
+          guestFallbackActive: false,
+        },
+      }
+    ),
+    {
+      authUserId: "user-1",
+      householdId: "household-1",
+      ownershipMode: "authenticated_owned",
+      guestFallbackActive: false,
+      canLoadShellData: true,
+      scopeSource: "authenticated_owned",
+    }
+  );
+});
+
+runTest("resolveResponsiveLayout keeps phone widths in compact mode", () => {
+  assert.equal(resolveResponsiveLayout(390).isMobile, true);
+  assert.equal(resolveResponsiveLayout(430).isMobile, true);
+  assert.equal(resolveResponsiveLayout(430).isTablet, true);
+  assert.equal(resolveResponsiveLayout(1180).isDesktop, true);
 });
 
 runTest("snapshot payload builder carries parser version and structured parser payload for new saves", () => {

@@ -12,7 +12,7 @@ export default function TopNav({
   showSidebarToggle = false,
   isCompact = false,
 }) {
-  const { householdState } = usePlatformShellData();
+  const { householdState, debug } = usePlatformShellData();
   const resolvedHouseholdName = householdState.household?.household_name || householdName;
   const actionButtonStyle = {
     border: "1px solid #cbd5e1",
@@ -138,6 +138,19 @@ export default function TopNav({
           Log Out
         </button>
       </div>
+      {import.meta.env.DEV ? (
+        <div
+          style={{
+            width: "100%",
+            paddingTop: "6px",
+            fontSize: "11px",
+            color: "#64748b",
+            borderTop: "1px solid rgba(226, 232, 240, 0.8)",
+          }}
+        >
+          auth={debug.authUserId || "guest"} | household={debug.householdId || "none"} | guestMode={debug.guestModeActive ? "yes" : "no"} | sharedFallback={debug.sharedFallbackActive ? "yes" : "no"} | policyScope={debug.policyScopeSource}
+        </div>
+      ) : null}
     </div>
   );
 }
