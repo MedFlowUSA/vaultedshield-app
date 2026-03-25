@@ -395,7 +395,7 @@ const POLICY_ASSISTANT_STARTERS = [
 ];
 
 export default function PolicyDetailPage({ policyId, onNavigate }) {
-  const { insuranceRows, errors } = usePlatformShellData();
+  const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
   const [bundle, setBundle] = useState({
     policy: null,
@@ -486,6 +486,15 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
   }
 
   useEffect(() => {
+    setBundle({
+      policy: null,
+      documents: [],
+      snapshots: [],
+      analytics: [],
+      statements: [],
+    });
+    setLoadError("");
+
     if (!policyId) return;
 
     let active = true;
@@ -536,7 +545,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [policyId]);
+  }, [debug.authUserId, debug.householdId, policyId]);
 
   useEffect(() => {
     setAssistantHistory([]);

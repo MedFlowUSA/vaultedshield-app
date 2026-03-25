@@ -6,6 +6,7 @@ import PricingPage from "./pages/PricingPage";
 import AuthLoginPage from "./pages/AuthLoginPage";
 import AuthSignupPage from "./pages/AuthSignupPage";
 import DashboardPage from "./pages/DashboardPage";
+import GuidanceCenterPage from "./pages/GuidanceCenterPage";
 import VaultPage from "./pages/VaultPage";
 import UploadCenterPage from "./pages/UploadCenterPage";
 import AssetsHomePage from "./pages/AssetsHomePage";
@@ -163,6 +164,8 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <PricingPage onNavigate={navigate} accessPortal={accessPortal} returnPath={returnPath} />;
     case "/dashboard":
       return <DashboardPage onNavigate={navigate} />;
+    case "/guidance":
+      return <GuidanceCenterPage onNavigate={navigate} />;
     case "/vault":
       return <VaultPage />;
     case "/upload-center":
@@ -213,14 +216,24 @@ export default function PlatformApp() {
   const { isMobile, isTablet } = useResponsiveLayout();
   const accessPortal = useAccessPortal();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pricingReturnPath, setPricingReturnPath] = useState("/dashboard");
   const postAuthHome = "/insurance";
-  const isAuthRoute = pathname === "/login" || pathname === "/signup" || pathname === "/pricing";
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
   const resolvedPathname = accessPortal.isAuthenticated && isAuthRoute ? postAuthHome : pathname;
   const route = getRouteByPath(resolvedPathname);
-  const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup" || resolvedPathname === "/pricing";
+  const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup";
   const hasRouteAccess = hasTierAccess(accessPortal.currentTier, route.minimumTier || "free");
   const intendedPath = !resolvedIsAuthRoute ? resolvedPathname : postAuthHome;
   const useCompactShell = isTablet;
+  const handleOpenPricing = () => {
+    setSidebarOpen(false);
+    setPricingReturnPath(resolvedPathname === "/pricing" ? pricingReturnPath : resolvedPathname || "/dashboard");
+    navigate("/pricing");
+  };
+  const resolvedPricingReturnPath =
+    resolvedPathname === "/pricing" && accessPortal.isAuthenticated
+      ? pricingReturnPath || postAuthHome
+      : intendedPath;
 
   useEffect(() => {
     if (!useCompactShell) {
@@ -256,11 +269,11 @@ export default function PlatformApp() {
   }
 
   if (resolvedIsAuthRoute) {
-    return (
-      <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-        {renderRoute(resolvedPathname, navigate, accessPortal, postAuthHome)}
-      </div>
-    );
+      return (
+        <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
+          {renderRoute(resolvedPathname, navigate, accessPortal, postAuthHome)}
+        </div>
+      );
   }
 
   if (!hasRouteAccess) {
@@ -270,7 +283,7 @@ export default function PlatformApp() {
           onNavigate={navigate}
           accessPortal={accessPortal}
           lockedRouteTitle={route.title}
-          returnPath={intendedPath}
+          returnPath={resolvedPricingReturnPath}
         />
       </div>
     );
@@ -300,7 +313,7 @@ export default function PlatformApp() {
             onNavigate={navigate}
             currentTier={accessPortal.currentTier}
             currentPlanLabel={accessPortal.currentPlan.label}
-            onUpgrade={() => navigate("/pricing")}
+            onUpgrade={handleOpenPricing}
             isCompact
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
@@ -313,7 +326,7 @@ export default function PlatformApp() {
               onNavigate={navigate}
               currentTier={accessPortal.currentTier}
               currentPlanLabel={accessPortal.currentPlan.label}
-              onUpgrade={() => navigate("/pricing")}
+              onUpgrade={handleOpenPricing}
               isCompact={false}
               isOpen
               onClose={() => setSidebarOpen(false)}
@@ -324,6 +337,7 @@ export default function PlatformApp() {
               title={route.title}
               subtitle="Modular family continuity and asset-intelligence shell"
               onNavigate={navigate}
+              onUpgrade={handleOpenPricing}
               currentPlanLabel={accessPortal.currentPlan.label}
               householdName={accessPortal.session.householdName || "Working Household"}
               onSignOut={() => {
@@ -336,7 +350,7 @@ export default function PlatformApp() {
             />
             <div style={{ padding: isMobile ? "16px 12px 22px" : isTablet ? "18px 16px 24px" : "28px" }}>
               <RouteErrorBoundary resetKey={resolvedPathname}>
-                {renderRoute(resolvedPathname, navigate, accessPortal, intendedPath)}
+                {renderRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
               </RouteErrorBoundary>
             </div>
           </ContentContainer>

@@ -5,6 +5,7 @@ export default function TopNav({
   title,
   subtitle,
   onNavigate,
+  onUpgrade,
   currentPlanLabel = "Free",
   householdName = "Working Household",
   onSignOut,
@@ -105,18 +106,21 @@ export default function TopNav({
           <div style={{ fontSize: "12px", color: "#475569" }}>{resolvedHouseholdName}</div>
         </div>
         <button
-          onClick={() => onNavigate("/pricing")}
+          type="button"
+          onClick={() => onUpgrade?.()}
           style={actionButtonStyle}
         >
           Upgrade
         </button>
         <button
+          type="button"
           onClick={() => onNavigate("/upload-center")}
           style={actionButtonStyle}
         >
           Upload Center
         </button>
         <button
+          type="button"
           onClick={() => onNavigate("/insurance/life/policy-detail")}
           style={{
             border: "none",
@@ -132,6 +136,7 @@ export default function TopNav({
           Open Life Policy Portal
         </button>
         <button
+          type="button"
           onClick={() => onSignOut?.()}
           style={actionButtonStyle}
         >

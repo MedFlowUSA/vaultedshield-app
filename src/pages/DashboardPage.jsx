@@ -1082,6 +1082,21 @@ export default function DashboardPage({ onNavigate }) {
                 </button>
               ))}
             </div>
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                paddingTop: "4px",
+              }}
+            >
+              <button type="button" onClick={() => onNavigate?.("/guidance")} style={buttonStyle(false)}>
+                Open Guidance Center
+              </button>
+              <button type="button" onClick={() => onNavigate?.("/upload-center")} style={buttonStyle(false)}>
+                Upload More Records
+              </button>
+            </div>
           </div>
         </section>
 

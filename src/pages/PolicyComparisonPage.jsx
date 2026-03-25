@@ -561,7 +561,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
   const [statementBundles, setStatementBundles] = useState({});
   const [activeEvidenceId, setActiveEvidenceId] = useState("");
   const [showComparisonReport, setShowComparisonReport] = useState(false);
-  const { insuranceRows, loadingStates, errors } = usePlatformShellData();
+  const { insuranceRows, loadingStates, errors, debug } = usePlatformShellData();
   const loadError = errors.insurancePortfolio || "";
   const loading = loadingStates.insurancePortfolio && insuranceRows.length === 0;
 
@@ -655,6 +655,10 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
       trendDeltaAnalysis,
     ]
   );
+
+  useEffect(() => {
+    setStatementBundles({});
+  }, [debug.authUserId, debug.householdId]);
 
   useEffect(() => {
     let active = true;

@@ -45,7 +45,6 @@ export const ACCESS_TIERS = {
 };
 
 export const ACCESS_TIER_ORDER = ["free", "essential", "professional"];
-
 function safeReadStorage(key, fallback) {
   if (typeof window === "undefined") return fallback;
   try {
