@@ -12,6 +12,8 @@ import {
 } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
+import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
+import { convertImageToFile } from "../utils/imageToFile";
 
 const DOCUMENT_TYPES = [
   "statement",
@@ -51,6 +53,7 @@ export default function UploadCenterPage() {
   const householdState = usePlatformHousehold();
   const supabaseConfigured = isSupabaseConfigured();
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const [assets, setAssets] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -60,6 +63,8 @@ export default function UploadCenterPage() {
   const [documentRole, setDocumentRole] = useState("uploaded_document");
   const [notes, setNotes] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const nativeCameraAvailable = isNativeCameraAvailable();
 
   useEffect(() => {
     if (!householdState.context.householdId) {
@@ -105,6 +110,26 @@ export default function UploadCenterPage() {
       duplicate: false,
     }));
     setQueue((current) => [...newEntries, ...current]);
+  }
+
+  async function handleCameraCapture() {
+    setLoadError("");
+    setCameraLoading(true);
+
+    try {
+      if (!nativeCameraAvailable) {
+        cameraInputRef.current?.click();
+        return;
+      }
+
+      const image = await captureDocumentPhoto();
+      const file = await convertImageToFile(image);
+      enqueueFiles([file]);
+    } catch (error) {
+      setLoadError(error?.message || "Camera capture failed.");
+    } finally {
+      setCameraLoading(false);
+    }
   }
 
   async function handleUploadQueuedFiles() {
@@ -212,11 +237,30 @@ export default function UploadCenterPage() {
               style={{ display: "none" }}
               onChange={(event) => enqueueFiles(event.target.files)}
             />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                enqueueFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
             <button
               onClick={() => fileInputRef.current?.click()}
               style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
             >
               Select Files
+            </button>
+            <button
+              type="button"
+              onClick={handleCameraCapture}
+              disabled={cameraLoading}
+              style={{ marginTop: "10px", padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
+            >
+              {cameraLoading ? "Opening Camera..." : "Scan Document"}
             </button>
           </div>
 

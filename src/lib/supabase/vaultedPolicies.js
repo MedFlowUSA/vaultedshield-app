@@ -1729,13 +1729,17 @@ export async function persistVaultedPolicyAnalysis({
           carrierKey: carrierProfile?.key || null,
           classificationConfidence: baseline.documentType?.confidence,
           rawTextExcerpt: baseline.text?.slice(0, 1000) || "",
-          metadata: {
-            evidence: baseline.documentType?.evidence || [],
-            storage_bucket: baselineStorageResult.storageBucket,
-            storage_path: baselineStorageResult.storagePath,
-            upload_status: baselineStorageResult.succeeded ? "uploaded" : baselineStorageResult.attempted ? "failed" : "not_attempted",
-          },
-        })
+        metadata: {
+          evidence: baseline.documentType?.evidence || [],
+          storage_bucket: baselineStorageResult.storageBucket,
+          storage_path: baselineStorageResult.storagePath,
+          upload_status: baselineStorageResult.succeeded ? "uploaded" : baselineStorageResult.attempted ? "failed" : "not_attempted",
+          source_type: baseline.extractionMeta?.source_type || "pdf",
+          ocr_confidence: baseline.extractionMeta?.ocr_confidence ?? null,
+          extraction_method: baseline.extractionMeta?.extraction_method || "pdf_text",
+          extraction_warnings: baseline.extractionMeta?.extraction_warnings || [],
+        },
+      })
       : { data: null, error: null, duplicateStatus: null, sourceHash: baselineSourceHash };
 
     if (baselineDocumentResult.error) {
@@ -1773,7 +1777,10 @@ export async function persistVaultedPolicyAnalysis({
       snapshotType: "baseline_illustration",
       statementDate: null,
       normalizedPolicy,
-      extractionMeta: normalizedPolicy?.extraction_meta || {},
+      extractionMeta: {
+        ...(normalizedPolicy?.extraction_meta || {}),
+        ...(baseline?.extractionMeta || {}),
+      },
       completenessAssessment,
       carrierProfile,
       productProfile,
@@ -1899,6 +1906,10 @@ export async function persistVaultedPolicyAnalysis({
           storage_bucket: statementStorageResult.storageBucket,
           storage_path: statementStorageResult.storagePath,
           upload_status: statementStorageResult.succeeded ? "uploaded" : statementStorageResult.attempted ? "failed" : "not_attempted",
+          source_type: statement.extractionMeta?.source_type || "pdf",
+          ocr_confidence: statement.extractionMeta?.ocr_confidence ?? null,
+          extraction_method: statement.extractionMeta?.extraction_method || "pdf_text",
+          extraction_warnings: statement.extractionMeta?.extraction_warnings || [],
         },
       });
 
@@ -1984,7 +1995,10 @@ export async function persistVaultedPolicyAnalysis({
         snapshotType: "annual_statement",
         statementDate: statement.fields?.statement_date?.display_value || null,
         normalizedPolicy: statementSnapshotPolicy,
-        extractionMeta: statement.fields || {},
+        extractionMeta: {
+          ...(statement.fields || {}),
+          ...(statement.extractionMeta || {}),
+        },
         completenessAssessment,
         carrierProfile,
         productProfile,

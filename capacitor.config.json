@@ -1,0 +1,6 @@
+{
+  "appId": "com.vaultedshield.app",
+  "appName": "VaultedShield",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

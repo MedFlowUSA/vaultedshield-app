@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import { ACCESS_TIERS } from "../lib/auth/accessPortal";
@@ -17,9 +17,18 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
   const [submitError, setSubmitError] = useState("");
   const [submitNote, setSubmitNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [retryCountdown, setRetryCountdown] = useState(0);
+
+  useEffect(() => {
+    if (retryCountdown <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setRetryCountdown((current) => (current <= 1 ? 0 : current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryCountdown]);
 
   async function handleCreateAccount() {
-    if (submitting) return;
+    if (submitting || retryCountdown > 0) return;
     setSubmitError("");
     setSubmitNote("");
     setSubmitting(true);
@@ -33,6 +42,9 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
         }
         onNavigate(returnPath || "/dashboard");
         return;
+      }
+      if (result?.rateLimited && result?.retryAfterSeconds) {
+        setRetryCountdown(result.retryAfterSeconds);
       }
       setSubmitError(result?.error || "Account creation could not be completed.");
     } finally {
@@ -72,10 +84,14 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             />
             <button
               onClick={handleCreateAccount}
-              disabled={submitting}
+              disabled={submitting || retryCountdown > 0}
               style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
             >
-              {submitting ? "Creating Account..." : "Create Account And Enter Platform"}
+              {submitting
+                ? "Creating Account..."
+                : retryCountdown > 0
+                  ? `Try Again In ${retryCountdown}s`
+                  : "Create Account And Enter Platform"}
             </button>
             <button
               onClick={() => onNavigate("/login")}
@@ -84,6 +100,11 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             >
               Back To Login
             </button>
+            {retryCountdown > 0 ? (
+              <div style={{ color: "#92400e", fontSize: "14px" }}>
+                Email sending is temporarily cooling down. Retry in {retryCountdown} seconds.
+              </div>
+            ) : null}
             {submitNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
             {submitError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
           </div>

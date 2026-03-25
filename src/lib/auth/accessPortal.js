@@ -255,6 +255,7 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
       ok: false,
       error: formatEmailCooldownMessage(emailSendGuard.remainingMs),
       rateLimited: true,
+      retryAfterSeconds: Math.max(1, Math.ceil(emailSendGuard.remainingMs / 1000)),
     };
   }
 
@@ -270,7 +271,12 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
   });
 
   if (error) {
-    return { ok: false, error: normalizeSupabaseEmailError(error), rateLimited: true };
+    return {
+      ok: false,
+      error: normalizeSupabaseEmailError(error),
+      rateLimited: true,
+      retryAfterSeconds: 60,
+    };
   }
 
   setStoredTierForEmail(normalizedEmail, tier);

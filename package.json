@@ -11,10 +11,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/camera": "^8.0.2",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@supabase/supabase-js": "^2.99.1",
     "pdfjs-dist": "^5.5.207",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tesseract.js": "^7.0.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
