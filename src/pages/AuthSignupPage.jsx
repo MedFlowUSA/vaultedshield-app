@@ -16,21 +16,28 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
   });
   const [submitError, setSubmitError] = useState("");
   const [submitNote, setSubmitNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleCreateAccount() {
+    if (submitting) return;
     setSubmitError("");
     setSubmitNote("");
-    const result = await accessPortal?.signUp(form);
-    if (result?.ok) {
-      if (result.requiresEmailConfirmation) {
-        setSubmitNote(result.message || "Account created. Confirm your email, then log in.");
-        onNavigate("/login");
+    setSubmitting(true);
+    try {
+      const result = await accessPortal?.signUp(form);
+      if (result?.ok) {
+        if (result.requiresEmailConfirmation) {
+          setSubmitNote(result.message || "Account created. Confirm your email, then log in.");
+          onNavigate("/login");
+          return;
+        }
+        onNavigate(returnPath || "/dashboard");
         return;
       }
-      onNavigate(returnPath || "/dashboard");
-      return;
+      setSubmitError(result?.error || "Account creation could not be completed.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitError(result?.error || "Account creation could not be completed.");
   }
 
   return (
@@ -65,12 +72,14 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             />
             <button
               onClick={handleCreateAccount}
+              disabled={submitting}
               style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
             >
-              Create Account And Enter Platform
+              {submitting ? "Creating Account..." : "Create Account And Enter Platform"}
             </button>
             <button
               onClick={() => onNavigate("/login")}
+              disabled={submitting}
               style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
             >
               Back To Login

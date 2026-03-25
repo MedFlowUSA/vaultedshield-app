@@ -4,6 +4,8 @@ import { getSupabaseClient, isSupabaseConfigured } from "../supabase/client";
 const SESSION_STORAGE_KEY = "vaultedshield_access_session_v1";
 const PROFILE_STORAGE_KEY = "vaultedshield_access_profiles_v1";
 const PLAN_STORAGE_KEY = "vaultedshield_access_plans_v1";
+const EMAIL_SEND_GUARD_KEY = "vaultedshield_email_send_guard_v1";
+const EMAIL_SEND_GUARD_WINDOW_MS = 90 * 1000;
 
 export const ACCESS_TIERS = {
   free: {
@@ -129,6 +131,65 @@ function setStoredTierForEmail(email = "", tier = "free") {
   });
 }
 
+function getStoredEmailSendGuardMap() {
+  return safeReadStorage(EMAIL_SEND_GUARD_KEY, {});
+}
+
+function writeStoredEmailSendGuardMap(value) {
+  safeWriteStorage(EMAIL_SEND_GUARD_KEY, value);
+}
+
+function readEmailSendGuard(email = "") {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+  const guardMap = getStoredEmailSendGuardMap();
+  const record = guardMap[normalizedEmail];
+  if (!record?.lastSentAt) return null;
+
+  const ageMs = Date.now() - new Date(record.lastSentAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs >= EMAIL_SEND_GUARD_WINDOW_MS) {
+    delete guardMap[normalizedEmail];
+    writeStoredEmailSendGuardMap(guardMap);
+    return null;
+  }
+
+  return {
+    ...record,
+    remainingMs: Math.max(0, EMAIL_SEND_GUARD_WINDOW_MS - ageMs),
+  };
+}
+
+function writeEmailSendGuard(email = "", context = "signup_confirmation") {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  const guardMap = getStoredEmailSendGuardMap();
+  guardMap[normalizedEmail] = {
+    lastSentAt: new Date().toISOString(),
+    context,
+  };
+  writeStoredEmailSendGuardMap(guardMap);
+}
+
+function formatEmailCooldownMessage(remainingMs = EMAIL_SEND_GUARD_WINDOW_MS) {
+  const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  return `An email was already requested recently. Wait about ${remainingSeconds} seconds, then try again.`;
+}
+
+function normalizeSupabaseEmailError(error) {
+  const message = String(error?.message || "");
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    lowerMessage.includes("email rate limit") ||
+    lowerMessage.includes("rate limit exceeded") ||
+    lowerMessage.includes("over_email_send_rate_limit")
+  ) {
+    return "Too many email attempts were made for this address. Wait a minute, then try again.";
+  }
+
+  return message || "Authentication could not be completed.";
+}
+
 export function getTierDefinition(tierKey = "free") {
   return ACCESS_TIERS[tierKey] || ACCESS_TIERS.free;
 }
@@ -188,6 +249,15 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
   }
 
   const normalizedEmail = normalizeEmail(email);
+  const emailSendGuard = readEmailSendGuard(normalizedEmail);
+  if (emailSendGuard) {
+    return {
+      ok: false,
+      error: formatEmailCooldownMessage(emailSendGuard.remainingMs),
+      rateLimited: true,
+    };
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password: String(password || ""),
@@ -200,10 +270,11 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
   });
 
   if (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: normalizeSupabaseEmailError(error), rateLimited: true };
   }
 
   setStoredTierForEmail(normalizedEmail, tier);
+  writeEmailSendGuard(normalizedEmail, "supabase_signup");
   return { ok: true, user: data?.user || null, session: data?.session || null };
 }
 
