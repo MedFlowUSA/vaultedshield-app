@@ -142,6 +142,32 @@ async function getCurrentVaultedPolicyScope() {
   };
 }
 
+function normalizeExplicitVaultedPolicyScope(scopeOverride = null) {
+  if (!scopeOverride) return null;
+  if (typeof scopeOverride === "string") {
+    return {
+      userId: scopeOverride || null,
+      mode: scopeOverride ? "authenticated_owned" : "guest_shared",
+      source: "explicit_user_id",
+    };
+  }
+  if (typeof scopeOverride === "object") {
+    const userId = scopeOverride.userId || null;
+    return {
+      userId,
+      mode: userId ? "authenticated_owned" : "guest_shared",
+      source: scopeOverride.source || "explicit_scope",
+    };
+  }
+  return null;
+}
+
+async function resolveVaultedPolicyScope(scopeOverride = null) {
+  const explicitScope = normalizeExplicitVaultedPolicyScope(scopeOverride);
+  if (explicitScope) return explicitScope;
+  return getCurrentVaultedPolicyScope();
+}
+
 export function buildVaultedPolicyScopeFilter(userId) {
   return userId
     ? { column: "user_id", operator: "eq", value: userId }
@@ -890,7 +916,7 @@ export function rehydrateVaultedPolicyBundle(bundle) {
   };
 }
 
-export async function compareVaultedPolicies(policyIds = []) {
+export async function compareVaultedPolicies(policyIds = [], scopeOverride = null) {
   const uniqueIds = [...new Set((Array.isArray(policyIds) ? policyIds : []).filter(Boolean))];
   if (uniqueIds.length === 0) {
     return {
@@ -902,7 +928,7 @@ export async function compareVaultedPolicies(policyIds = []) {
     };
   }
 
-  const bundleResults = await Promise.all(uniqueIds.map((policyId) => getVaultedPolicyBundle(policyId)));
+  const bundleResults = await Promise.all(uniqueIds.map((policyId) => getVaultedPolicyBundle(policyId, scopeOverride)));
   const error = bundleResults.find((result) => result?.error)?.error || null;
   if (error) {
     return { data: null, error };
@@ -988,7 +1014,7 @@ export function isRowLevelSecurityError(error) {
   );
 }
 
-async function findVaultedPolicyByIdentity({ policyNumber, carrierKey }) {
+async function findVaultedPolicyByIdentity({ policyNumber, carrierKey, scopeOverride = null }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: null, error: new Error("Supabase not configured") };
@@ -997,7 +1023,7 @@ async function findVaultedPolicyByIdentity({ policyNumber, carrierKey }) {
     return { data: null, error: null };
   }
 
-  const scope = await getCurrentVaultedPolicyScope();
+  const scope = await resolveVaultedPolicyScope(scopeOverride);
   const { data, error } = await supabase
     .from("vaulted_policies")
     .select("*")
@@ -1015,13 +1041,14 @@ export async function upsertVaultedPolicyFromAnalysis({
   normalizedPolicy,
   carrierProfile,
   productProfile,
+  scopeOverride = null,
 }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: null, error: new Error("Supabase not configured") };
   }
 
-  const scope = await getCurrentVaultedPolicyScope();
+  const scope = await resolveVaultedPolicyScope(scopeOverride);
   const payload = {
     user_id: scope.userId,
     policy_number: normalizedPolicy?.policy_identity?.policy_number || null,
@@ -1051,6 +1078,7 @@ export async function upsertVaultedPolicyFromAnalysis({
     const existingResult = await findVaultedPolicyByIdentity({
       policyNumber: payload.policy_number,
       carrierKey: payload.carrier_key,
+      scopeOverride,
     });
     if (existingResult.error) {
       return { data: null, error: existingResult.error };
@@ -1280,13 +1308,13 @@ export async function getVaultedPolicyWithHistory(policyId) {
   return { data, error };
 }
 
-export async function listVaultedPolicies() {
+export async function listVaultedPolicies(scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const scope = await getCurrentVaultedPolicyScope();
+  const scope = await resolveVaultedPolicyScope(scopeOverride);
   let query = supabase.from("vaulted_policies").select(`
       *,
       vaulted_policy_statements (statement_date),
@@ -1308,13 +1336,13 @@ export async function listVaultedPolicies() {
   };
 }
 
-export async function getVaultedPolicyById(policyId) {
+export async function getVaultedPolicyById(policyId, scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: null, error: new Error("Supabase not configured") };
   }
 
-  const scope = await getCurrentVaultedPolicyScope();
+  const scope = await resolveVaultedPolicyScope(scopeOverride);
   let query = supabase.from("vaulted_policies").select("*").eq("id", policyId);
   query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
   const { data, error } = await query.single();
@@ -1322,8 +1350,8 @@ export async function getVaultedPolicyById(policyId) {
   return { data, error };
 }
 
-async function ensureAccessibleVaultedPolicy(policyId) {
-  const policyResult = await getVaultedPolicyById(policyId);
+async function ensureAccessibleVaultedPolicy(policyId, scopeOverride = null) {
+  const policyResult = await getVaultedPolicyById(policyId, scopeOverride);
   if (policyResult.error || !policyResult.data?.id) {
     return {
       data: null,
@@ -1333,13 +1361,13 @@ async function ensureAccessibleVaultedPolicy(policyId) {
   return policyResult;
 }
 
-export async function getVaultedPolicyDocuments(policyId) {
+export async function getVaultedPolicyDocuments(policyId, scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId, scopeOverride);
   if (accessResult.error) {
     return { data: [], error: accessResult.error };
   }
@@ -1353,13 +1381,13 @@ export async function getVaultedPolicyDocuments(policyId) {
   return { data: safeArray(data), error };
 }
 
-export async function getVaultedPolicySnapshots(policyId) {
+export async function getVaultedPolicySnapshots(policyId, scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId, scopeOverride);
   if (accessResult.error) {
     return { data: [], error: accessResult.error };
   }
@@ -1373,13 +1401,13 @@ export async function getVaultedPolicySnapshots(policyId) {
   return { data: safeArray(data), error };
 }
 
-export async function getVaultedPolicyAnalytics(policyId) {
+export async function getVaultedPolicyAnalytics(policyId, scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId, scopeOverride);
   if (accessResult.error) {
     return { data: [], error: accessResult.error };
   }
@@ -1393,13 +1421,13 @@ export async function getVaultedPolicyAnalytics(policyId) {
   return { data: safeArray(data), error };
 }
 
-export async function getVaultedPolicyStatements(policyId) {
+export async function getVaultedPolicyStatements(policyId, scopeOverride = null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     return { data: [], error: new Error("Supabase not configured") };
   }
 
-  const accessResult = await ensureAccessibleVaultedPolicy(policyId);
+  const accessResult = await ensureAccessibleVaultedPolicy(policyId, scopeOverride);
   if (accessResult.error) {
     return { data: [], error: accessResult.error };
   }
@@ -1413,8 +1441,8 @@ export async function getVaultedPolicyStatements(policyId) {
   return { data: safeArray(data), error };
 }
 
-export async function getVaultedPolicyBundle(policyId) {
-  const policyResult = await getVaultedPolicyById(policyId);
+export async function getVaultedPolicyBundle(policyId, scopeOverride = null) {
+  const policyResult = await getVaultedPolicyById(policyId, scopeOverride);
   if (policyResult.error || !policyResult.data?.id) {
     return {
       data: null,
@@ -1424,10 +1452,10 @@ export async function getVaultedPolicyBundle(policyId) {
 
   const [documentsResult, snapshotsResult, analyticsResult, statementsResult] =
     await Promise.all([
-      getVaultedPolicyDocuments(policyId),
-      getVaultedPolicySnapshots(policyId),
-      getVaultedPolicyAnalytics(policyId),
-      getVaultedPolicyStatements(policyId),
+      getVaultedPolicyDocuments(policyId, scopeOverride),
+      getVaultedPolicySnapshots(policyId, scopeOverride),
+      getVaultedPolicyAnalytics(policyId, scopeOverride),
+      getVaultedPolicyStatements(policyId, scopeOverride),
     ]);
 
   const error =
@@ -1579,6 +1607,7 @@ export async function persistVaultedPolicyAnalysis({
   statements,
   illustrationFile,
   statementFiles,
+  scopeOverride = null,
 }) {
   const status = {
     attempted: false,
@@ -1622,6 +1651,7 @@ export async function persistVaultedPolicyAnalysis({
       normalizedPolicy,
       carrierProfile,
       productProfile,
+      scopeOverride,
     });
 
     if (policyResult.error || !policyResult.data?.id) {

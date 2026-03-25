@@ -18,6 +18,7 @@ import {
   parseRetirementDocumentToSnapshot,
   uploadRetirementDocument,
 } from "../lib/supabase/retirementData";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 
 const RETIREMENT_DOCUMENT_CLASSES = listRetirementDocumentClasses();
 const RETIREMENT_PROVIDERS = listRetirementProviders();
@@ -100,6 +101,7 @@ function formatFlagLabel(value) {
 }
 
 export default function RetirementAccountDetailPage({ retirementAccountId, onNavigate }) {
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -112,6 +114,22 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   const [parsingDocumentId, setParsingDocumentId] = useState("");
   const [parseError, setParseError] = useState("");
   const [parseDebug, setParseDebug] = useState(null);
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "retirement_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   async function loadRetirementBundle(targetRetirementAccountId, options = {}) {
     const result = await getRetirementAccountBundle(targetRetirementAccountId);
@@ -133,7 +151,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
 
     const linkedAssetId = result.data.retirementAccount.assets?.id;
     if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId);
+      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
       if (!assetResult.error) {
         setAssetBundle(assetResult.data || null);
       } else if (!options.silent) {
@@ -164,7 +182,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     return () => {
       active = false;
     };
-  }, [retirementAccountId]);
+  }, [retirementAccountId, scopeKey]);
 
   const retirementAccount = bundle?.retirementAccount || null;
   const retirementType = retirementAccount ? getRetirementType(retirementAccount.retirement_type_key) : null;

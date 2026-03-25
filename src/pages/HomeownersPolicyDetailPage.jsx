@@ -22,6 +22,7 @@ import {
   updatePropertyHomeownersLink,
   uploadHomeownersDocument,
 } from "../lib/supabase/homeownersData";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 
@@ -49,6 +50,7 @@ function getStatusTone(status) {
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -68,6 +70,22 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "homeowners_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   async function loadHomeownersBundle(targetHomeownersPolicyId, options = {}) {
     const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId);
@@ -86,7 +104,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
 
     const linkedAssetId = result.data.homeownersPolicy.assets?.id;
     if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId);
+      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
       if (!assetResult.error) {
         setAssetBundle(assetResult.data || null);
       } else if (!options.silent) {
@@ -106,7 +124,9 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     }
 
     if (result.data.homeownersPolicy?.household_id) {
-      const propertiesResult = await listProperties(result.data.homeownersPolicy.household_id);
+      const propertiesResult = await listProperties(
+        platformScope.householdId || result.data.homeownersPolicy.household_id
+      );
       setAvailableProperties(propertiesResult.data || []);
       if (!options.silent && propertiesResult.error) {
         setLinkError(propertiesResult.error.message || "");
@@ -129,7 +149,17 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     return () => {
       active = false;
     };
-  }, [homeownersPolicyId]);
+  }, [homeownersPolicyId, scopeKey]);
+
+  useEffect(() => {
+    setBundle(null);
+    setAssetBundle(null);
+    setPropertyLinks([]);
+    setAvailableProperties([]);
+    setLoadError("");
+    setLinkError("");
+    setLinkSuccess("");
+  }, [scopeKey]);
 
   const homeownersPolicy = bundle?.homeownersPolicy || null;
   const homeownersPolicyType = homeownersPolicy
@@ -230,6 +260,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
       link_type: propertyLinks.length === 0 ? "primary_property_coverage" : "supplemental_reference",
       is_primary: propertyLinks.length === 0,
       metadata: { linked_from: "homeowners_detail" },
+      scopeOverride: platformScope,
     });
 
     if (result.error) {
@@ -260,7 +291,10 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     setSavingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await updatePropertyHomeownersLink(linkId, linkDraft);
+    const result = await updatePropertyHomeownersLink(linkId, {
+      ...linkDraft,
+      scopeOverride: platformScope,
+    });
     if (result.error) {
       setLinkError(result.error.message || "Property link could not be updated.");
       setSavingLinkId("");
@@ -277,7 +311,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     setRemovingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await unlinkHomeownersFromProperty(linkId);
+    const result = await unlinkHomeownersFromProperty(linkId, { scopeOverride: platformScope });
     if (result.error) {
       setLinkError(result.error.message || "Property link could not be removed.");
       setRemovingLinkId("");

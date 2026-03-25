@@ -14,12 +14,23 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
     password: "",
     tier: "free",
   });
+  const [submitError, setSubmitError] = useState("");
+  const [submitNote, setSubmitNote] = useState("");
 
   async function handleCreateAccount() {
+    setSubmitError("");
+    setSubmitNote("");
     const result = await accessPortal?.signUp(form);
     if (result?.ok) {
+      if (result.requiresEmailConfirmation) {
+        setSubmitNote(result.message || "Account created. Confirm your email, then log in.");
+        onNavigate("/login");
+        return;
+      }
       onNavigate(returnPath || "/dashboard");
+      return;
     }
+    setSubmitError(result?.error || "Account creation could not be completed.");
   }
 
   return (
@@ -64,6 +75,8 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             >
               Back To Login
             </button>
+            {submitNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
+            {submitError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
           </div>
         </SectionCard>
 

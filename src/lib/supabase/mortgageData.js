@@ -15,6 +15,10 @@ import {
 } from "./propertyStackLinks";
 import { getSupabaseClient } from "./client";
 import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
+import {
+  appendHouseholdScope,
+  buildScopedAccessError,
+} from "./platformScope";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -126,8 +130,8 @@ export async function createMortgageLoan(payload) {
   });
 }
 
-export async function getMortgageLoanById(mortgageLoanId) {
-  return maybeSingleRecord("mortgage_loans", [{ column: "id", value: mortgageLoanId }], {
+export async function getMortgageLoanById(mortgageLoanId, scopeOverride = null) {
+  return maybeSingleRecord("mortgage_loans", appendHouseholdScope([{ column: "id", value: mortgageLoanId }], scopeOverride), {
     select:
       "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
   });
@@ -350,14 +354,14 @@ export async function uploadMortgageDocument({
   };
 }
 
-export async function getMortgageLoanBundle(mortgageLoanId) {
+export async function getMortgageLoanBundle(mortgageLoanId, scopeOverride = null) {
   const [
     mortgageLoanResult,
     mortgageDocumentsResult,
     mortgageSnapshotsResult,
     mortgageAnalyticsResult,
   ] = await Promise.all([
-    getMortgageLoanById(mortgageLoanId),
+    getMortgageLoanById(mortgageLoanId, scopeOverride),
     listMortgageDocuments(mortgageLoanId),
     listMortgageSnapshots(mortgageLoanId),
     listMortgageAnalytics(mortgageLoanId),
@@ -418,17 +422,17 @@ export async function createMortgageAssetWithLoan(payload) {
   };
 }
 
-export async function getMortgageLoanForAsset(assetId) {
-  return maybeSingleRecord("mortgage_loans", [{ column: "asset_id", value: assetId }], {
+export async function getMortgageLoanForAsset(assetId, scopeOverride = null) {
+  return maybeSingleRecord("mortgage_loans", appendHouseholdScope([{ column: "asset_id", value: assetId }], scopeOverride), {
     select:
       "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
   });
 }
 
-export async function getMortgageAssetLink(assetId) {
+export async function getMortgageAssetLink(assetId, scopeOverride = null) {
   const [assetResult, mortgageLoanResult] = await Promise.all([
-    getAssetById(assetId),
-    getMortgageLoanForAsset(assetId),
+    getAssetById(assetId, scopeOverride),
+    getMortgageLoanForAsset(assetId, scopeOverride),
   ]);
   return {
     data:
@@ -438,7 +442,12 @@ export async function getMortgageAssetLink(assetId) {
             asset: assetResult.data,
             mortgageLoan: mortgageLoanResult.data,
           },
-    error: assetResult.error || mortgageLoanResult.error || null,
+    error:
+      assetResult.error ||
+      mortgageLoanResult.error ||
+      (!assetResult.data && !mortgageLoanResult.data
+        ? buildScopedAccessError("Mortgage asset link")
+        : null),
   };
 }
 

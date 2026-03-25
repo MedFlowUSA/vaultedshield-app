@@ -21,6 +21,7 @@ import {
   getSupabaseConfigurationMessage,
   isSupabaseConfigured,
 } from "../lib/supabase/client";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getPropertyBundle,
   linkHomeownersToProperty,
@@ -37,6 +38,7 @@ import {
 import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listMortgageLoans } from "../lib/supabase/mortgageData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 
 const PROPERTY_DOCUMENT_CLASSES = listPropertyDocumentClasses();
@@ -292,6 +294,8 @@ function buildPropertyFactsDraft(property) {
 }
 
 export default function PropertyDetailPage({ propertyId, onNavigate }) {
+  const { isMobile, isTablet } = useResponsiveLayout();
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
   const [bundle, setBundle] = useState(null);
@@ -328,9 +332,25 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantHistory, setAssistantHistory] = useState([]);
   const [showPropertyReport, setShowPropertyReport] = useState(false);
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "property_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   async function loadPropertyBundle(targetPropertyId, options = {}) {
-    const result = await getPropertyBundle(targetPropertyId);
+    const result = await getPropertyBundle(targetPropertyId, platformScope);
     if (result.error || !result.data?.property) {
       if (!options.silent) {
         setBundle(null);
@@ -349,7 +369,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
     const linkedAssetId = result.data.property.assets?.id;
     if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId);
+      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
       if (!assetResult.error) {
         setAssetBundle(assetResult.data || null);
       } else if (!options.silent) {
@@ -362,7 +382,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
     if (result.data.property?.household_id) {
       const [mortgageLoansResult, homeownersPoliciesResult] = await Promise.all([
-        listMortgageLoans(result.data.property.household_id),
+        listMortgageLoans(platformScope.householdId || result.data.property.household_id),
         listHomeownersPolicies(result.data.property.household_id),
       ]);
       setAvailableMortgageLoans(mortgageLoansResult.data || []);
@@ -392,7 +412,22 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [propertyId]);
+  }, [propertyId, scopeKey]);
+
+  useEffect(() => {
+    setBundle(null);
+    setAssetBundle(null);
+    setAvailableMortgageLoans([]);
+    setAvailableHomeownersPolicies([]);
+    setLoadError("");
+    setLinkError("");
+    setLinkSuccess("");
+    setAnalyticsError("");
+    setFactsError("");
+    setFactsSuccess("");
+    setValuationError("");
+    setValuationSuccess("");
+  }, [scopeKey]);
 
   useEffect(() => {
     setFactsDraft(buildPropertyFactsDraft(bundle?.property || null));
@@ -411,6 +446,22 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const propertyStackAnalytics = bundle?.propertyStackAnalytics || null;
   const latestPropertyValuation = bundle?.latestPropertyValuation || null;
   const valuationMetadata = latestPropertyValuation?.metadata || {};
+  const dualColumnLayout = isTablet ? "1fr" : "1fr 1fr";
+  const summaryRailLayout = isTablet ? "1fr" : "1.2fr 1fr";
+  const documentRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
+  const factsHeaderLayout = isMobile ? "1fr" : "1fr 1fr";
+  const factsStreetLayout = isTablet ? "1fr" : "1.2fr 0.8fr";
+  const factsCityLayout = isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 0.45fr 0.55fr";
+  const factsTripleLayout = isMobile ? "1fr" : isTablet ? "1fr 1fr" : "1fr 1fr 1fr";
+  const factsFiveLayout = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))";
+  const tripleMetricLayout = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const fiveMetricLayout = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))";
+  const assistantFormLayout = isMobile ? "1fr" : "minmax(0, 1fr) auto";
+  const baseInputStyle = { width: "100%", minWidth: 0, boxSizing: "border-box", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" };
+  const baseSelectStyle = { ...baseInputStyle, background: "#fff" };
+  const actionStackStyle = { display: "flex", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" };
+  const actionButtonLayoutStyle = isMobile ? { width: "100%", justifyContent: "center" } : null;
+  const wrapTextStyle = { minWidth: 0, wordBreak: "break-word", overflowWrap: "anywhere" };
   const officialMarketSignalCount = valuationMetadata.official_source_count ?? 0;
   const officialMarketSupportLabel =
     valuationMetadata.official_market_support === "aligned"
@@ -604,6 +655,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       link_type: linkedMortgages.length === 0 ? "primary_financing" : "secondary_financing",
       is_primary: linkedMortgages.length === 0,
       metadata: { linked_from: "property_detail" },
+      scopeOverride: platformScope,
     });
 
     if (result.error) {
@@ -629,6 +681,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       link_type: linkedHomeownersPolicies.length === 0 ? "primary_property_coverage" : "supplemental_reference",
       is_primary: linkedHomeownersPolicies.length === 0,
       metadata: { linked_from: "property_detail" },
+      scopeOverride: platformScope,
     });
 
     if (result.error) {
@@ -670,7 +723,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setSavingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await updatePropertyMortgageLink(linkId, mortgageLinkDraft);
+    const result = await updatePropertyMortgageLink(linkId, {
+      ...mortgageLinkDraft,
+      scopeOverride: platformScope,
+    });
     if (result.error) {
       setLinkError(result.error.message || "Mortgage link could not be updated.");
       setSavingLinkId("");
@@ -687,7 +743,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setSavingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await updatePropertyHomeownersLink(linkId, homeownersLinkDraft);
+    const result = await updatePropertyHomeownersLink(linkId, {
+      ...homeownersLinkDraft,
+      scopeOverride: platformScope,
+    });
     if (result.error) {
       setLinkError(result.error.message || "Homeowners link could not be updated.");
       setSavingLinkId("");
@@ -704,7 +763,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setRemovingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await unlinkMortgageFromProperty(linkId);
+    const result = await unlinkMortgageFromProperty(linkId, { scopeOverride: platformScope });
     if (result.error) {
       setLinkError(result.error.message || "Mortgage link could not be removed.");
       setRemovingLinkId("");
@@ -720,7 +779,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setRemovingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await unlinkHomeownersFromProperty(linkId);
+    const result = await unlinkHomeownersFromProperty(linkId, { scopeOverride: platformScope });
     if (result.error) {
       setLinkError(result.error.message || "Homeowners link could not be removed.");
       setRemovingLinkId("");
@@ -735,7 +794,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     if (!property?.id) return;
     setRefreshingAnalytics(true);
     setAnalyticsError("");
-    const result = await upsertPropertyStackAnalytics(property.id);
+    const result = await upsertPropertyStackAnalytics(property.id, platformScope);
     if (result.error) {
       setAnalyticsError(result.error.message || "Property stack analytics could not be refreshed.");
       setRefreshingAnalytics(false);
@@ -771,7 +830,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       last_purchase_price:
         factsDraft.last_purchase_price === "" ? null : Number(factsDraft.last_purchase_price),
       last_purchase_date: factsDraft.last_purchase_date || null,
-    });
+    }, platformScope);
     if (result.error) {
       setFactsError(result.error.message || "Property facts could not be saved.");
       setSavingFacts(false);
@@ -792,7 +851,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setRunningValuation(true);
     setValuationError("");
     setValuationSuccess("");
-    const result = await runPropertyVirtualValuation(property.id);
+    const result = await runPropertyVirtualValuation(property.id, platformScope);
     if (result.error) {
       setValuationError(result.error.message || "Virtual valuation could not be completed.");
       setRunningValuation(false);
@@ -850,7 +909,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   }
 
   return (
-    <div>
+    <div style={{ width: "100%", minWidth: 0, overflowX: "clip" }}>
       <PageHeader
         eyebrow="Assets"
         title={property?.property_name || linkedAsset?.asset_name || "Property Detail"}
@@ -873,15 +932,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             <StatusBadge label={propertyType?.display_name || property.property_type_key} tone="info" />
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
           </div>
-          <div style={{ marginTop: "18px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ marginTop: "18px", ...actionStackStyle }}>
             <button
               type="button"
               onClick={() => setShowPropertyReport((current) => !current)}
-              style={reportActionButtonStyle(showPropertyReport, false)}
+              style={{ ...reportActionButtonStyle(showPropertyReport, false), ...(actionButtonLayoutStyle || {}) }}
             >
               {showPropertyReport ? "Hide Property Report" : "Open Property Report"}
             </button>
-            <button type="button" onClick={handlePrintPropertyReport} style={reportActionButtonStyle(false, true)}>
+            <button type="button" onClick={handlePrintPropertyReport} style={{ ...reportActionButtonStyle(false, true), ...(actionButtonLayoutStyle || {}) }}>
               Print Report
             </button>
           </div>
@@ -892,9 +951,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </div>
           ) : null}
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
             <SectionCard title="Property Summary">
-              <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+              <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                 <div><strong>Property Name:</strong> {property.property_name || linkedAsset?.asset_name || "Limited visibility"}</div>
                 <div><strong>Property Type:</strong> {propertyType?.display_name || property.property_type_key}</div>
                 <div><strong>Address:</strong> {property.property_address || "Limited visibility"}</div>
@@ -908,7 +967,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
             <SectionCard title="Linked Platform Asset Summary">
               {linkedAsset ? (
-                <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+                <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                   <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
                   <div><strong>Category:</strong> {linkedAsset.asset_category}</div>
                   <div><strong>Subcategory:</strong> {linkedAsset.asset_subcategory || "Limited visibility"}</div>
@@ -926,10 +985,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
           <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.facts = node; }}>
             <SectionCard title="Property Address & Facts">
-              <form onSubmit={handleSaveFacts} style={{ display: "grid", gap: "12px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <input value={factsDraft.property_name} onChange={(event) => setFactsDraft((current) => ({ ...current, property_name: event.target.value }))} placeholder="Property name" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <select value={factsDraft.property_type_key} onChange={(event) => setFactsDraft((current) => ({ ...current, property_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+              <form onSubmit={handleSaveFacts} style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+                <div style={{ display: "grid", gridTemplateColumns: factsHeaderLayout, gap: "12px" }}>
+                  <input value={factsDraft.property_name} onChange={(event) => setFactsDraft((current) => ({ ...current, property_name: event.target.value }))} placeholder="Property name" style={baseInputStyle} />
+                  <select value={factsDraft.property_type_key} onChange={(event) => setFactsDraft((current) => ({ ...current, property_type_key: event.target.value }))} style={baseSelectStyle}>
                     {PROPERTY_TYPES.map((item) => (
                       <option key={item.property_type_key} value={item.property_type_key}>
                         {item.display_name}
@@ -937,39 +996,39 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     ))}
                   </select>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "12px" }}>
-                  <input value={factsDraft.street_1} onChange={(event) => setFactsDraft((current) => ({ ...current, street_1: event.target.value }))} placeholder="Street address" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.street_2} onChange={(event) => setFactsDraft((current) => ({ ...current, street_2: event.target.value }))} placeholder="Unit / Apt" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                <div style={{ display: "grid", gridTemplateColumns: factsStreetLayout, gap: "12px" }}>
+                  <input value={factsDraft.street_1} onChange={(event) => setFactsDraft((current) => ({ ...current, street_1: event.target.value }))} placeholder="Street address" style={baseInputStyle} />
+                  <input value={factsDraft.street_2} onChange={(event) => setFactsDraft((current) => ({ ...current, street_2: event.target.value }))} placeholder="Unit / Apt" style={baseInputStyle} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 0.45fr 0.55fr", gap: "12px" }}>
-                  <input value={factsDraft.city} onChange={(event) => setFactsDraft((current) => ({ ...current, city: event.target.value }))} placeholder="City" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.state} onChange={(event) => setFactsDraft((current) => ({ ...current, state: event.target.value }))} placeholder="State" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.postal_code} onChange={(event) => setFactsDraft((current) => ({ ...current, postal_code: event.target.value }))} placeholder="ZIP" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                <div style={{ display: "grid", gridTemplateColumns: factsCityLayout, gap: "12px" }}>
+                  <input value={factsDraft.city} onChange={(event) => setFactsDraft((current) => ({ ...current, city: event.target.value }))} placeholder="City" style={baseInputStyle} />
+                  <input value={factsDraft.state} onChange={(event) => setFactsDraft((current) => ({ ...current, state: event.target.value }))} placeholder="State" style={baseInputStyle} />
+                  <input value={factsDraft.postal_code} onChange={(event) => setFactsDraft((current) => ({ ...current, postal_code: event.target.value }))} placeholder="ZIP" style={baseInputStyle} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                  <input value={factsDraft.county} onChange={(event) => setFactsDraft((current) => ({ ...current, county: event.target.value }))} placeholder="County" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.apn} onChange={(event) => setFactsDraft((current) => ({ ...current, apn: event.target.value }))} placeholder="APN / Parcel" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.occupancy_type} onChange={(event) => setFactsDraft((current) => ({ ...current, occupancy_type: event.target.value }))} placeholder="Occupancy type" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                <div style={{ display: "grid", gridTemplateColumns: factsTripleLayout, gap: "12px" }}>
+                  <input value={factsDraft.county} onChange={(event) => setFactsDraft((current) => ({ ...current, county: event.target.value }))} placeholder="County" style={baseInputStyle} />
+                  <input value={factsDraft.apn} onChange={(event) => setFactsDraft((current) => ({ ...current, apn: event.target.value }))} placeholder="APN / Parcel" style={baseInputStyle} />
+                  <input value={factsDraft.occupancy_type} onChange={(event) => setFactsDraft((current) => ({ ...current, occupancy_type: event.target.value }))} placeholder="Occupancy type" style={baseInputStyle} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px" }}>
-                  <input value={factsDraft.beds} onChange={(event) => setFactsDraft((current) => ({ ...current, beds: event.target.value }))} placeholder="Beds" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.baths} onChange={(event) => setFactsDraft((current) => ({ ...current, baths: event.target.value }))} placeholder="Baths" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.square_feet} onChange={(event) => setFactsDraft((current) => ({ ...current, square_feet: event.target.value }))} placeholder="Square feet" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.lot_size} onChange={(event) => setFactsDraft((current) => ({ ...current, lot_size: event.target.value }))} placeholder="Lot size" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input value={factsDraft.year_built} onChange={(event) => setFactsDraft((current) => ({ ...current, year_built: event.target.value }))} placeholder="Year built" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                <div style={{ display: "grid", gridTemplateColumns: factsFiveLayout, gap: "12px" }}>
+                  <input value={factsDraft.beds} onChange={(event) => setFactsDraft((current) => ({ ...current, beds: event.target.value }))} placeholder="Beds" style={baseInputStyle} />
+                  <input value={factsDraft.baths} onChange={(event) => setFactsDraft((current) => ({ ...current, baths: event.target.value }))} placeholder="Baths" style={baseInputStyle} />
+                  <input value={factsDraft.square_feet} onChange={(event) => setFactsDraft((current) => ({ ...current, square_feet: event.target.value }))} placeholder="Square feet" style={baseInputStyle} />
+                  <input value={factsDraft.lot_size} onChange={(event) => setFactsDraft((current) => ({ ...current, lot_size: event.target.value }))} placeholder="Lot size" style={baseInputStyle} />
+                  <input value={factsDraft.year_built} onChange={(event) => setFactsDraft((current) => ({ ...current, year_built: event.target.value }))} placeholder="Year built" style={baseInputStyle} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <input value={factsDraft.last_purchase_price} onChange={(event) => setFactsDraft((current) => ({ ...current, last_purchase_price: event.target.value }))} placeholder="Last purchase price" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                  <input type="date" value={factsDraft.last_purchase_date} onChange={(event) => setFactsDraft((current) => ({ ...current, last_purchase_date: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                <div style={{ display: "grid", gridTemplateColumns: factsHeaderLayout, gap: "12px" }}>
+                  <input value={factsDraft.last_purchase_price} onChange={(event) => setFactsDraft((current) => ({ ...current, last_purchase_price: event.target.value }))} placeholder="Last purchase price" style={baseInputStyle} />
+                  <input type="date" value={factsDraft.last_purchase_date} onChange={(event) => setFactsDraft((current) => ({ ...current, last_purchase_date: event.target.value }))} style={baseInputStyle} />
                 </div>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  <button type="submit" disabled={savingFacts} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                <div style={actionStackStyle}>
+                  <button type="submit" disabled={savingFacts} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                     {savingFacts ? "Saving Facts..." : "Save Facts"}
                   </button>
-                  <button type="button" onClick={handleRunValuation} disabled={runningValuation} style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                  <button type="button" onClick={handleRunValuation} disabled={runningValuation} style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                     {runningValuation ? "Running Valuation..." : "Run Virtual Valuation"}
                   </button>
-                  <button type="button" onClick={handleRunValuation} disabled={runningValuation || !latestPropertyValuation} style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                  <button type="button" onClick={handleRunValuation} disabled={runningValuation || !latestPropertyValuation} style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                     {runningValuation ? "Refreshing..." : "Refresh Valuation"}
                   </button>
                 </div>
@@ -987,7 +1046,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               subtitle="Ask focused questions about the current value read, comp quality, market support, and property linkage using the live intelligence already loaded on this page."
             >
               <div style={{ display: "grid", gap: "18px" }}>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
                   {PROPERTY_ASSISTANT_STARTERS.map((prompt) => (
                     <button
                       key={prompt}
@@ -1001,6 +1060,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         color: "#1d4ed8",
                         fontWeight: 700,
                         cursor: "pointer",
+                        maxWidth: "100%",
+                        textAlign: "left",
+                        ...wrapTextStyle,
                       }}
                     >
                       {prompt}
@@ -1009,7 +1071,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 </div>
 
                 <form onSubmit={handleAssistantSubmit} style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: assistantFormLayout, gap: "12px", alignItems: "center" }}>
                     <input
                       value={assistantQuestion}
                       onChange={(event) => setAssistantQuestion(event.target.value)}
@@ -1019,6 +1081,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         borderRadius: "14px",
                         border: "1px solid #cbd5e1",
                         background: "#ffffff",
+                        width: "100%",
+                        minWidth: 0,
+                        boxSizing: "border-box",
                       }}
                     />
                     <button
@@ -1032,6 +1097,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         color: "#ffffff",
                         cursor: assistantQuestion.trim() ? "pointer" : "not-allowed",
                         fontWeight: 700,
+                        ...(actionButtonLayoutStyle || {}),
                       }}
                     >
                       Ask
@@ -1088,7 +1154,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     {(latestAssistantEntry.response.actions || []).length > 0 ? (
                       <div>
                         <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Suggested Actions</div>
-                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
                           {latestAssistantEntry.response.actions.map((action) => (
                             <button
                               key={action.id}
@@ -1107,6 +1173,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                                 color: "#1d4ed8",
                                 fontWeight: 700,
                                 cursor: "pointer",
+                                maxWidth: "100%",
+                                textAlign: "left",
+                                ...wrapTextStyle,
                               }}
                             >
                               {action.label}
@@ -1118,7 +1187,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
                     <div>
                       <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
                         {(latestAssistantEntry.response.followup_prompts || []).map((prompt) => (
                           <button
                             key={prompt}
@@ -1132,6 +1201,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                               color: "#1d4ed8",
                               fontWeight: 700,
                               cursor: "pointer",
+                              maxWidth: "100%",
+                              textAlign: "left",
+                              ...wrapTextStyle,
                             }}
                           >
                             {prompt}
@@ -1149,15 +1221,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
             <div ref={(node) => { sectionRefs.current.mortgages = node; }}>
             <SectionCard title="Linked Mortgages">
               {linkedMortgages.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {linkedMortgages.map((mortgage) => (
-                    <div key={mortgage.linkage?.id || mortgage.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div key={mortgage.linkage?.id || mortgage.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                        <div>
+                        <div style={wrapTextStyle}>
                           <div style={{ fontWeight: 700, color: "#0f172a" }}>{mortgage.loan_name || mortgage.assets?.asset_name || "Mortgage Loan"}</div>
                           <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
                             <div><strong>Lender:</strong> {mortgage.assets?.institution_name || mortgage.lender_key || "Limited visibility"}</div>
@@ -1167,14 +1239,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                             <div><strong>Notes:</strong> {mortgage.linkage?.notes || "None"}</div>
                           </div>
                         </div>
-                        <div style={{ display: "grid", gap: "8px" }}>
-                          <button onClick={() => onNavigate(`/mortgage/detail/${mortgage.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                        <div style={{ display: "grid", gap: "8px", width: isMobile ? "100%" : undefined }}>
+                          <button onClick={() => onNavigate(`/mortgage/detail/${mortgage.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Open Mortgage
                           </button>
-                          <button onClick={() => beginEditMortgageLink(mortgage)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                          <button onClick={() => beginEditMortgageLink(mortgage)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Edit
                           </button>
-                          <button onClick={() => handleRemoveMortgageLink(mortgage.linkage?.id)} disabled={removingLinkId === mortgage.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b" }}>
+                          <button onClick={() => handleRemoveMortgageLink(mortgage.linkage?.id)} disabled={removingLinkId === mortgage.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
                             {removingLinkId === mortgage.linkage?.id ? "Removing..." : "Remove"}
                           </button>
                         </div>
@@ -1192,12 +1264,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                             <input type="checkbox" checked={mortgageLinkDraft.is_primary} onChange={(event) => setMortgageLinkDraft((current) => ({ ...current, is_primary: event.target.checked }))} />
                             Primary mortgage link
                           </label>
-                          <textarea value={mortgageLinkDraft.notes} onChange={(event) => setMortgageLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
-                          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                            <button onClick={() => handleSaveMortgageLink(mortgage.linkage?.id)} disabled={savingLinkId === mortgage.linkage?.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                          <textarea value={mortgageLinkDraft.notes} onChange={(event) => setMortgageLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ ...baseInputStyle, padding: "10px", resize: "vertical" }} />
+                          <div style={actionStackStyle}>
+                            <button onClick={() => handleSaveMortgageLink(mortgage.linkage?.id)} disabled={savingLinkId === mortgage.linkage?.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                               {savingLinkId === mortgage.linkage?.id ? "Saving..." : "Save Link"}
                             </button>
-                            <button onClick={() => setEditingMortgageLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                            <button onClick={() => setEditingMortgageLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                               Cancel
                             </button>
                           </div>
@@ -1219,7 +1291,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     </option>
                   ))}
                 </select>
-                <button type="submit" disabled={linkingMortgage || !selectedMortgageLoanId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                <button type="submit" disabled={linkingMortgage || !selectedMortgageLoanId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                   {linkingMortgage ? "Linking Mortgage..." : "Link Mortgage"}
                 </button>
               </form>
@@ -1231,9 +1303,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               {linkedHomeownersPolicies.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {linkedHomeownersPolicies.map((policy) => (
-                    <div key={policy.linkage?.id || policy.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div key={policy.linkage?.id || policy.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                        <div>
+                        <div style={wrapTextStyle}>
                           <div style={{ fontWeight: 700, color: "#0f172a" }}>{policy.policy_name || policy.assets?.asset_name || "Homeowners Policy"}</div>
                           <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
                             <div><strong>Carrier:</strong> {policy.assets?.institution_name || policy.carrier_key || "Limited visibility"}</div>
@@ -1243,14 +1315,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                             <div><strong>Notes:</strong> {policy.linkage?.notes || "None"}</div>
                           </div>
                         </div>
-                        <div style={{ display: "grid", gap: "8px" }}>
-                          <button onClick={() => onNavigate(`/insurance/homeowners/detail/${policy.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                        <div style={{ display: "grid", gap: "8px", width: isMobile ? "100%" : undefined }}>
+                          <button onClick={() => onNavigate(`/insurance/homeowners/detail/${policy.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Open Policy
                           </button>
-                          <button onClick={() => beginEditHomeownersLink(policy)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                          <button onClick={() => beginEditHomeownersLink(policy)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Edit
                           </button>
-                          <button onClick={() => handleRemoveHomeownersLink(policy.linkage?.id)} disabled={removingLinkId === policy.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b" }}>
+                          <button onClick={() => handleRemoveHomeownersLink(policy.linkage?.id)} disabled={removingLinkId === policy.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
                             {removingLinkId === policy.linkage?.id ? "Removing..." : "Remove"}
                           </button>
                         </div>
@@ -1268,12 +1340,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                             <input type="checkbox" checked={homeownersLinkDraft.is_primary} onChange={(event) => setHomeownersLinkDraft((current) => ({ ...current, is_primary: event.target.checked }))} />
                             Primary homeowners link
                           </label>
-                          <textarea value={homeownersLinkDraft.notes} onChange={(event) => setHomeownersLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
-                          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                            <button onClick={() => handleSaveHomeownersLink(policy.linkage?.id)} disabled={savingLinkId === policy.linkage?.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                          <textarea value={homeownersLinkDraft.notes} onChange={(event) => setHomeownersLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ ...baseInputStyle, padding: "10px", resize: "vertical" }} />
+                          <div style={actionStackStyle}>
+                            <button onClick={() => handleSaveHomeownersLink(policy.linkage?.id)} disabled={savingLinkId === policy.linkage?.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                               {savingLinkId === policy.linkage?.id ? "Saving..." : "Save Link"}
                             </button>
-                            <button onClick={() => setEditingHomeownersLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                            <button onClick={() => setEditingHomeownersLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                               Cancel
                             </button>
                           </div>
@@ -1295,7 +1367,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     </option>
                   ))}
                 </select>
-                <button type="submit" disabled={linkingHomeowners || !selectedHomeownersPolicyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                <button type="submit" disabled={linkingHomeowners || !selectedHomeownersPolicyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                   {linkingHomeowners ? "Linking Homeowners..." : "Link Homeowners Policy"}
                 </button>
               </form>
@@ -1345,14 +1417,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <StatusBadge label={`Completeness ${formatScore(propertyStackAnalytics.completeness_score)}`} tone={getContinuityTone(propertyStackAnalytics.continuity_status)} />
                     <StatusBadge label={propertyStackAnalytics.continuity_status || "weak"} tone={getContinuityTone(propertyStackAnalytics.continuity_status)} />
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
+                    <div style={{ color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                       <div><strong>Primary Mortgage:</strong> {primaryMortgageSummary?.loan_name || primaryMortgageSummary?.assets?.asset_name || propertyStackAnalytics.primary_mortgage_loan_id || "Not set"}</div>
                       <div><strong>Primary Homeowners:</strong> {primaryHomeownersSummary?.policy_name || primaryHomeownersSummary?.assets?.asset_name || propertyStackAnalytics.primary_homeowners_policy_id || "Not set"}</div>
                       <div><strong>Mortgage Links:</strong> {propertyStackAnalytics.mortgage_link_count ?? 0}</div>
                       <div><strong>Homeowners Links:</strong> {propertyStackAnalytics.homeowners_link_count ?? 0}</div>
                     </div>
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    <div style={{ color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                       <div><strong>Has Mortgage:</strong> {propertyStackAnalytics.has_mortgage ? "Yes" : "No"}</div>
                       <div><strong>Has Homeowners:</strong> {propertyStackAnalytics.has_homeowners ? "Yes" : "No"}</div>
                       <div><strong>Continuity:</strong> {propertyStackAnalytics.continuity_status || "weak"}</div>
@@ -1383,7 +1455,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
             <div ref={(node) => { sectionRefs.current.valuation = node; }}>
             <SectionCard title="Virtual Valuation">
               {latestPropertyValuation ? (
@@ -1402,7 +1474,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                       The latest saved valuation contains invalid value output and should be refreshed before using it in review.
                     </div>
                   ) : null}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: tripleMetricLayout, gap: "12px" }}>
                     <div><strong>Low:</strong><div style={{ marginTop: "6px", color: "#0f172a", fontWeight: 700 }}>{formatCurrency(latestPropertyValuation.low_estimate)}</div></div>
                     <div><strong>Midpoint:</strong><div style={{ marginTop: "6px", color: "#0f172a", fontWeight: 700 }}>{formatCurrency(latestPropertyValuation.midpoint_estimate)}</div></div>
                     <div><strong>High:</strong><div style={{ marginTop: "6px", color: "#0f172a", fontWeight: 700 }}>{formatCurrency(latestPropertyValuation.high_estimate)}</div></div>
@@ -1413,7 +1485,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <div><strong>Valuation Date:</strong> {formatDate(latestPropertyValuation.valuation_date)}</div>
                     <div><strong>Matched Market Context:</strong> {officialMarketContext || "Local market context only"}</div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: fiveMetricLayout, gap: "12px" }}>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                       <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Subject Completeness</div>
                       <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{formatScore(valuationMetadata.subject_completeness)}</div>
@@ -1450,7 +1522,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         : ["Adjustment notes will appear here after a valuation run."]
                     }
                   />
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: dualColumnLayout, gap: "12px" }}>
                     <div style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>Comp Support Read</div>
                       <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
@@ -1474,8 +1546,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <strong>Source Summary:</strong>
                     <div style={{ marginTop: "8px", display: "grid", gap: "10px" }}>
                       {(latestPropertyValuation.source_summary || []).map((source, index) => (
-                        <div key={`${source.source_name}-${index}`} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                          <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                        <div key={`${source.source_name}-${index}`} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
+                          <div style={{ fontWeight: 700, color: "#0f172a", ...wrapTextStyle }}>
                             {source.source_name}
                             {source.official_source ? (
                               <span style={{ marginLeft: "8px", fontSize: "12px", color: "#0f766e", fontWeight: 600 }}>Official</span>
@@ -1555,7 +1627,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                       Equity calculations are using an invalid saved valuation. Refresh the valuation before relying on estimated value, equity, or LTV.
                     </div>
                   ) : null}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: tripleMetricLayout, gap: "12px" }}>
                     <div>
                       <strong>Estimated Value Midpoint</strong>
                       <div style={{ marginTop: "6px", color: "#0f172a", fontWeight: 700 }}>
@@ -1626,9 +1698,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     ]}
                   />
                   {propertyComps.map((comp) => (
-                    <div key={comp.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div key={comp.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                        <div>
+                        <div style={wrapTextStyle}>
                           <div style={{ fontWeight: 700, color: "#0f172a" }}>{comp.comp_address || "Comparable sale"}</div>
                           <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
                             <div><strong>Distance:</strong> {comp.distance_miles ?? "?"} mi</div>
@@ -1636,7 +1708,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                             <div><strong>Sale Date:</strong> {formatDate(comp.sale_date)}</div>
                           </div>
                         </div>
-                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                        <div style={{ color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                           <div><strong>Beds / Baths:</strong> {comp.beds ?? "?"} / {comp.baths ?? "?"}</div>
                           <div><strong>Sq Ft:</strong> {formatNumber(comp.square_feet)}</div>
                           <div><strong>Price / Sq Ft:</strong> {comp.price_per_sqft ? formatCurrency(comp.price_per_sqft) : "Not available"}</div>
@@ -1653,13 +1725,13 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
             <SectionCard title="Property Documents">
               {bundle.propertyDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertyDocuments.map((document) => (
-                    <div key={document.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                    <div key={document.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
+                      <div style={{ fontWeight: 700, color: "#0f172a", ...wrapTextStyle }}>
                         {document.asset_documents?.file_name || document.document_class_key || "Property document"}
                       </div>
                       <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
@@ -1678,27 +1750,27 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
 
             <SectionCard title="Property Document Intake">
-              <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
-                <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: "20px", background: "#f8fafc" }}>
+              <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+                <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: isMobile ? "16px" : "20px", background: "#f8fafc", minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop property documents here</div>
                   <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
                     Upload deeds, tax bills, assessments, HOA statements, title references, leases, and related property documents into this record. The original file is saved as a generic asset document and then linked into the property module.
                   </p>
                   <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(event) => enqueueFiles(event.target.files)} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                     Select Property Documents
                   </button>
                 </div>
-                <select value={uploadForm.document_class_key} onChange={(event) => setUploadForm((current) => ({ ...current, document_class_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+                <select value={uploadForm.document_class_key} onChange={(event) => setUploadForm((current) => ({ ...current, document_class_key: event.target.value }))} style={baseSelectStyle}>
                   {PROPERTY_DOCUMENT_CLASSES.map((documentClass) => (
                     <option key={documentClass.document_class_key} value={documentClass.document_class_key}>
                       {documentClass.display_name}
                     </option>
                   ))}
                 </select>
-                <input type="date" value={uploadForm.document_date} onChange={(event) => setUploadForm((current) => ({ ...current, document_date: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                <textarea value={uploadForm.notes} onChange={(event) => setUploadForm((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional intake notes" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
-                <button type="submit" disabled={uploading || uploadQueue.length === 0 || !linkedAsset?.id} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                <input type="date" value={uploadForm.document_date} onChange={(event) => setUploadForm((current) => ({ ...current, document_date: event.target.value }))} style={baseInputStyle} />
+                <textarea value={uploadForm.notes} onChange={(event) => setUploadForm((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional intake notes" style={{ ...baseInputStyle, resize: "vertical" }} />
+                <button type="submit" disabled={uploading || uploadQueue.length === 0 || !linkedAsset?.id} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                   {uploading ? "Uploading Property Documents..." : "Upload Property Documents"}
                 </button>
                 {uploadError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{uploadError}</div> : null}
@@ -1708,8 +1780,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 {uploadQueue.length > 0 ? (
                   <div style={{ display: "grid", gap: "12px" }}>
                     {uploadQueue.map((item) => (
-                      <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.file.name}</div>
+                      <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a", ...wrapTextStyle }}>{item.file.name}</div>
                         <div style={{ marginTop: "4px", color: "#64748b" }}>
                           {uploadForm.document_class_key}
                           {uploadForm.document_date ? ` | ${uploadForm.document_date}` : ""}
@@ -1730,12 +1802,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
             <SectionCard title="Property Snapshots">
               {bundle.propertySnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertySnapshots.map((snapshot) => (
-                    <div key={snapshot.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div key={snapshot.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>{snapshot.snapshot_type || "property_snapshot"}</div>
                       <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
                         <div><strong>Snapshot Date:</strong> {formatDate(snapshot.snapshot_date)}</div>
@@ -1753,7 +1825,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               {bundle.propertyAnalytics.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertyAnalytics.map((analytics) => (
-                    <div key={analytics.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div key={analytics.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>{analytics.analytics_type || "property_analytics"}</div>
                       <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
                         <div><strong>Review Flags:</strong> {analytics.review_flags?.length ? analytics.review_flags.join(", ") : "None yet"}</div>
@@ -1768,14 +1840,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
             <SectionCard title="Linked Portals">
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {assetBundle.portalLinks.map((link) => {
                     const portal = link.portal_profiles || {};
                     return (
-                      <div key={link.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      <div key={link.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", ...wrapTextStyle }}>
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{portal.portal_name || "Linked portal"}</div>
                         <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
                           <div><strong>Institution:</strong> {portal.institution_name || "Limited visibility"}</div>

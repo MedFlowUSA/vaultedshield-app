@@ -33,6 +33,10 @@ import {
 } from "./propertyValuationData";
 import { getSupabaseClient } from "./client";
 import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
+import {
+  appendHouseholdScope,
+  buildScopedAccessError,
+} from "./platformScope";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -173,8 +177,8 @@ export async function createProperty(payload) {
   });
 }
 
-export async function getPropertyById(propertyId) {
-  return maybeSingleRecord("properties", [{ column: "id", value: propertyId }], {
+export async function getPropertyById(propertyId, scopeOverride = null) {
+  return maybeSingleRecord("properties", appendHouseholdScope([{ column: "id", value: propertyId }], scopeOverride), {
     select:
       "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
   });
@@ -387,21 +391,21 @@ export async function uploadPropertyDocument({
   };
 }
 
-export async function getPropertyBundle(propertyId) {
+export async function getPropertyBundle(propertyId, scopeOverride = null) {
   const [propertyResult, propertyDocumentsResult, propertySnapshotsResult, propertyAnalyticsResult, stackResult, latestValuationResult, valuationHistoryResult] =
     await Promise.all([
-      getPropertyById(propertyId),
+      getPropertyById(propertyId, scopeOverride),
       listPropertyDocuments(propertyId),
       listPropertySnapshots(propertyId),
       listPropertyAnalytics(propertyId),
-      getPropertyStackBundle(propertyId),
-      getLatestPropertyValuation(propertyId),
-      listPropertyValuations(propertyId),
+      getPropertyStackBundle(propertyId, scopeOverride),
+      getLatestPropertyValuation(propertyId, scopeOverride),
+      listPropertyValuations(propertyId, scopeOverride),
     ]);
 
-  let propertyStackAnalyticsResult = await getPropertyStackAnalytics(propertyId);
+  let propertyStackAnalyticsResult = await getPropertyStackAnalytics(propertyId, scopeOverride);
   if (!propertyStackAnalyticsResult.error && !propertyStackAnalyticsResult.data) {
-    const refreshAnalyticsResult = await upsertPropertyStackAnalytics(propertyId);
+    const refreshAnalyticsResult = await upsertPropertyStackAnalytics(propertyId, scopeOverride);
     propertyStackAnalyticsResult = {
       data: refreshAnalyticsResult.data || null,
       error: refreshAnalyticsResult.error || null,
@@ -410,7 +414,7 @@ export async function getPropertyBundle(propertyId) {
 
   const latestValuationId = latestValuationResult.data?.id || null;
   const latestValuationCompsResult = latestValuationId
-    ? await listPropertyComps(propertyId, latestValuationId)
+    ? await listPropertyComps(propertyId, latestValuationId, scopeOverride)
     : { data: [], error: null };
   const propertyEquityResult = evaluatePropertyEquityPosition({
     property: propertyResult.data || null,
@@ -459,13 +463,16 @@ export async function getPropertyBundle(propertyId) {
   };
 }
 
-export async function runPropertyVirtualValuation(propertyId) {
-  const runResult = await runPropertyVirtualValuationBase(propertyId);
+export async function runPropertyVirtualValuation(propertyId, scopeOverride = null) {
+  const runResult = await runPropertyVirtualValuationBase(propertyId, scopeOverride);
   if (runResult.error || !runResult.data?.property?.id) {
     return runResult;
   }
 
-  const analyticsResult = await upsertPropertyStackAnalytics(runResult.data.property.id);
+  const analyticsResult = await upsertPropertyStackAnalytics(
+    runResult.data.property.id,
+    scopeOverride
+  );
   return {
     data: {
       ...runResult.data,
@@ -510,17 +517,17 @@ export async function createPropertyAssetWithRecord(payload) {
   };
 }
 
-export async function getPropertyForAsset(assetId) {
-  return maybeSingleRecord("properties", [{ column: "asset_id", value: assetId }], {
+export async function getPropertyForAsset(assetId, scopeOverride = null) {
+  return maybeSingleRecord("properties", appendHouseholdScope([{ column: "asset_id", value: assetId }], scopeOverride), {
     select:
       "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
   });
 }
 
-export async function getPropertyAssetLink(assetId) {
+export async function getPropertyAssetLink(assetId, scopeOverride = null) {
   const [assetResult, propertyResult] = await Promise.all([
-    getAssetById(assetId),
-    getPropertyForAsset(assetId),
+    getAssetById(assetId, scopeOverride),
+    getPropertyForAsset(assetId, scopeOverride),
   ]);
   return {
     data:
@@ -530,7 +537,10 @@ export async function getPropertyAssetLink(assetId) {
             asset: assetResult.data,
             property: propertyResult.data,
           },
-    error: assetResult.error || propertyResult.error || null,
+    error:
+      assetResult.error ||
+      propertyResult.error ||
+      (!assetResult.data && !propertyResult.data ? buildScopedAccessError("Property asset link") : null),
   };
 }
 

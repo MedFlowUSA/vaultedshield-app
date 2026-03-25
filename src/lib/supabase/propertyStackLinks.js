@@ -1,6 +1,10 @@
 import { getSupabaseClient } from "./client";
 import { getAssetDetailBundle } from "./platformData";
 import { evaluatePropertyEquityPosition } from "../domain/propertyValuation";
+import {
+  appendHouseholdScope,
+  buildScopedAccessError,
+} from "./platformScope";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -112,6 +116,33 @@ async function listRecords(table, filters = [], options = {}) {
   return { data: data || [], error: listError };
 }
 
+async function getScopedProperty(propertyId, scopeOverride = null) {
+  return maybeSingleRecord(
+    "properties",
+    appendHouseholdScope([{ column: "id", value: propertyId }], scopeOverride),
+    {
+      select:
+        "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+    }
+  );
+}
+
+async function getScopedMortgageLoan(mortgageLoanId, scopeOverride = null) {
+  return maybeSingleRecord(
+    "mortgage_loans",
+    appendHouseholdScope([{ column: "id", value: mortgageLoanId }], scopeOverride),
+    { select: "id, household_id, asset_id, property_address, current_status" }
+  );
+}
+
+async function getScopedHomeownersPolicy(homeownersPolicyId, scopeOverride = null) {
+  return maybeSingleRecord(
+    "homeowners_policies",
+    appendHouseholdScope([{ column: "id", value: homeownersPolicyId }], scopeOverride),
+    { select: "id, household_id, asset_id, property_address, policy_status" }
+  );
+}
+
 async function getLatestPropertyValuationRecord(propertyId) {
   const { supabase, error } = getClientOrError();
   if (error) return { data: null, error };
@@ -151,6 +182,24 @@ export async function linkMortgageToProperty(propertyId, mortgageLoanId, options
     return { data: null, error: new Error("propertyId and mortgageLoanId are required"), duplicate: false };
   }
 
+  const propertyResult = await getScopedProperty(propertyId, options.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
+      duplicate: false,
+    };
+  }
+
+  const mortgageResult = await getScopedMortgageLoan(mortgageLoanId, options.scopeOverride);
+  if (mortgageResult.error || !mortgageResult.data) {
+    return {
+      data: null,
+      error: mortgageResult.error || buildScopedAccessError("Mortgage loan"),
+      duplicate: false,
+    };
+  }
+
   const linkType = options.link_type || "primary_financing";
   const existingResult = await maybeSingleRecord(
     "property_mortgage_links",
@@ -185,7 +234,7 @@ export async function linkMortgageToProperty(propertyId, mortgageLoanId, options
     });
 
   if (!insertResult.error) {
-    await upsertPropertyStackAnalytics(propertyId);
+    await upsertPropertyStackAnalytics(propertyId, options.scopeOverride);
   }
 
   return {
@@ -197,6 +246,27 @@ export async function linkMortgageToProperty(propertyId, mortgageLoanId, options
 export async function linkHomeownersToProperty(propertyId, homeownersPolicyId, options = {}) {
   if (!propertyId || !homeownersPolicyId) {
     return { data: null, error: new Error("propertyId and homeownersPolicyId are required"), duplicate: false };
+  }
+
+  const propertyResult = await getScopedProperty(propertyId, options.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
+      duplicate: false,
+    };
+  }
+
+  const homeownersResult = await getScopedHomeownersPolicy(
+    homeownersPolicyId,
+    options.scopeOverride
+  );
+  if (homeownersResult.error || !homeownersResult.data) {
+    return {
+      data: null,
+      error: homeownersResult.error || buildScopedAccessError("Homeowners policy"),
+      duplicate: false,
+    };
   }
 
   const linkType = options.link_type || "primary_property_coverage";
@@ -233,7 +303,7 @@ export async function linkHomeownersToProperty(propertyId, homeownersPolicyId, o
     });
 
   if (!insertResult.error) {
-    await upsertPropertyStackAnalytics(propertyId);
+    await upsertPropertyStackAnalytics(propertyId, options.scopeOverride);
   }
 
   return {
@@ -290,20 +360,13 @@ export async function listHomeownersPropertyLinks(homeownersPolicyId) {
   );
 }
 
-export async function getPropertyStackBundle(propertyId) {
-  const propertyResult = await maybeSingleRecord(
-    "properties",
-    [{ column: "id", value: propertyId }],
-    {
-      select:
-        "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
-    }
-  );
+export async function getPropertyStackBundle(propertyId, scopeOverride = null) {
+  const propertyResult = await getScopedProperty(propertyId, scopeOverride);
 
   if (propertyResult.error || !propertyResult.data) {
     return {
       data: null,
-      error: propertyResult.error || new Error("Property not found"),
+      error: propertyResult.error || buildScopedAccessError("Property"),
     };
   }
 
@@ -311,7 +374,7 @@ export async function getPropertyStackBundle(propertyId) {
     listPropertyMortgageLinks(propertyId),
     listPropertyHomeownersLinks(propertyId),
     propertyResult.data.assets?.id
-      ? getAssetDetailBundle(propertyResult.data.assets.id)
+      ? getAssetDetailBundle(propertyResult.data.assets.id, scopeOverride)
       : Promise.resolve({ data: null, error: null }),
   ]);
 
@@ -477,12 +540,12 @@ function buildPropertyStackAnalyticsFromBundle(stackBundle) {
   };
 }
 
-export async function evaluatePropertyStackAnalytics(propertyId) {
+export async function evaluatePropertyStackAnalytics(propertyId, scopeOverride = null) {
   if (!propertyId) {
     return { data: null, error: new Error("propertyId is required") };
   }
 
-  const stackBundleResult = await getPropertyStackBundle(propertyId);
+  const stackBundleResult = await getPropertyStackBundle(propertyId, scopeOverride);
   if (stackBundleResult.error || !stackBundleResult.data?.property) {
     return {
       data: null,
@@ -507,8 +570,8 @@ export async function evaluatePropertyStackAnalytics(propertyId) {
   };
 }
 
-export async function upsertPropertyStackAnalytics(propertyId) {
-  const analyticsResult = await evaluatePropertyStackAnalytics(propertyId);
+export async function upsertPropertyStackAnalytics(propertyId, scopeOverride = null) {
+  const analyticsResult = await evaluatePropertyStackAnalytics(propertyId, scopeOverride);
   if (analyticsResult.error || !analyticsResult.data?.property_id) {
     return { data: null, error: analyticsResult.error || new Error("Property stack analytics could not be evaluated") };
   }
@@ -516,7 +579,12 @@ export async function upsertPropertyStackAnalytics(propertyId) {
   return upsertRecord("property_stack_analytics", analyticsResult.data, "property_id");
 }
 
-export async function getPropertyStackAnalytics(propertyId) {
+export async function getPropertyStackAnalytics(propertyId, scopeOverride = null) {
+  const propertyResult = await getScopedProperty(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { data: null, error: propertyResult.error || buildScopedAccessError("Property") };
+  }
+
   return maybeSingleRecord("property_stack_analytics", [{ column: "property_id", value: propertyId }]);
 }
 
@@ -546,6 +614,14 @@ export async function updatePropertyMortgageLink(linkId, updates = {}) {
     };
   }
 
+  const propertyResult = await getScopedProperty(existingResult.data.property_id, updates.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
+    };
+  }
+
   if (updates.is_primary === true) {
     const demotionResult = await demoteOtherPrimaryLinks(
       "property_mortgage_links",
@@ -564,7 +640,7 @@ export async function updatePropertyMortgageLink(linkId, updates = {}) {
     metadata: updates.metadata ?? existingResult.data.metadata ?? {},
   });
   if (updateResult.error) return updateResult;
-  await upsertPropertyStackAnalytics(existingResult.data.property_id);
+  await upsertPropertyStackAnalytics(existingResult.data.property_id, updates.scopeOverride);
   return updateResult;
 }
 
@@ -581,6 +657,14 @@ export async function updatePropertyHomeownersLink(linkId, updates = {}) {
     return {
       data: null,
       error: existingResult.error || new Error("Property homeowners link not found"),
+    };
+  }
+
+  const propertyResult = await getScopedProperty(existingResult.data.property_id, updates.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
     };
   }
 
@@ -602,11 +686,11 @@ export async function updatePropertyHomeownersLink(linkId, updates = {}) {
     metadata: updates.metadata ?? existingResult.data.metadata ?? {},
   });
   if (updateResult.error) return updateResult;
-  await upsertPropertyStackAnalytics(existingResult.data.property_id);
+  await upsertPropertyStackAnalytics(existingResult.data.property_id, updates.scopeOverride);
   return updateResult;
 }
 
-export async function unlinkMortgageFromProperty(linkId) {
+export async function unlinkMortgageFromProperty(linkId, options = {}) {
   if (!linkId) {
     return { error: new Error("linkId is required") };
   }
@@ -617,13 +701,18 @@ export async function unlinkMortgageFromProperty(linkId) {
   if (existingResult.error || !existingResult.data) {
     return { error: existingResult.error || new Error("Property mortgage link not found") };
   }
+
+  const propertyResult = await getScopedProperty(existingResult.data.property_id, options.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { error: propertyResult.error || buildScopedAccessError("Property") };
+  }
   const deleteResult = await deleteRecord("property_mortgage_links", linkId);
   if (deleteResult.error) return deleteResult;
-  await upsertPropertyStackAnalytics(existingResult.data.property_id);
+  await upsertPropertyStackAnalytics(existingResult.data.property_id, options.scopeOverride);
   return deleteResult;
 }
 
-export async function unlinkHomeownersFromProperty(linkId) {
+export async function unlinkHomeownersFromProperty(linkId, options = {}) {
   if (!linkId) {
     return { error: new Error("linkId is required") };
   }
@@ -634,8 +723,13 @@ export async function unlinkHomeownersFromProperty(linkId) {
   if (existingResult.error || !existingResult.data) {
     return { error: existingResult.error || new Error("Property homeowners link not found") };
   }
+
+  const propertyResult = await getScopedProperty(existingResult.data.property_id, options.scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { error: propertyResult.error || buildScopedAccessError("Property") };
+  }
   const deleteResult = await deleteRecord("property_homeowners_links", linkId);
   if (deleteResult.error) return deleteResult;
-  await upsertPropertyStackAnalytics(existingResult.data.property_id);
+  await upsertPropertyStackAnalytics(existingResult.data.property_id, options.scopeOverride);
   return deleteResult;
 }

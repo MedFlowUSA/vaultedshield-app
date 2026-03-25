@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
@@ -12,7 +12,7 @@ import {
   linkExistingPortalToAsset,
   listPortalProfiles,
 } from "../lib/supabase/platformData";
-import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
 const ACCESS_STATUS = ["active", "limited", "locked", "unknown"];
@@ -30,7 +30,7 @@ function formatDate(value) {
 }
 
 export default function AssetDetailPage({ assetId, onNavigate }) {
-  const householdState = usePlatformHousehold();
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const [bundle, setBundle] = useState({
     asset: null,
     documents: [],
@@ -60,6 +60,22 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     notes: "",
     link_type: "primary_access",
   });
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "asset_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   useEffect(() => {
     if (!assetId) return;
@@ -68,7 +84,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
 
     async function loadBundle() {
       const [result, portalsResult] = await Promise.all([
-        getAssetDetailBundle(assetId),
+        getAssetDetailBundle(assetId, platformScope),
         householdState.context.householdId
           ? listPortalProfiles(householdState.context.householdId)
           : Promise.resolve({ data: [], error: null }),
@@ -94,7 +110,24 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [assetId, householdState.context.householdId]);
+  }, [assetId, householdState.context.householdId, scopeKey]);
+
+  useEffect(() => {
+    setBundle({
+      asset: null,
+      documents: [],
+      alerts: [],
+      tasks: [],
+      snapshots: [],
+      portalLinks: [],
+      portalContinuity: {
+        linkedCount: 0,
+        missingRecoveryCount: 0,
+      },
+    });
+    setLoadError("");
+    setExistingPortalOptions([]);
+  }, [scopeKey]);
 
   async function handleCreatePortal(event) {
     event.preventDefault();
@@ -127,6 +160,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
       is_primary: portalForm.link_type === "primary_access",
       notes: portalForm.notes,
       metadata: { asset_detail_create: true },
+      scopeOverride: platformScope,
     });
 
     if (linkResult.error) {
@@ -181,6 +215,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         is_primary: existingPortalForm.is_primary,
         notes: existingPortalForm.notes,
         metadata: { asset_detail_existing_link: true },
+        scopeOverride: platformScope,
       }
     );
 

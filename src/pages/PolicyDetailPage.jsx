@@ -502,11 +502,12 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     async function loadPolicyDetail() {
       setLoading(true);
       setLoadError("");
+      const policyScope = { userId: debug.authUserId, source: "policy_detail_page" };
 
       const [policyResult, analyticsResult, statementsResult] = await Promise.all([
-        getVaultedPolicyById(policyId),
-        getVaultedPolicyAnalytics(policyId),
-        getVaultedPolicyStatements(policyId),
+        getVaultedPolicyById(policyId, policyScope),
+        getVaultedPolicyAnalytics(policyId, policyScope),
+        getVaultedPolicyStatements(policyId, policyScope),
       ]);
 
       if (!active) return;
@@ -527,8 +528,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       setLoading(false);
 
       const [documentsResult, snapshotsResult] = await Promise.all([
-        getVaultedPolicyDocuments(policyId),
-        getVaultedPolicySnapshots(policyId),
+        getVaultedPolicyDocuments(policyId, policyScope),
+        getVaultedPolicySnapshots(policyId, policyScope),
       ]);
 
       if (!active) return;

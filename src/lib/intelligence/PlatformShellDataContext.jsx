@@ -117,12 +117,13 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       setInsuranceState((current) => ({ ...current, loading: true, error: "" }));
 
       try {
-        const policiesResult = await listVaultedPolicies();
+        const policyScope = { userId: authUserId, source: "platform_shell_provider" };
+        const policiesResult = await listVaultedPolicies(policyScope);
         const savedPolicies = policiesResult.data || [];
         const policyIds = savedPolicies.map((policy) => policy?.id).filter(Boolean);
         const comparisonResult =
           policyIds.length > 0
-            ? await compareVaultedPolicies(policyIds)
+            ? await compareVaultedPolicies(policyIds, policyScope)
             : { data: { comparison_rows: [] }, error: null };
 
         setInsuranceState({
@@ -180,6 +181,9 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
         guestModeActive: !authUserId,
         sharedFallbackActive: guestFallbackActive,
         policyScopeSource: insuranceState.scopeSource,
+        scopedPropertyCount: bundleState.data?.properties?.length || 0,
+        scopedMortgageCount: bundleState.data?.mortgageLoans?.length || 0,
+        usedFallbackPlatformData: Boolean(authUserId && guestFallbackActive),
       },
       loadingStates: {
         household: householdState.loading,

@@ -665,10 +665,11 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
 
     async function loadStatementBundles() {
       if (!basePolicy?.policy_id || !comparisonPolicy?.policy_id) return;
+      const policyScope = { userId: debug.authUserId, source: "policy_comparison_page" };
 
       const [baseStatementsResult, compareStatementsResult] = await Promise.all([
-        getVaultedPolicyStatements(basePolicy.policy_id),
-        getVaultedPolicyStatements(comparisonPolicy.policy_id),
+        getVaultedPolicyStatements(basePolicy.policy_id, policyScope),
+        getVaultedPolicyStatements(comparisonPolicy.policy_id, policyScope),
       ]);
 
       if (!active) return;
@@ -684,7 +685,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
     return () => {
       active = false;
     };
-  }, [basePolicy?.policy_id, comparisonPolicy?.policy_id]);
+  }, [basePolicy?.policy_id, comparisonPolicy?.policy_id, debug.authUserId]);
 
   function handlePrintReport() {
     setShowComparisonReport(true);

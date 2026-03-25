@@ -18,6 +18,7 @@ import {
   sortStatementsChronologically,
 } from "../lib/parser/extractionEngine";
 import { buildPolicyIntelligence } from "../lib/domain/intelligenceEngine";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { persistVaultedPolicyAnalysis } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
@@ -51,6 +52,7 @@ async function extractPdfPages(file) {
 
 export default function LifePolicyUploadPage({ onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
+  const { debug } = usePlatformShellData();
   const [illustrationFile, setIllustrationFile] = useState(null);
   const [statementFiles, setStatementFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -152,6 +154,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         statements: sortedStatements,
         illustrationFile: illustrationFile,
         statementFiles,
+        scopeOverride: { userId: debug.authUserId, source: "life_policy_upload_page" },
       });
 
       setSaveStatus({

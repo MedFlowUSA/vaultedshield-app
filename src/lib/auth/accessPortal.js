@@ -153,6 +153,16 @@ function buildSessionFromSupabaseUser(user) {
   });
 }
 
+function buildPendingConfirmationResult(user = null) {
+  return {
+    ok: true,
+    requiresEmailConfirmation: true,
+    user,
+    profile: null,
+    message: "Account created. Confirm the email address for this account, then log in.",
+  };
+}
+
 async function signInWithSupabase({ email, password }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -265,9 +275,14 @@ export function useAccessPortal() {
       const result = await signUpWithSupabase({ householdName, email, password, tier });
       if (!result.ok) return result;
 
-      const nextSession = buildSessionFromSupabaseUser(result.user);
+      if (!result.session?.user) {
+        setSession(buildSignedOutSession());
+        return buildPendingConfirmationResult(result.user);
+      }
+
+      const nextSession = buildSessionFromSupabaseUser(result.session.user);
       setSession(nextSession);
-      return { ok: true, profile: nextSession };
+      return { ok: true, profile: nextSession, requiresEmailConfirmation: false };
     }
 
     const normalizedEmail = normalizeEmail(email);

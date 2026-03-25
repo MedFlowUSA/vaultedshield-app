@@ -3,6 +3,11 @@ import {
   buildDocumentSourceHash,
   uploadPlatformDocumentFile,
 } from "./documentStorage.js";
+import {
+  appendHouseholdScope,
+  buildScopedAccessError,
+  normalizePlatformScope,
+} from "./platformScope.js";
 
 // Broad platform tables support the modular shell:
 // - households, members, contacts, generic assets, documents, alerts, tasks, reports
@@ -537,10 +542,10 @@ export async function createAsset(payload) {
   });
 }
 
-export async function getAssetById(assetId) {
+export async function getAssetById(assetId, scopeOverride = null) {
   const result = await listRecords(
     "assets",
-    [{ column: "id", value: assetId }],
+    appendHouseholdScope([{ column: "id", value: assetId }], scopeOverride),
     { select: "*, household_members(full_name)" }
   );
 
@@ -1218,10 +1223,10 @@ export async function updatePortalProfile(portalProfileId, payload) {
   });
 }
 
-export async function getPortalProfileById(portalProfileId) {
+export async function getPortalProfileById(portalProfileId, scopeOverride = null) {
   const result = await listRecords(
     "portal_profiles",
-    [{ column: "id", value: portalProfileId }],
+    appendHouseholdScope([{ column: "id", value: portalProfileId }], scopeOverride),
     { orderBy: "updated_at" }
   );
 
@@ -1247,6 +1252,25 @@ export async function linkExistingPortalToAsset(assetId, portalProfileId, option
     return {
       data: null,
       error: new Error("Asset and portal profile are required"),
+      duplicate: false,
+    };
+  }
+
+  const scope = normalizePlatformScope(options.scopeOverride);
+  const assetResult = await getAssetById(assetId, scope);
+  if (assetResult.error || !assetResult.data) {
+    return {
+      data: null,
+      error: assetResult.error || buildScopedAccessError("Asset"),
+      duplicate: false,
+    };
+  }
+
+  const portalResult = await getPortalProfileById(portalProfileId, scope);
+  if (portalResult.error || !portalResult.data) {
+    return {
+      data: null,
+      error: portalResult.error || buildScopedAccessError("Portal profile"),
       duplicate: false,
     };
   }
@@ -1282,14 +1306,14 @@ export async function linkExistingPortalToAsset(assetId, portalProfileId, option
     return { data: null, error: linkResult.error, duplicate: false };
   }
 
-  const portalResult = await getPortalProfileById(portalProfileId);
+  const linkedPortalResult = await getPortalProfileById(portalProfileId, scope);
 
   return {
     data: {
       ...linkResult.data,
-      portal_profiles: portalResult.data || null,
+      portal_profiles: linkedPortalResult.data || null,
     },
-    error: portalResult.error || null,
+    error: linkedPortalResult.error || null,
     duplicate: false,
   };
 }
@@ -1398,12 +1422,12 @@ export async function getPortalHubBundle(householdId) {
   };
 }
 
-export async function getAssetDetailBundle(assetId) {
-  const assetResult = await getAssetById(assetId);
+export async function getAssetDetailBundle(assetId, scopeOverride = null) {
+  const assetResult = await getAssetById(assetId, scopeOverride);
   if (assetResult.error || !assetResult.data) {
     return {
       data: null,
-      error: assetResult.error || new Error("Asset not found"),
+      error: assetResult.error || buildScopedAccessError("Asset"),
     };
   }
 

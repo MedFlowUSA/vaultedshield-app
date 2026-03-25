@@ -22,6 +22,7 @@ import {
   updatePropertyMortgageLink,
   uploadMortgageDocument,
 } from "../lib/supabase/mortgageData";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 
@@ -50,6 +51,7 @@ function getStatusTone(status) {
 }
 
 export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -69,9 +71,25 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "mortgage_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   async function loadMortgageBundle(targetMortgageLoanId, options = {}) {
-    const result = await getMortgageLoanBundle(targetMortgageLoanId);
+    const result = await getMortgageLoanBundle(targetMortgageLoanId, platformScope);
     if (result.error || !result.data?.mortgageLoan) {
       if (!options.silent) {
         setBundle(null);
@@ -87,7 +105,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
 
     const linkedAssetId = result.data.mortgageLoan.assets?.id;
     if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId);
+      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
       if (!assetResult.error) {
         setAssetBundle(assetResult.data || null);
       } else if (!options.silent) {
@@ -107,7 +125,9 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     }
 
     if (result.data.mortgageLoan?.household_id) {
-      const propertiesResult = await listProperties(result.data.mortgageLoan.household_id);
+      const propertiesResult = await listProperties(
+        platformScope.householdId || result.data.mortgageLoan.household_id
+      );
       setAvailableProperties(propertiesResult.data || []);
       if (!options.silent && propertiesResult.error) {
         setLinkError(propertiesResult.error.message || "");
@@ -130,7 +150,17 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [mortgageLoanId]);
+  }, [mortgageLoanId, scopeKey]);
+
+  useEffect(() => {
+    setBundle(null);
+    setAssetBundle(null);
+    setPropertyLinks([]);
+    setAvailableProperties([]);
+    setLoadError("");
+    setLinkError("");
+    setLinkSuccess("");
+  }, [scopeKey]);
 
   const mortgageLoan = bundle?.mortgageLoan || null;
   const mortgageLoanType = mortgageLoan
@@ -231,6 +261,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       link_type: propertyLinks.length === 0 ? "primary_financing" : "secondary_financing",
       is_primary: propertyLinks.length === 0,
       metadata: { linked_from: "mortgage_detail" },
+      scopeOverride: platformScope,
     });
 
     if (result.error) {
@@ -261,7 +292,10 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     setSavingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await updatePropertyMortgageLink(linkId, linkDraft);
+    const result = await updatePropertyMortgageLink(linkId, {
+      ...linkDraft,
+      scopeOverride: platformScope,
+    });
     if (result.error) {
       setLinkError(result.error.message || "Property link could not be updated.");
       setSavingLinkId("");
@@ -278,7 +312,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     setRemovingLinkId(linkId);
     setLinkError("");
     setLinkSuccess("");
-    const result = await unlinkMortgageFromProperty(linkId);
+    const result = await unlinkMortgageFromProperty(linkId, { scopeOverride: platformScope });
     if (result.error) {
       setLinkError(result.error.message || "Property link could not be removed.");
       setRemovingLinkId("");

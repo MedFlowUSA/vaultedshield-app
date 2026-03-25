@@ -2,6 +2,10 @@ import { getPropertyValuationProvider } from "../domain/propertyValuation";
 import { buildVirtualValuation } from "../domain/propertyValuation";
 import { evaluatePropertyEquityPosition as evaluatePropertyEquityPositionFromDomain } from "../domain/propertyValuation";
 import { getSupabaseClient } from "./client";
+import {
+  appendHouseholdScope,
+  buildScopedAccessError,
+} from "./platformScope";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -84,9 +88,25 @@ function buildSubjectFacts(property = {}) {
   };
 }
 
-export async function updatePropertyAddressFacts(propertyId, updates = {}) {
+async function getScopedPropertyRecord(propertyId, scopeOverride = null) {
+  return maybeSingleRecord(
+    "properties",
+    appendHouseholdScope([{ column: "id", value: propertyId }], scopeOverride),
+    { select: "*" }
+  );
+}
+
+export async function updatePropertyAddressFacts(propertyId, updates = {}, scopeOverride = null) {
   if (!propertyId) {
     return { data: null, error: new Error("propertyId is required") };
+  }
+
+  const propertyResult = await getScopedPropertyRecord(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
+    };
   }
 
   const payload = {
@@ -183,7 +203,12 @@ export async function savePropertyComps(propertyId, valuationId, comps = [], hou
   return { data: data || [], error: insertError };
 }
 
-export async function listPropertyValuations(propertyId) {
+export async function listPropertyValuations(propertyId, scopeOverride = null) {
+  const propertyResult = await getScopedPropertyRecord(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { data: [], error: propertyResult.error || buildScopedAccessError("Property") };
+  }
+
   return listRecords(
     "property_valuations",
     [{ column: "property_id", value: propertyId }],
@@ -191,7 +216,12 @@ export async function listPropertyValuations(propertyId) {
   );
 }
 
-export async function getLatestPropertyValuation(propertyId) {
+export async function getLatestPropertyValuation(propertyId, scopeOverride = null) {
+  const propertyResult = await getScopedPropertyRecord(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { data: null, error: propertyResult.error || buildScopedAccessError("Property") };
+  }
+
   const { supabase, error } = getClientOrError();
   if (error) return { data: null, error };
   const { data, error: queryError } = await supabase
@@ -204,7 +234,12 @@ export async function getLatestPropertyValuation(propertyId) {
   return { data: data || null, error: queryError };
 }
 
-export async function listPropertyComps(propertyId, valuationId = null) {
+export async function listPropertyComps(propertyId, valuationId = null, scopeOverride = null) {
+  const propertyResult = await getScopedPropertyRecord(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return { data: [], error: propertyResult.error || buildScopedAccessError("Property") };
+  }
+
   return listRecords(
     "property_comps",
     [
@@ -215,18 +250,16 @@ export async function listPropertyComps(propertyId, valuationId = null) {
   );
 }
 
-export async function runPropertyVirtualValuation(propertyId) {
+export async function runPropertyVirtualValuation(propertyId, scopeOverride = null) {
   if (!propertyId) {
     return { data: null, error: new Error("propertyId is required") };
   }
 
-  const propertyResult = await maybeSingleRecord("properties", [{ column: "id", value: propertyId }], {
-    select: "*",
-  });
+  const propertyResult = await getScopedPropertyRecord(propertyId, scopeOverride);
   if (propertyResult.error || !propertyResult.data) {
     return {
       data: null,
-      error: propertyResult.error || new Error("Property not found"),
+      error: propertyResult.error || buildScopedAccessError("Property"),
     };
   }
 

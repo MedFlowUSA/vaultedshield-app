@@ -17,6 +17,7 @@ import {
   listWarrantyDocumentClasses,
   uploadWarrantyDocument,
 } from "../lib/supabase/warrantyData";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 
 const WARRANTY_DOCUMENT_CLASSES = listWarrantyDocumentClasses();
@@ -43,6 +44,7 @@ function getStatusTone(status) {
 }
 
 export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
+  const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -52,6 +54,22 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const platformScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId || null,
+      authUserId: shellDebug.authUserId || null,
+      ownershipMode: householdState.context.ownershipMode || "unknown",
+      guestFallbackActive: householdState.context.guestFallbackActive,
+      scopeSource: "warranty_detail_page",
+    }),
+    [
+      householdState.context.guestFallbackActive,
+      householdState.context.householdId,
+      householdState.context.ownershipMode,
+      shellDebug.authUserId,
+    ]
+  );
+  const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   async function loadWarrantyBundle(targetWarrantyId, options = {}) {
     const result = await getWarrantyBundle(targetWarrantyId);
@@ -69,7 +87,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
 
     const linkedAssetId = result.data.warranty.assets?.id;
     if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId);
+      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
       if (!assetResult.error) {
         setAssetBundle(assetResult.data || null);
       } else if (!options.silent) {
@@ -96,7 +114,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [warrantyId]);
+  }, [warrantyId, scopeKey]);
 
   const warranty = bundle?.warranty || null;
   const warrantyType = warranty ? getWarrantyType(warranty.warranty_type_key) : null;
