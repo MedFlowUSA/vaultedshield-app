@@ -11,6 +11,7 @@ import {
   uploadGenericAssetDocument,
 } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const DOCUMENT_TYPES = [
   "statement",
@@ -46,6 +47,7 @@ function formatDate(value) {
 }
 
 export default function UploadCenterPage() {
+  const { isMobile, isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const supabaseConfigured = isSupabaseConfigured();
   const fileInputRef = useRef(null);
@@ -184,7 +186,7 @@ export default function UploadCenterPage() {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1.2fr 1fr", gap: "18px" }}>
         <SectionCard title="Generic Document Intake" subtitle="Upload household documents into the broad platform vault without invoking the specialized IUL parser.">
           <div
             onDragOver={(event) => event.preventDefault()}
@@ -195,7 +197,7 @@ export default function UploadCenterPage() {
             style={{
               border: "1px dashed #94a3b8",
               borderRadius: "16px",
-              padding: "24px",
+              padding: isMobile ? "18px" : "24px",
               background: "#f8fafc",
             }}
           >
@@ -212,7 +214,7 @@ export default function UploadCenterPage() {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}
+              style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
             >
               Select Files
             </button>
@@ -222,7 +224,7 @@ export default function UploadCenterPage() {
             <select
               value={assetId}
               onChange={(event) => setAssetId(event.target.value)}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
             >
               <option value="">No asset selected (household-level document)</option>
               {assets.map((asset) => (
@@ -235,7 +237,7 @@ export default function UploadCenterPage() {
             <select
               value={assetCategoryHint}
               onChange={(event) => setAssetCategoryHint(event.target.value)}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
             >
               <option value="insurance">insurance</option>
               <option value="banking">banking</option>
@@ -251,7 +253,7 @@ export default function UploadCenterPage() {
             <select
               value={documentType}
               onChange={(event) => setDocumentType(event.target.value)}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
             >
               {DOCUMENT_TYPES.map((type) => (
                 <option key={type} value={type}>{type}</option>
@@ -261,7 +263,7 @@ export default function UploadCenterPage() {
             <select
               value={documentRole}
               onChange={(event) => setDocumentRole(event.target.value)}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
             >
               {DOCUMENT_ROLES.map((role) => (
                 <option key={role} value={role}>{role}</option>
@@ -273,13 +275,13 @@ export default function UploadCenterPage() {
               onChange={(event) => setNotes(event.target.value)}
               rows={4}
               placeholder="Notes or tag for this upload batch"
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
             />
 
             <button
               onClick={handleUploadQueuedFiles}
               disabled={!householdState.context.householdId || queue.length === 0}
-              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
             >
               Upload Queue
             </button>
@@ -291,7 +293,7 @@ export default function UploadCenterPage() {
             <div style={{ display: "grid", gap: "12px" }}>
               {queue.map((item) => (
                 <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.file.name}</div>
+                  <div style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word" }}>{item.file.name}</div>
                   <div style={{ marginTop: "4px", color: "#64748b" }}>
                     {item.documentType} | {item.documentRole} | {item.assetId ? "Asset-linked" : "Household-level"}
                   </div>

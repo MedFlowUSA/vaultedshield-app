@@ -1,4 +1,4 @@
-import { Component } from "react";
+import { Component, useEffect, useState } from "react";
 import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
 import TopNav from "./components/layout/TopNav";
@@ -40,6 +40,7 @@ import { hasTierAccess, useAccessPortal } from "./lib/auth/accessPortal";
 import { PlatformShellDataProvider } from "./lib/intelligence/PlatformShellDataContext";
 import { getRouteByPath } from "./lib/navigation/routes";
 import { useHashRoute } from "./lib/navigation/useHashRoute";
+import useResponsiveLayout from "./lib/ui/useResponsiveLayout";
 
 class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -209,7 +210,9 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
 
 export default function PlatformApp() {
   const { pathname, navigate } = useHashRoute();
+  const { isTablet } = useResponsiveLayout();
   const accessPortal = useAccessPortal();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const postAuthHome = "/insurance";
   const isAuthRoute = pathname === "/login" || pathname === "/signup" || pathname === "/pricing";
   const resolvedPathname = accessPortal.isAuthenticated && isAuthRoute ? postAuthHome : pathname;
@@ -217,6 +220,14 @@ export default function PlatformApp() {
   const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup" || resolvedPathname === "/pricing";
   const hasRouteAccess = hasTierAccess(accessPortal.currentTier, route.minimumTier || "free");
   const intendedPath = !resolvedIsAuthRoute ? resolvedPathname : postAuthHome;
+
+  useEffect(() => {
+    if (!isTablet) {
+      setSidebarOpen(false);
+      return;
+    }
+    setSidebarOpen(false);
+  }, [isTablet, resolvedPathname]);
 
   if (!accessPortal.authReady) {
     return (
@@ -265,14 +276,32 @@ export default function PlatformApp() {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#e2e8f0" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#e2e8f0", position: "relative" }}>
       <PlatformShellDataProvider>
+        {isTablet && sidebarOpen ? (
+          <button
+            type="button"
+            aria-label="Close navigation overlay"
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              border: "none",
+              background: "rgba(15, 23, 42, 0.42)",
+              cursor: "pointer",
+              zIndex: 30,
+            }}
+          />
+        ) : null}
         <Sidebar
           currentPath={pathname}
           onNavigate={navigate}
           currentTier={accessPortal.currentTier}
           currentPlanLabel={accessPortal.currentPlan.label}
           onUpgrade={() => navigate("/pricing")}
+          isCompact={isTablet}
+          isOpen={!isTablet || sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
         <ContentContainer>
           <TopNav
@@ -285,8 +314,11 @@ export default function PlatformApp() {
               accessPortal.signOut();
               navigate("/login");
             }}
+            showSidebarToggle={isTablet}
+            onToggleSidebar={() => setSidebarOpen((current) => !current)}
+            isCompact={isTablet}
           />
-          <div style={{ padding: "28px" }}>
+          <div style={{ padding: isTablet ? "18px 14px 24px" : "28px" }}>
             <RouteErrorBoundary resetKey={resolvedPathname}>
               {renderRoute(resolvedPathname, navigate, accessPortal, intendedPath)}
             </RouteErrorBoundary>

@@ -15,6 +15,7 @@ import {
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { executeSmartAction } from "../lib/navigation/smartActions";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
   return {
@@ -493,7 +494,7 @@ function renderReportSection(section) {
   );
 }
 
-function HouseholdReportView({ report, onPrint }) {
+function HouseholdReportView({ report, onPrint, isCompact = false }) {
   if (!report) return null;
 
   return (
@@ -501,8 +502,8 @@ function HouseholdReportView({ report, onPrint }) {
       style={{
         display: "grid",
         gap: "18px",
-        padding: "26px 28px",
-        borderRadius: "24px",
+        padding: isCompact ? "20px 16px" : "26px 28px",
+        borderRadius: isCompact ? "20px" : "24px",
         background: "#ffffff",
         border: "1px solid rgba(15, 23, 42, 0.08)",
       }}
@@ -537,6 +538,7 @@ function HouseholdReportView({ report, onPrint }) {
 }
 
 export default function DashboardPage({ onNavigate }) {
+  const { isMobile, isTablet } = useResponsiveLayout();
   const {
     householdState,
     counts,
@@ -713,6 +715,9 @@ export default function DashboardPage({ onNavigate }) {
   );
   const showLoadingShell =
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
+  const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
+  const sectionRadius = isMobile ? "20px" : "24px";
+  const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))";
 
   function handleReviewWorkflowUpdate(itemId, status) {
     const householdId = householdState.context.householdId;
@@ -786,15 +791,15 @@ export default function DashboardPage({ onNavigate }) {
         minHeight: "100vh",
         background: "#020617",
         color: "#e2e8f0",
-        padding: "32px",
+        padding: isMobile ? "16px" : isTablet ? "22px" : "32px",
       }}
     >
       <div style={{ margin: "0 auto", maxWidth: "1180px", display: "grid", gap: "28px" }}>
         {showLoadingShell ? (
           <section
             style={{
-              padding: "28px 30px",
-              borderRadius: "24px",
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
               background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
               border: "1px solid rgba(255,255,255,0.06)",
             }}
@@ -805,19 +810,20 @@ export default function DashboardPage({ onNavigate }) {
         <header
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: isMobile ? "stretch" : "center",
             justifyContent: "space-between",
             gap: "16px",
+            flexWrap: "wrap",
           }}
         >
-          <div style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
+          <div style={{ fontSize: isMobile ? "16px" : "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
             VaultedShield
           </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button style={buttonStyle(false)} onClick={() => onNavigate?.("/upload-center")}>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+            <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
               Upload
             </button>
-            <button style={buttonStyle(true)} onClick={() => onNavigate?.("/portals")}>
+            <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/portals")}>
               Open Portal
             </button>
           </div>
@@ -825,16 +831,16 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "36px 40px",
-            borderRadius: "28px",
+            padding: isMobile ? "24px 18px" : isTablet ? "30px 26px" : "36px 40px",
+            borderRadius: isMobile ? "22px" : "28px",
             background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
             border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          <div style={{ fontSize: "56px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
+          <div style={{ fontSize: isMobile ? "42px" : "56px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
             {intelligence ? `${continuityPercent}%` : "--"}
           </div>
-          <div style={{ marginTop: "12px", fontSize: "18px", fontWeight: 600, color: "#f8fafc" }}>
+          <div style={{ marginTop: "12px", fontSize: isMobile ? "16px" : "18px", fontWeight: 600, color: "#f8fafc" }}>
             {continuityStatus.label}
           </div>
           <div style={{ marginTop: "10px", maxWidth: "700px", fontSize: "15px", lineHeight: "1.7", color: "#94a3b8" }}>
@@ -847,7 +853,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "28px",
               display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: metricGridColumns,
               gap: "18px",
             }}
           >
@@ -885,8 +891,8 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
             border: "1px solid rgba(255,255,255,0.06)",
             display: "grid",
@@ -1080,13 +1086,13 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         {showHouseholdReport ? (
-          <HouseholdReportView report={householdReviewReport} onPrint={handlePrintHouseholdReport} />
+          <HouseholdReportView report={householdReviewReport} onPrint={handlePrintHouseholdReport} isCompact={isTablet} />
         ) : null}
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
             display: "grid",
@@ -1262,8 +1268,8 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
           }}
@@ -1284,7 +1290,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "18px",
               display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: metricGridColumns,
               gap: "14px",
             }}
           >
@@ -1331,8 +1337,8 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
           }}
@@ -1369,7 +1375,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "24px",
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))",
               gap: "18px",
             }}
           >
@@ -1387,7 +1393,7 @@ export default function DashboardPage({ onNavigate }) {
                     gap: "14px",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                     <div style={{ fontSize: "17px", fontWeight: 700 }}>{area.title}</div>
                     <span
                       style={{
@@ -1419,7 +1425,7 @@ export default function DashboardPage({ onNavigate }) {
                       {area.action_label || "Open review"}
                     </button>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
                     {area.metrics.map((metric) => (
                       <div key={`${area.key}-${metric.label}`}>
                         <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
@@ -1440,7 +1446,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "22px",
               display: "grid",
-              gridTemplateColumns: "1.2fr 1fr",
+              gridTemplateColumns: isTablet ? "1fr" : "1.2fr 1fr",
               gap: "18px",
             }}
           >
@@ -1644,8 +1650,8 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
           }}
@@ -1669,8 +1675,8 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
           }}
@@ -1680,7 +1686,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "18px",
               display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gridTemplateColumns: metricGridColumns,
               gap: "18px",
             }}
           >
@@ -1710,51 +1716,91 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           style={{
-            padding: "28px 30px",
-            borderRadius: "24px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.05)",
           }}
         >
           <div style={{ fontSize: "20px", fontWeight: 700 }}>Module Overview</div>
-          <div style={{ marginTop: "18px", overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-              <thead>
-                <tr style={{ color: "#64748b", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Module</th>
-                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Insight</th>
-                </tr>
-              </thead>
-              <tbody>
-                {moduleRows.map((row) => {
-                  const tone = getStatusColors(row.status);
-                  return (
-                    <tr key={row.module} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                      <td style={{ padding: "14px 0", fontWeight: 600 }}>{row.module}</td>
-                      <td style={{ padding: "14px 0" }}>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "6px 10px",
-                            borderRadius: "999px",
-                            fontSize: "12px",
-                            fontWeight: 700,
-                            color: tone.color,
-                            background: tone.background,
-                          }}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: "14px 0", color: "#94a3b8" }}>{row.insight}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {isMobile ? (
+            <div style={{ marginTop: "18px", display: "grid", gap: "12px" }}>
+              {moduleRows.map((row) => {
+                const tone = getStatusColors(row.status);
+                return (
+                  <div
+                    key={row.module}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "rgba(15,23,42,0.42)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 700 }}>{row.module}</div>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: tone.color,
+                          background: tone.background,
+                        }}
+                      >
+                        {row.status}
+                      </span>
+                    </div>
+                    <div style={{ paddingTop: "2px", color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{row.insight}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ marginTop: "18px", overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                <thead>
+                  <tr style={{ color: "#64748b", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Module</th>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Insight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moduleRows.map((row) => {
+                    const tone = getStatusColors(row.status);
+                    return (
+                      <tr key={row.module} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                        <td style={{ padding: "14px 0", fontWeight: 600 }}>{row.module}</td>
+                        <td style={{ padding: "14px 0" }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "6px 10px",
+                              borderRadius: "999px",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              color: tone.color,
+                              background: tone.background,
+                            }}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: "14px 0", color: "#94a3b8" }}>{row.insight}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         {import.meta.env.DEV ? (

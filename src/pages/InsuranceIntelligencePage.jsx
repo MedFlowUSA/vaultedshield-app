@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+﻿import { useMemo, useRef, useState } from "react";
 import {
   buildInsurancePortfolioBrief,
   buildInsurancePortfolioReport,
@@ -6,6 +6,11 @@ import {
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
+
+const EMPTY_VALUE = "-";
+const METRIC_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
+const DETAIL_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
 
 function buttonStyle(primary = false) {
   return {
@@ -28,12 +33,12 @@ function parseDisplayNumber(value) {
 }
 
 function formatCurrency(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return EMPTY_VALUE;
   return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 function formatDateValue(value) {
-  if (!value) return "—";
+  if (!value) return EMPTY_VALUE;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString("en-US", {
@@ -45,7 +50,7 @@ function formatDateValue(value) {
 }
 
 function displayNullable(value) {
-  return value === null || value === undefined || value === "" ? "—" : value;
+  return value === null || value === undefined || value === "" ? EMPTY_VALUE : value;
 }
 
 function getStatusTone(status) {
@@ -105,7 +110,6 @@ function renderReportFactsGrid(items = [], columns = 3) {
     </div>
   );
 }
-
 function renderReportSection(section) {
   if (!section) return null;
 
@@ -189,7 +193,7 @@ function renderReportSection(section) {
   );
 }
 
-function PortfolioReportView({ report, onPrint }) {
+function PortfolioReportView({ report, onPrint, isCompact = false }) {
   if (!report) return null;
 
   return (
@@ -197,8 +201,8 @@ function PortfolioReportView({ report, onPrint }) {
       style={{
         display: "grid",
         gap: "18px",
-        padding: "26px 28px",
-        borderRadius: "24px",
+        padding: isCompact ? "20px 16px" : "26px 28px",
+        borderRadius: isCompact ? "20px" : "24px",
         background: "#ffffff",
         border: "1px solid rgba(15, 23, 42, 0.08)",
       }}
@@ -233,6 +237,7 @@ function PortfolioReportView({ report, onPrint }) {
 }
 
 export default function InsuranceIntelligencePage({ onNavigate }) {
+  const { isMobile, isTablet } = useResponsiveLayout();
   const comparisonRef = useRef(null);
   const [expandedPolicyId, setExpandedPolicyId] = useState(null);
   const [showPortfolioReport, setShowPortfolioReport] = useState(false);
@@ -353,6 +358,21 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       bullets: uniqueBullets.slice(0, 5),
     };
   }, [atRiskPolicies.length, rankedPolicies, strongContinuityPolicies.length]);
+  const sectionPadding = isMobile ? "20px 16px" : isTablet ? "22px 20px" : "26px 28px";
+  const sectionRadius = isMobile ? "20px" : "24px";
+  const briefColumns = isTablet ? "1fr" : "1.15fr 0.85fr";
+  const rankingActionDirection = isMobile ? "column" : "row";
+  const comparisonTableColumns = [
+    { label: "Carrier", value: (policy) => displayNullable(policy.carrier) },
+    { label: "Cash Value", value: (policy) => displayNullable(policy.cash_value) },
+    { label: "Cash Surrender Value", value: (policy) => displayNullable(policy.surrender_value) },
+    { label: "Total COI", value: (policy) => displayNullable(policy.total_coi) },
+    { label: "Total Visible Charges", value: (policy) => displayNullable(policy.total_visible_charges) },
+    { label: "COI Confidence", value: (policy) => displayNullable(policy.coi_confidence) },
+    { label: "Latest Statement Date", value: (policy) => displayNullable(formatDateValue(policy.latest_statement_date)) },
+    { label: "Primary Strategy", value: (policy) => displayNullable(policy.primary_strategy) },
+    { label: "Status", value: (policy) => `${policy.interpretation.label} (${policy.ranking.score}/100)` },
+  ];
 
   function handlePrintPortfolioReport() {
     setShowPortfolioReport(true);
@@ -366,49 +386,50 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       <section
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: isMobile ? "stretch" : "flex-start",
           justifyContent: "space-between",
           gap: "16px",
-          padding: "28px 30px",
-          borderRadius: "24px",
+          flexWrap: "wrap",
+          padding: isMobile ? "22px 16px" : "28px 30px",
+          borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
       >
-        <div style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
+        <div style={{ fontSize: isMobile ? "24px" : "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
           Insurance Intelligence
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
           <button
             type="button"
             onClick={() => setShowPortfolioReport((current) => !current)}
-            style={reportButtonStyle(showPortfolioReport, false)}
+            style={{ ...reportButtonStyle(showPortfolioReport, false), width: isMobile ? "100%" : "auto" }}
           >
             {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
           </button>
-          <button type="button" onClick={handlePrintPortfolioReport} style={buttonStyle(false)}>
+          <button type="button" onClick={handlePrintPortfolioReport} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
             Print Report
           </button>
           <button
             onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            style={buttonStyle(false)}
+            style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
           >
             Compare Policies
           </button>
-          <button onClick={() => onNavigate?.("/insurance/life/upload")} style={buttonStyle(true)}>
+          <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
             Upload Policy
           </button>
         </div>
       </section>
 
       {showPortfolioReport ? (
-        <PortfolioReportView report={portfolioReport} onPrint={handlePrintPortfolioReport} />
+        <PortfolioReportView report={portfolioReport} onPrint={handlePrintPortfolioReport} isCompact={isTablet} />
       ) : null}
 
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateColumns: METRIC_GRID_COLUMNS,
           gap: "22px",
           padding: "0 4px",
           color: "#0f172a",
@@ -425,7 +446,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             Total Coverage
           </div>
           <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 800 }}>
-            {totalCoverage > 0 ? formatCurrency(totalCoverage) : "—"}
+            {totalCoverage > 0 ? formatCurrency(totalCoverage) : EMPTY_VALUE}
           </div>
         </div>
         <div>
@@ -433,7 +454,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             Total COI Exposure
           </div>
           <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 800 }}>
-            {totalCoi > 0 ? formatCurrency(totalCoi) : "—"}
+            {totalCoi > 0 ? formatCurrency(totalCoi) : EMPTY_VALUE}
           </div>
         </div>
         <div>
@@ -448,8 +469,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         style={{
           display: "grid",
           gap: "18px",
-          padding: "26px 28px",
-          borderRadius: "24px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
@@ -459,7 +480,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "960px" }}>{portfolioBrief.summary}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: "18px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: briefColumns, gap: "18px" }}>
           <div
             style={{
               padding: "18px 20px",
@@ -565,8 +586,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         style={{
           display: "grid",
           gap: "18px",
-          padding: "26px 28px",
-          borderRadius: "24px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
@@ -588,12 +609,13 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "center",
+                      alignItems: isMobile ? "flex-start" : "center",
                       justifyContent: "space-between",
                       gap: "16px",
+                      flexWrap: "wrap",
                     }}
                   >
-                    <div style={{ display: "grid", gap: "4px" }}>
+                    <div style={{ display: "grid", gap: "4px", minWidth: 0, flex: "1 1 300px" }}>
                       <button
                         type="button"
                         onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
@@ -620,7 +642,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         <div style={{ fontSize: "12px", color: "#94a3b8" }}>{policy.ranking.caveat}</div>
                       ) : null}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", gap: "10px", flexWrap: "wrap", flexDirection: rankingActionDirection, width: isMobile ? "100%" : "auto" }}>
                       <div
                         style={{
                           padding: "8px 12px",
@@ -639,7 +661,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                       <button
                         type="button"
                         onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
-                        style={buttonStyle(false)}
+                        style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
                       >
                         Open Policy
                       </button>
@@ -647,7 +669,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         onClick={() =>
                           setExpandedPolicyId(isExpanded ? null : policy.policy_id)
                         }
-                        style={buttonStyle(false)}
+                        style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
                       >
                         {isExpanded ? "Hide Details" : "View Details"}
                       </button>
@@ -664,8 +686,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         gap: "12px",
                       }}
                     >
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "12px", fontSize: "13px" }}>
-                        <div><strong>Missing Fields:</strong> {(policy.missing_fields || []).join(", ") || "—"}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: DETAIL_GRID_COLUMNS, gap: "12px", fontSize: "13px" }}>
+                        <div><strong>Missing Fields:</strong> {(policy.missing_fields || []).join(", ") || EMPTY_VALUE}</div>
                         <div><strong>COI Source:</strong> {displayNullable(policy.coi_source_kind)}</div>
                         <div><strong>COI Confidence:</strong> {displayNullable(policy.coi_confidence)}</div>
                         <div><strong>Charge Visibility:</strong> {displayNullable(policy.charge_visibility_status)}</div>
@@ -761,15 +783,65 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         style={{
           display: "grid",
           gap: "18px",
-          padding: "26px 28px",
-          borderRadius: "24px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
       >
         <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Policy Comparison</div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", color: "#0f172a" }}>
+        {isMobile ? (
+          <div style={{ display: "grid", gap: "12px" }}>
+            {rankedPolicies.map((policy) => (
+              <div
+                key={policy.policy_id || policy.product}
+                style={{
+                  padding: "16px",
+                  borderRadius: "16px",
+                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  background: policy.ranking.status === "Weak" || policy.ranking.status === "At Risk" ? "rgba(248, 250, 252, 0.75)" : "#ffffff",
+                  display: "grid",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ display: "grid", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                    style={{
+                      padding: 0,
+                      border: "none",
+                      background: "transparent",
+                      fontWeight: 700,
+                      fontSize: "16px",
+                      color: "#0f172a",
+                      textAlign: "left",
+                      cursor: policy.policy_id ? "pointer" : "default",
+                    }}
+                  >
+                    {displayNullable(policy.product)}
+                  </button>
+                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>Missing fields: {(policy.missing_fields || []).length || 0}</div>
+                  <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.65" }}>{policy.interpretation.bottom_line_summary}</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px 12px" }}>
+                  {comparisonTableColumns.map((column) => (
+                    <div key={`${policy.policy_id || policy.product}-${column.label}`} style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {column.label}
+                      </div>
+                      <div style={{ marginTop: "4px", color: "#0f172a", fontSize: "13px", lineHeight: "1.5", wordBreak: "break-word" }}>
+                        {column.value(policy)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", color: "#0f172a" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(15, 23, 42, 0.10)" }}>
                 <th style={{ padding: "0 0 14px 0", fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Policy</th>
@@ -835,16 +907,17 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        )}
       </section>
 
       <section
         style={{
           display: "grid",
           gap: "14px",
-          padding: "26px 28px",
-          borderRadius: "24px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
@@ -862,3 +935,4 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     </div>
   );
 }
+

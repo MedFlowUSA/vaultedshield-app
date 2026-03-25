@@ -19,6 +19,7 @@ import {
 } from "../lib/parser/extractionEngine";
 import { buildPolicyIntelligence } from "../lib/domain/intelligenceEngine";
 import { persistVaultedPolicyAnalysis } from "../lib/supabase/vaultedPolicies";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -49,6 +50,7 @@ async function extractPdfPages(file) {
 }
 
 export default function LifePolicyUploadPage({ onNavigate }) {
+  const { isMobile, isTablet } = useResponsiveLayout();
   const [illustrationFile, setIllustrationFile] = useState(null);
   const [statementFiles, setStatementFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -184,7 +186,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         title="Life Policy Upload Workspace"
         description="Start with the initial policy illustration, then add annual statements separately to build performance history and a stronger current read."
         actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
             <button type="button" onClick={() => onNavigate?.("/insurance/life/policy-detail")} style={actionStyle(false)}>
               Back To Life Policy Portal
             </button>
@@ -197,7 +199,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
         <SectionCard
           title="1. Initial Policy / Illustration Upload"
           subtitle="Upload the original illustration or baseline policy PDF first."
@@ -210,10 +212,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               type="file"
               accept="application/pdf"
               onChange={(event) => setIllustrationFile(event.target.files?.[0] || null)}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff" }}
             />
             {illustrationFile ? (
-              <div style={{ color: "#0f172a", fontWeight: 600 }}>{illustrationFile.name}</div>
+              <div style={{ color: "#0f172a", fontWeight: 600, wordBreak: "break-word" }}>{illustrationFile.name}</div>
             ) : (
               <div style={{ color: "#64748b" }}>No initial policy file selected yet.</div>
             )}
@@ -233,12 +235,12 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               accept="application/pdf"
               multiple
               onChange={(event) => setStatementFiles(Array.from(event.target.files || []))}
-              style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff" }}
+              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff" }}
             />
             {statementFiles.length > 0 ? (
               <div style={{ display: "grid", gap: "8px" }}>
                 {statementFiles.map((file) => (
-                  <div key={`${file.name}-${file.size}`} style={{ color: "#0f172a", fontWeight: 600 }}>
+                  <div key={`${file.name}-${file.size}`} style={{ color: "#0f172a", fontWeight: 600, wordBreak: "break-word" }}>
                     {file.name}
                   </div>
                 ))}
@@ -275,7 +277,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           <div
             style={{
               marginTop: "16px",
-              padding: "16px",
+              padding: "clamp(14px, 3vw, 16px)",
               borderRadius: "14px",
               background: saveStatus.succeeded ? "#f0fdf4" : "#fff7ed",
               border: saveStatus.succeeded ? "1px solid #bbf7d0" : "1px solid #fed7aa",
@@ -290,7 +292,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
                   ? "Policy record was created, but downstream save steps were blocked."
                   : "Policy save needs review."}
             </div>
-            <div style={{ color: "#475569" }}>
+            <div style={{ color: "#475569", wordBreak: "break-word" }}>
               {saveStatus.product} | {saveStatus.carrier}
             </div>
             <div style={{ color: "#475569" }}>
