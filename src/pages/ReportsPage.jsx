@@ -16,7 +16,13 @@ import {
   buildPolicyListInterpretation,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import QuickActionGrid from "../components/onboarding/QuickActionGrid";
+import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import {
+  buildHouseholdOnboardingChecklist,
+  getHouseholdBlankState,
+} from "../lib/onboarding/isHouseholdBlank";
 
 function buttonStyle(primary = false) {
   return {
@@ -276,6 +282,37 @@ export default function ReportsPage({ onNavigate }) {
     () => buildInsurancePortfolioReport(rankedPolicies),
     [rankedPolicies]
   );
+  const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
+  const onboardingChecklist = useMemo(
+    () => buildHouseholdOnboardingChecklist(blankHousehold, bundle || {}, rows),
+    [blankHousehold, bundle, rows]
+  );
+  const onboardingQuickActions = [
+    {
+      id: "reports-add-property",
+      label: "Add Property",
+      description: "Create the first property record so household reporting has real asset context.",
+      route: "/property",
+    },
+    {
+      id: "reports-upload-policy",
+      label: "Upload Insurance Policy",
+      description: "Start the life insurance flow with a baseline illustration or statement.",
+      route: "/insurance/life/upload",
+    },
+    {
+      id: "reports-add-contact",
+      label: "Add Contact",
+      description: "Add an emergency or advisor contact to begin the continuity directory.",
+      route: "/contacts",
+    },
+    {
+      id: "reports-upload-document",
+      label: "Upload Document",
+      description: "Add the first household file to begin report-ready evidence collection.",
+      route: "/upload-center",
+    },
+  ];
 
   const totalCoverage = rankedPolicies
     .map((row) => parseDisplayNumber(row.death_benefit))
@@ -290,6 +327,109 @@ export default function ReportsPage({ onNavigate }) {
     if (typeof window !== "undefined") {
       window.setTimeout(() => window.print(), 80);
     }
+  }
+
+  if (blankHousehold.isBlank && !loadingStates.householdData && !loadingStates.insurancePortfolio && !loadError) {
+    return (
+      <div style={{ display: "grid", gap: "24px" }}>
+        <section
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "16px",
+            padding: "28px 30px",
+            borderRadius: "24px",
+            background: "#ffffff",
+            border: "1px solid rgba(15, 23, 42, 0.08)",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
+            <div style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
+              Reports and Exports
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              No household analysis yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support trustworthy output.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => onNavigate?.("/dashboard")} style={buttonStyle(true)}>
+              Open Dashboard
+            </button>
+            <button type="button" onClick={() => onNavigate?.("/upload-center")} style={buttonStyle(false)}>
+              Upload First Document
+            </button>
+          </div>
+        </section>
+
+        <section
+          style={{
+            padding: "26px 28px",
+            borderRadius: "24px",
+            background: "#ffffff",
+            border: "1px solid rgba(15, 23, 42, 0.08)",
+            display: "grid",
+            gap: "18px",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Report readiness starts with setup progress</div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              VaultedShield will start generating household and insurance reports after you add meaningful records like properties, policies, documents, and contacts. Until then, setup progress is the right signal to show.
+            </div>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            {[
+              { label: "Assets", value: blankHousehold.setupCounts.assets },
+              { label: "Documents", value: blankHousehold.setupCounts.documents },
+              { label: "Policies", value: blankHousehold.setupCounts.policies },
+              { label: "Emergency Contacts", value: blankHousehold.setupCounts.emergencyContacts },
+              { label: "Portals", value: blankHousehold.setupCounts.portals },
+            ].map((metric) => (
+              <div
+                key={metric.label}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "14px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{metric.label}</div>
+                <div style={{ marginTop: "8px", fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{metric.value}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: "18px",
+          }}
+        >
+          <SetupChecklist
+            items={onboardingChecklist}
+            title="Complete the core household setup"
+            subtitle="These steps unlock real reporting later, but they are not a readiness score."
+          />
+          <QuickActionGrid
+            actions={onboardingQuickActions}
+            title="Use the fastest setup paths"
+            subtitle="Jump into the live creation flows that move the household from blank to report-ready."
+            onAction={(action) => action.route && onNavigate?.(action.route)}
+          />
+        </section>
+      </div>
+    );
   }
 
   const reportCards = [

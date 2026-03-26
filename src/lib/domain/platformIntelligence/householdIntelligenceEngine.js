@@ -1,6 +1,7 @@
 import {
   createEmptyHouseholdIntelligenceSchema,
 } from "./householdIntelligenceSchema";
+import { getHouseholdBlankState } from "../../onboarding/isHouseholdBlank";
 
 const CRITICAL_ASSET_CATEGORIES = [
   "insurance",
@@ -371,35 +372,6 @@ function toStatus(score) {
   if (score >= 65) return "Moderate";
   if (score >= 40) return "Weak";
   return "At Risk";
-}
-
-function isBootstrapOnlyMember(member) {
-  return Boolean(
-    member?.metadata?.bootstrap &&
-      member?.role_type === "self" &&
-      member?.is_primary
-  );
-}
-
-function isBlankHouseholdForOnboarding(bundle = {}, savedPolicyRows = []) {
-  const householdMembers = bundle.householdMembers || [];
-  const explicitMembers = householdMembers.filter((member) => !isBootstrapOnlyMember(member));
-  return (
-    (savedPolicyRows || []).length === 0 &&
-    (bundle.assets || []).length === 0 &&
-    (bundle.documents || []).length === 0 &&
-    (bundle.openAlerts || []).length === 0 &&
-    (bundle.openTasks || []).length === 0 &&
-    (bundle.reports || []).length === 0 &&
-    (bundle.emergencyContacts || []).length === 0 &&
-    (bundle.keyProfessionalContacts || []).length === 0 &&
-    explicitMembers.length === 0 &&
-    (bundle.contacts || []).length === 0 &&
-    (bundle.portalReadiness?.portalCount || 0) === 0 &&
-    (bundle.properties || []).length === 0 &&
-    (bundle.mortgageLoans || []).length === 0 &&
-    (bundle.homeownersPolicies || []).length === 0
-  );
 }
 
 function toVisibilityLabel(value) {
@@ -782,7 +754,9 @@ export function buildCrossAssetDependencySignals(bundle = {}, savedPolicyRows = 
 }
 
 export function buildHouseholdRiskContinuityMap(bundle = {}, intelligence = null, savedPolicyRows = []) {
-  if (isBlankHouseholdForOnboarding(bundle, savedPolicyRows)) {
+  const blankHousehold = getHouseholdBlankState(bundle, savedPolicyRows);
+
+  if (blankHousehold.isBlank) {
     return {
       overall_score: null,
       overall_status: "Starter",
@@ -828,6 +802,8 @@ export function buildHouseholdRiskContinuityMap(bundle = {}, intelligence = null
       },
       debug: {
         onboardingBlankState: true,
+        blankHouseholdReasons: blankHousehold.reasons,
+        setupCounts: blankHousehold.setupCounts,
       },
     };
   }

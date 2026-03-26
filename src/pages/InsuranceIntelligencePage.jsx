@@ -381,6 +381,127 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     }
   }
 
+  if (rankedPolicies.length === 0 && !loadingStates.insurancePortfolio && !loadError) {
+    return (
+      <div style={{ display: "grid", gap: "24px" }}>
+        <section
+          style={{
+            display: "grid",
+            gap: "18px",
+            padding: isMobile ? "22px 16px" : "28px 30px",
+            borderRadius: sectionRadius,
+            background: "#ffffff",
+            border: "1px solid rgba(15, 23, 42, 0.08)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "10px", maxWidth: "860px" }}>
+            <div style={{ fontSize: "12px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+              Insurance Onboarding
+            </div>
+            <div style={{ fontSize: isMobile ? "28px" : "34px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
+              Insurance Intelligence
+            </div>
+            <div style={{ fontSize: isMobile ? "18px" : "22px", fontWeight: 700, color: "#0f172a" }}>
+              Start with your first life policy upload
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              Uploading a life policy lets VaultedShield extract baseline policy details, compare annual statements, and build real insurance intelligence over time. Nothing is scored here until actual policy data exists.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            {[
+              "IUL",
+              "Universal life",
+              "Whole life",
+              "Term",
+              "Final expense",
+            ].map((item) => (
+              <div
+                key={item}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  color: "#0f172a",
+                  fontWeight: 700,
+                }}
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onNavigate?.("/insurance/life/upload")}
+              style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+            >
+              Upload Baseline Policy
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.("/insurance/life/upload")}
+              style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+            >
+              Scan Policy with Camera
+            </button>
+          </div>
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr",
+            gap: "18px",
+          }}
+        >
+          <div
+            style={{
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
+              background: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              display: "grid",
+              gap: "12px",
+            }}
+          >
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>No portfolio analysis yet</div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              Add your first policy illustration, declaration, or annual statement to begin comparison and continuity analysis. VaultedShield will start generating policy-level insights after real records are saved.
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
+              background: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              display: "grid",
+              gap: "12px",
+            }}
+          >
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What the first upload unlocks</div>
+            <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569" }}>
+              <li style={{ lineHeight: "1.7" }}>Baseline policy details and carrier visibility</li>
+              <li style={{ lineHeight: "1.7" }}>Statement freshness and charge-read support</li>
+              <li style={{ lineHeight: "1.7" }}>Portfolio comparison once multiple policies exist</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "grid", gap: "24px" }}>
       <section
@@ -935,4 +1056,3 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     </div>
   );
 }
-

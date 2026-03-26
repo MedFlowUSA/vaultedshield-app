@@ -13,7 +13,13 @@ import {
   saveHouseholdReviewDigestSnapshot,
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import QuickActionGrid from "../components/onboarding/QuickActionGrid";
+import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import {
+  buildHouseholdOnboardingChecklist,
+  getHouseholdBlankState,
+} from "../lib/onboarding/isHouseholdBlank";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
@@ -793,6 +799,249 @@ export default function DashboardPage({ onNavigate }) {
     "How strong is the insurance side right now?",
     "Are portal and access records in good shape?",
   ];
+
+  const blankHousehold = useMemo(
+    () => getHouseholdBlankState(intelligenceBundle || {}, savedPolicyRows || []),
+    [intelligenceBundle, savedPolicyRows]
+  );
+  const onboardingChecklist = useMemo(
+    () => buildHouseholdOnboardingChecklist(blankHousehold, intelligenceBundle || {}, savedPolicyRows || []),
+    [blankHousehold, intelligenceBundle, savedPolicyRows]
+  );
+  const onboardingCompletedCount = onboardingChecklist.filter((item) => item.complete).length;
+  const onboardingProgressPercent = onboardingChecklist.length > 0
+    ? Math.round((onboardingCompletedCount / onboardingChecklist.length) * 100)
+    : 0;
+  const onboardingQuickActions = [
+    {
+      id: "add_property",
+      label: "Add Property",
+      description: "Create the first home or property record and start the asset picture.",
+      route: "/property",
+    },
+    {
+      id: "upload_insurance",
+      label: "Upload Insurance Policy",
+      description: "Start life insurance analysis with a baseline illustration or policy packet.",
+      route: "/insurance/life/upload",
+    },
+    {
+      id: "add_contact",
+      label: "Add Contact",
+      description: "Add a family member, advisor, trustee, or emergency contact.",
+      route: "/contacts",
+    },
+    {
+      id: "add_retirement",
+      label: "Add Retirement Account",
+      description: "Create the first retirement record to unlock account-level visibility.",
+      route: "/retirement",
+    },
+    {
+      id: "upload_document",
+      label: "Upload Document",
+      description: "Drop in a statement, declaration page, will, trust, or other household file.",
+      route: "/upload-center",
+    },
+  ];
+  const showGuidedOnboarding =
+    !showLoadingShell &&
+    blankHousehold.isBlank &&
+    !householdState.error &&
+    !loadError;
+
+  if (showGuidedOnboarding) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#020617",
+          color: "#e2e8f0",
+          padding: isMobile ? "16px" : isTablet ? "22px" : "32px",
+        }}
+      >
+        <div style={{ margin: "0 auto", maxWidth: "1180px", display: "grid", gap: "28px" }}>
+          <header
+            style={{
+              display: "flex",
+              alignItems: isMobile ? "stretch" : "center",
+              justifyContent: "space-between",
+              gap: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: isMobile ? "16px" : "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
+              VaultedShield
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+              <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
+                Upload Document
+              </button>
+              <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/property")}>
+                Add Property
+              </button>
+            </div>
+          </header>
+
+          <section
+            style={{
+              padding: isMobile ? "24px 18px" : isTablet ? "30px 26px" : "36px 40px",
+              borderRadius: isMobile ? "22px" : "28px",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+              border: "1px solid rgba(255,255,255,0.06)",
+              display: "grid",
+              gap: "22px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "10px", maxWidth: "860px" }}>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+                Guided Setup
+              </div>
+              <div style={{ fontSize: isMobile ? "34px" : "48px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
+                Welcome to VaultedShield
+              </div>
+              <div style={{ fontSize: isMobile ? "18px" : "22px", fontWeight: 700, color: "#f8fafc" }}>
+                Let&apos;s build your household profile
+              </div>
+              <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
+                VaultedShield becomes more useful as you add household members, properties, insurance, retirement accounts, documents, and key contacts. This setup progress tracks what you&apos;ve actually added without creating fake intelligence.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Household setup progress</div>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#93c5fd" }}>{onboardingProgressPercent}% complete</div>
+              </div>
+              <div style={{ height: "12px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${onboardingProgressPercent}%`,
+                    minWidth: onboardingProgressPercent > 0 ? "12px" : 0,
+                    height: "100%",
+                    borderRadius: "999px",
+                    background: "linear-gradient(90deg, #38bdf8 0%, #60a5fa 100%)",
+                  }}
+                />
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "14px", lineHeight: "1.7" }}>
+                {onboardingCompletedCount} of {onboardingChecklist.length} core setup steps completed.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {[
+                { label: "Assets", value: blankHousehold.setupCounts.assets },
+                { label: "Documents", value: blankHousehold.setupCounts.documents },
+                { label: "Policies", value: blankHousehold.setupCounts.policies },
+                { label: "Emergency Contacts", value: blankHousehold.setupCounts.emergencyContacts },
+              ].map((metric) => (
+                <div
+                  key={metric.label}
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "18px",
+                    background: "rgba(15,23,42,0.32)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>{metric.label}</div>
+                  <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#f8fafc" }}>{metric.value}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "1.1fr 0.9fr",
+              gap: "18px",
+            }}
+          >
+            <SetupChecklist
+              theme="dark"
+              items={onboardingChecklist}
+              title="Build the household foundation"
+              subtitle="These steps create real household records, which is when VaultedShield starts meaningful analysis."
+            />
+            <QuickActionGrid
+              theme="dark"
+              actions={onboardingQuickActions}
+              title="Start with the fastest actions"
+              subtitle="Each action opens an existing setup flow so you can move from zero data to real household visibility."
+              onAction={(action) => action.route && onNavigate?.(action.route)}
+            />
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                padding: sectionPadding,
+                borderRadius: sectionRadius,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>No household analysis yet</div>
+              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                Add your first asset or document to begin analysis. VaultedShield will start generating insights once real household data is added.
+              </div>
+              <ul style={{ margin: "4px 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#94a3b8" }}>
+                <li style={{ lineHeight: "1.7" }}>No readiness score is shown until meaningful household records exist.</li>
+                <li style={{ lineHeight: "1.7" }}>No review queue or alerts are created for a truly blank household.</li>
+                <li style={{ lineHeight: "1.7" }}>Your setup progress is separate from household continuity or emergency readiness.</li>
+              </ul>
+            </div>
+
+            <div
+              style={{
+                padding: sectionPadding,
+                borderRadius: sectionRadius,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance onboarding</div>
+              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                Uploading a life policy is one of the fastest ways to activate real analysis. Start with a baseline illustration, policy packet, or annual statement when you&apos;re ready.
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={buttonStyle(true)}>
+                  Upload Insurance Policy
+                </button>
+                <button type="button" onClick={() => onNavigate?.("/insurance")} style={buttonStyle(false)}>
+                  Open Insurance Hub
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {import.meta.env.DEV ? (
+            <div style={{ color: "#64748b", fontSize: "12px" }}>
+              household={householdState.context.householdId || "none"} | onboardingBlank=yes | assets={blankHousehold.setupCounts.assets} | documents={blankHousehold.setupCounts.documents} | policies={blankHousehold.setupCounts.policies} | emergencyContacts={blankHousehold.setupCounts.emergencyContacts}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

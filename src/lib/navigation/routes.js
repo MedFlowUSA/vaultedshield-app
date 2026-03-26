@@ -20,6 +20,7 @@ export const ROUTES = {
   healthInsuranceHub: { path: "/insurance/health", title: "Health Insurance", section: "Assets", minimumTier: "essential" },
   healthPlanDetail: { path: "/insurance/health/detail", title: "Health Plan Detail", section: "Assets", minimumTier: "essential" },
   lifePolicyDetail: { path: "/insurance/life/policy-detail", title: "Life Policy Detail", section: "Assets", minimumTier: "essential" },
+  lifePolicyUpload: { path: "/insurance/life/upload", title: "Life Policy Upload", section: "Assets", minimumTier: "free" },
   bankingHub: { path: "/banking", title: "Banking", section: "Assets", minimumTier: "professional" },
   mortgageHub: { path: "/mortgage", title: "Mortgage", section: "Assets", minimumTier: "essential" },
   mortgageDetail: { path: "/mortgage/detail", title: "Mortgage Detail", section: "Assets", minimumTier: "essential" },
