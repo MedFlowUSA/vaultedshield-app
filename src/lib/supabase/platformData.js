@@ -139,6 +139,26 @@ async function findExistingGenericDocument({ householdId, sourceHash }) {
   return { data, error: findError };
 }
 
+function mapGenericUploadError(error, { assetId = null } = {}) {
+  const message = String(error?.message || error?.details || "").toLowerCase();
+
+  if (!message) {
+    return "We couldn't save this upload right now.";
+  }
+
+  if (message.includes("asset_id") && message.includes("null value")) {
+    return assetId
+      ? "We couldn't attach this document to the selected asset. Please try again."
+      : "We couldn't attach this document correctly. Please try again or choose an asset.";
+  }
+
+  if (message.includes("violates row-level security") || message.includes("row-level security")) {
+    return "This upload could not be saved for the current household context.";
+  }
+
+  return "We couldn't save this upload right now.";
+}
+
 async function listRecords(table, filters = [], options = {}) {
   const { supabase, error } = getClientOrError();
   if (error) return { data: [], error };
@@ -584,7 +604,7 @@ export async function listHouseholdDocuments(householdId) {
 
 export async function createAssetDocument(payload) {
   return insertRecord("asset_documents", {
-    asset_id: payload.asset_id,
+    asset_id: payload.asset_id || null,
     household_id: payload.household_id,
     document_role: payload.document_role || null,
     document_type: payload.document_type || null,
@@ -619,6 +639,7 @@ export async function uploadGenericAssetDocument({
   }
 
   const sourceHash = await buildDocumentSourceHash(file);
+  const documentScope = assetId ? "asset" : "household";
   const existingResult = await findExistingGenericDocument({
     householdId,
     sourceHash,
@@ -632,6 +653,7 @@ export async function uploadGenericAssetDocument({
     return {
       data: existingResult.data,
       error: null,
+      errorSummary: "",
       upload: {
         attempted: false,
         succeeded: Boolean(existingResult.data.storage_path),
@@ -664,15 +686,21 @@ export async function uploadGenericAssetDocument({
     notes: notes || null,
     metadata: {
       ...metadata,
+      document_scope: documentScope,
       asset_category_hint: assetCategoryHint || null,
       upload_attempted: uploadResult.attempted,
       upload_error: uploadResult.errorSummary || null,
     },
   });
 
+  const friendlyErrorSummary =
+    uploadResult.errorSummary ||
+    (documentResult.error ? mapGenericUploadError(documentResult.error, { assetId }) : "");
+
   return {
     data: documentResult.data,
     error: documentResult.error,
+    errorSummary: friendlyErrorSummary,
     upload: uploadResult,
     duplicate: false,
   };

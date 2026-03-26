@@ -48,6 +48,26 @@ function formatDate(value) {
   });
 }
 
+function formatFriendlyLoadError(error) {
+  if (!error) return "";
+  return "We couldn't load the Upload Center right now.";
+}
+
+function getQueueStatusTone(status) {
+  if (status === "saved") return { background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0" };
+  if (status === "failed") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (status === "uploading") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function getDocumentScopeLabel(item, assets) {
+  if (!item.assetId) {
+    return "Household-level document";
+  }
+  const linkedAsset = assets.find((asset) => asset.id === item.assetId);
+  return linkedAsset ? `Linked asset: ${linkedAsset.asset_name}` : "Asset-linked document";
+}
+
 export default function UploadCenterPage() {
   const { isMobile, isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
@@ -85,7 +105,14 @@ export default function UploadCenterPage() {
 
       setAssets(assetsResult.data || []);
       setDocuments(documentsResult.data || []);
-      setLoadError(assetsResult.error?.message || documentsResult.error?.message || "");
+      setLoadError(formatFriendlyLoadError(assetsResult.error || documentsResult.error));
+
+      if (import.meta.env.DEV && (assetsResult.error || documentsResult.error)) {
+        console.error("[UploadCenterPage] loadContextData", {
+          assetsError: assetsResult.error,
+          documentsError: documentsResult.error,
+        });
+      }
     }
 
     loadContextData();
@@ -168,7 +195,7 @@ export default function UploadCenterPage() {
                 status: nextStatus,
                 storagePath: result.upload?.storagePath || "",
                 documentId: result.data?.id || null,
-                errorSummary: result.error?.message || result.upload?.errorSummary || "",
+                errorSummary: result.errorSummary || "",
                 duplicate: result.duplicate,
               }
             : entry
@@ -178,12 +205,20 @@ export default function UploadCenterPage() {
       if (!result.error && result.data) {
         setDocuments((current) => [result.data, ...current]);
       }
+
+      if (import.meta.env.DEV && result.error) {
+        console.error("[UploadCenterPage] uploadGenericAssetDocument", {
+          queueId: item.id,
+          rawError: result.error,
+        });
+      }
     }
   }
 
   const documentRows = documents.slice(0, 12).map((document) => ({
     name: document.file_name || "Unnamed document",
     role: [
+      document.metadata?.document_scope === "household" ? "Household-level" : null,
       document.document_type,
       document.document_role,
       document.assets?.asset_name,
@@ -195,7 +230,7 @@ export default function UploadCenterPage() {
   }));
 
   return (
-    <div>
+    <div style={{ display: "grid", gap: "24px", minWidth: 0, maxWidth: "100%", overflowX: "clip" }}>
       <PageHeader
         eyebrow="Upload Center"
         title="Unified Upload Center"
@@ -211,144 +246,209 @@ export default function UploadCenterPage() {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1.2fr 1fr", gap: "18px" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.18fr) minmax(0, 0.82fr)",
+          gap: "18px",
+          minWidth: 0,
+        }}
+      >
         <SectionCard title="Generic Document Intake" subtitle="Upload household documents into the broad platform vault without invoking the specialized IUL parser.">
-          <div
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              enqueueFiles(event.dataTransfer.files);
-            }}
-            style={{
-              border: "1px dashed #94a3b8",
-              borderRadius: "16px",
-              padding: isMobile ? "18px" : "24px",
-              background: "#f8fafc",
-            }}
-          >
-            <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop files here</div>
-            <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
-              Upload generic household documents to the platform vault. This flow does not replace the specialized life-policy analysis flow.
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              style={{ display: "none" }}
-              onChange={(event) => enqueueFiles(event.target.files)}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: "none" }}
-              onChange={(event) => {
-                enqueueFiles(event.target.files);
-                event.target.value = "";
+          <div style={{ display: "grid", gap: "18px", minWidth: 0 }}>
+            <div
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                enqueueFiles(event.dataTransfer.files);
               }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
+              style={{
+                border: "1px dashed #94a3b8",
+                borderRadius: "16px",
+                padding: isMobile ? "18px" : "24px",
+                background: "#f8fafc",
+                minWidth: 0,
+              }}
             >
-              Select Files
-            </button>
-            <button
-              type="button"
-              onClick={handleCameraCapture}
-              disabled={cameraLoading}
-              style={{ marginTop: "10px", padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
-            >
-              {cameraLoading ? "Opening Camera..." : "Scan Document"}
-            </button>
-          </div>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop files here</div>
+              <p style={{ marginTop: "8px", marginBottom: "14px", color: "#64748b", lineHeight: "1.6" }}>
+                Upload generic household documents to the platform vault. This flow does not replace the specialized life-policy analysis flow.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: "none" }}
+                onChange={(event) => enqueueFiles(event.target.files)}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  enqueueFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
+                >
+                  Select Files
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCameraCapture}
+                  disabled={cameraLoading}
+                  style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
+                >
+                  {cameraLoading ? "Opening Camera..." : "Scan Document"}
+                </button>
+              </div>
+            </div>
 
-          <div style={{ marginTop: "18px", display: "grid", gap: "12px" }}>
-            <select
-              value={assetId}
-              onChange={(event) => setAssetId(event.target.value)}
-              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-            >
-              <option value="">No asset selected (household-level document)</option>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.asset_name} ({asset.asset_category}{asset.asset_subcategory ? ` / ${asset.asset_subcategory}` : ""})
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+              <select
+                value={assetId}
+                onChange={(event) => setAssetId(event.target.value)}
+                style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              >
+                <option value="">No asset selected (household-level document)</option>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.asset_name} ({asset.asset_category}{asset.asset_subcategory ? ` / ${asset.asset_subcategory}` : ""})
+                  </option>
+                ))}
+              </select>
 
-            <select
-              value={assetCategoryHint}
-              onChange={(event) => setAssetCategoryHint(event.target.value)}
-              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-            >
-              <option value="insurance">insurance</option>
-              <option value="banking">banking</option>
-              <option value="retirement">retirement</option>
-              <option value="estate">estate</option>
-              <option value="property">property</option>
-              <option value="health">health</option>
-              <option value="business">business</option>
-              <option value="digital_asset">digital_asset</option>
-              <option value="misc">misc</option>
-            </select>
+              <select
+                value={assetCategoryHint}
+                onChange={(event) => setAssetCategoryHint(event.target.value)}
+                style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+              >
+                <option value="insurance">insurance</option>
+                <option value="banking">banking</option>
+                <option value="retirement">retirement</option>
+                <option value="estate">estate</option>
+                <option value="property">property</option>
+                <option value="health">health</option>
+                <option value="business">business</option>
+                <option value="digital_asset">digital_asset</option>
+                <option value="misc">misc</option>
+              </select>
 
-            <select
-              value={documentType}
-              onChange={(event) => setDocumentType(event.target.value)}
-              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-            >
-              {DOCUMENT_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                  gap: "12px",
+                  minWidth: 0,
+                }}
+              >
+                <select
+                  value={documentType}
+                  onChange={(event) => setDocumentType(event.target.value)}
+                  style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+                >
+                  {DOCUMENT_TYPES.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
 
-            <select
-              value={documentRole}
-              onChange={(event) => setDocumentRole(event.target.value)}
-              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-            >
-              {DOCUMENT_ROLES.map((role) => (
-                <option key={role} value={role}>{role}</option>
-              ))}
-            </select>
+                <select
+                  value={documentRole}
+                  onChange={(event) => setDocumentRole(event.target.value)}
+                  style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+                >
+                  {DOCUMENT_ROLES.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
 
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={4}
-              placeholder="Notes or tag for this upload batch"
-              style={{ width: "100%", maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
-            />
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={4}
+                placeholder="Notes or tag for this upload batch"
+                style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
+              />
 
-            <button
-              onClick={handleUploadQueuedFiles}
-              disabled={!householdState.context.householdId || queue.length === 0}
-              style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
-            >
-              Upload Queue
-            </button>
+              <button
+                type="button"
+                onClick={handleUploadQueuedFiles}
+                disabled={!householdState.context.householdId || queue.length === 0}
+                style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "auto" }}
+              >
+                Upload Queue
+              </button>
+            </div>
           </div>
         </SectionCard>
 
         <SectionCard title="Upload Queue" subtitle="Per-file platform upload status.">
           {queue.length > 0 ? (
-            <div style={{ display: "grid", gap: "12px" }}>
-              {queue.map((item) => (
-                <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word" }}>{item.file.name}</div>
-                  <div style={{ marginTop: "4px", color: "#64748b" }}>
-                    {item.documentType} | {item.documentRole} | {item.assetId ? "Asset-linked" : "Household-level"}
+            <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+              {queue.map((item) => {
+                const statusTone = getQueueStatusTone(item.status);
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "14px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gap: "10px",
+                      minWidth: 0,
+                      maxWidth: "100%",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                      {item.file.name}
+                    </div>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "fit-content",
+                        maxWidth: "100%",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        ...statusTone,
+                      }}
+                    >
+                      {item.status}{item.duplicate ? " | Duplicate reused" : ""}
+                    </div>
+                    <div style={{ display: "grid", gap: "6px", color: "#475569", lineHeight: "1.65", minWidth: 0 }}>
+                      <div style={{ overflowWrap: "anywhere" }}>
+                        <strong style={{ color: "#0f172a" }}>Scope:</strong> {getDocumentScopeLabel(item, assets)}
+                      </div>
+                      <div style={{ overflowWrap: "anywhere" }}>
+                        <strong style={{ color: "#0f172a" }}>Type:</strong> {item.documentType} | {item.documentRole}
+                      </div>
+                      {item.storagePath ? (
+                        <div style={{ overflowWrap: "anywhere" }}>
+                          <strong style={{ color: "#0f172a" }}>Storage Path:</strong> <span style={{ color: "#64748b" }}>{item.storagePath}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {item.errorSummary ? (
+                      <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>
+                        {item.errorSummary}
+                      </div>
+                    ) : null}
                   </div>
-                  <div style={{ marginTop: "8px", color: "#475569" }}>
-                    Status: {item.status}
-                    {item.duplicate ? " | Duplicate reused" : ""}
-                    {item.storagePath ? ` | ${item.storagePath}` : ""}
-                  </div>
-                  {item.errorSummary ? <div style={{ marginTop: "6px", color: "#991b1b" }}>{item.errorSummary}</div> : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyState
@@ -359,25 +459,23 @@ export default function UploadCenterPage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
-        <SectionCard title="Recent Generic Uploads" subtitle="These household documents will appear in the Vault view on refresh/navigation.">
-          {documentRows.length > 0 ? (
-            <DocumentTable rows={documentRows} />
-          ) : (
-            <EmptyState
-              title="No generic documents yet"
-              description="Upload generic documents here to populate the broader platform vault without affecting the specialized IUL workflow."
-            />
-          )}
-        </SectionCard>
-      </div>
+      <SectionCard title="Recent Generic Uploads" subtitle="These household documents will appear in the Vault view on refresh or navigation.">
+        {documentRows.length > 0 ? (
+          <DocumentTable rows={documentRows} />
+        ) : (
+          <EmptyState
+            title="No generic documents yet"
+            description="Upload generic documents here to populate the broader platform vault without affecting the specialized IUL workflow."
+          />
+        )}
+      </SectionCard>
 
       {loadError ? (
-        <div style={{ marginTop: "18px", color: "#991b1b" }}>{loadError}</div>
+        <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>{loadError}</div>
       ) : null}
 
       {import.meta.env.DEV ? (
-        <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
+        <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7", overflowWrap: "anywhere" }}>
           Upload Debug: household={householdState.context.householdId || "none"} | asset={assetId || "none"} | storageConfigured={supabaseConfigured ? "yes" : "no"} | queue={queue.length} | uploadedPaths={queue.map((item) => item.storagePath).filter(Boolean).join(", ") || "none"} | documentIds={queue.map((item) => item.documentId).filter(Boolean).join(", ") || "none"} | error={loadError || "none"}
         </div>
       ) : null}
