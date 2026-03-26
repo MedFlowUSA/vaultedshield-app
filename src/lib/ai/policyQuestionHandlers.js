@@ -1,3 +1,5 @@
+import { buildIulV2Analytics } from "../insurance/iulV2Analytics";
+
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";
   return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString("en-US", {
@@ -31,6 +33,17 @@ function buildInsufficientDataAnswer(message, suggested = []) {
     [],
     ["The current file does not contain enough clean evidence for a stronger answer."],
     suggested.length ? suggested : ["What should I review first?", "Is the data complete enough to trust?"]
+  );
+}
+
+function getIulV2(context = {}) {
+  return (
+    context.iulV2 ||
+    buildIulV2Analytics({
+      lifePolicy: context.lifePolicy,
+      normalizedAnalytics: context.normalizedAnalytics,
+      statementRows: context.statementRows,
+    })
   );
 }
 
@@ -196,6 +209,139 @@ export function explainIllustrationVariancePlaceholder({ normalizedAnalytics = {
   );
 }
 
+export function explainIllustrationVsActual(context = {}) {
+  const iulV2 = getIulV2(context);
+  const comparison = iulV2.illustrationComparison;
+  if (!comparison || comparison.status === "indeterminate") {
+    return answer(
+      comparison?.explanation ||
+        "Illustration-versus-actual alignment is still indeterminate from the current packet.",
+      "low",
+      [],
+      [...new Set([...(iulV2.missingData || []), "A trusted illustration checkpoint was not matched cleanly to the latest statement."])],
+      followups("Is the policy being funded strongly enough?", "Are charges hurting this policy?", "Is the data complete enough to trust?")
+    );
+  }
+  return answer(
+    comparison.explanation,
+    comparison.confidence || "moderate",
+    [
+      supporting_data("Comparison basis", comparison.comparisonMetric?.replace(/_/g, " ") || "Unavailable"),
+      supporting_data("Illustrated value", formatCurrency(comparison.illustratedValue)),
+      supporting_data("Actual value", formatCurrency(comparison.actualValue)),
+      supporting_data("Variance", formatCurrency(comparison.varianceAmount)),
+      supporting_data("Variance percent", comparison.variancePercent !== null ? `${comparison.variancePercent.toFixed(1)}%` : "Unavailable"),
+    ],
+    iulV2.missingData || [],
+    followups("Are charges hurting this policy?", "Is the policy being funded strongly enough?", "What should I review first?")
+  );
+}
+
+export function explainChargeDrag(context = {}) {
+  const iulV2 = getIulV2(context);
+  const chargeAnalysis = iulV2.chargeAnalysis;
+  if (!chargeAnalysis || chargeAnalysis.chargeDragLevel === "unknown") {
+    return buildInsufficientDataAnswer(
+      chargeAnalysis?.explanation || "Charge drag is still unclear because visible charge support is incomplete.",
+      ["Is the data complete enough to trust?", "What should I review first?", "Is there visible lapse or loan pressure?"]
+    );
+  }
+  return answer(
+    chargeAnalysis.explanation,
+    chargeAnalysis.confidence || "moderate",
+    [
+      supporting_data("Visible charges", formatCurrency(chargeAnalysis.totalVisibleCharges)),
+      supporting_data("Charge drag level", chargeAnalysis.chargeDragLevel),
+      supporting_data("COI visible", chargeAnalysis.coiVisible ? "Yes" : "No"),
+      supporting_data("Trend", chargeAnalysis.trend),
+    ],
+    iulV2.missingData || [],
+    followups("Is the policy being funded strongly enough?", "Is there visible lapse or loan pressure?", "Are we ahead or behind the illustration?")
+  );
+}
+
+export function explainFundingSufficiency(context = {}) {
+  const iulV2 = getIulV2(context);
+  const funding = iulV2.fundingAnalysis;
+  if (!funding || funding.status === "unclear") {
+    return answer(
+      funding?.explanation || "Funding sufficiency is still unclear from the visible data.",
+      "low",
+      [
+        supporting_data("Planned premium", formatCurrency(funding?.plannedPremium)),
+        supporting_data("Visible total premium paid", formatCurrency(funding?.totalPremiumPaid)),
+      ],
+      iulV2.missingData || [],
+      followups("Are charges hurting this policy?", "Is there visible lapse or loan pressure?", "Is the data complete enough to trust?")
+    );
+  }
+  return answer(
+    funding.explanation,
+    funding.confidence || "moderate",
+    [
+      supporting_data("Funding status", funding.status),
+      supporting_data("Planned premium", formatCurrency(funding.plannedPremium)),
+      supporting_data("Visible total premium paid", formatCurrency(funding.totalPremiumPaid)),
+      supporting_data("Observed funding pace", formatCurrency(funding.observedFundingPace)),
+      supporting_data("Funding gap", formatCurrency(funding.fundingGapAmount)),
+    ],
+    iulV2.missingData || [],
+    followups("Are charges hurting this policy?", "Are we ahead or behind the illustration?", "What should I review first?")
+  );
+}
+
+export function explainIulRisk(context = {}) {
+  const iulV2 = getIulV2(context);
+  const risk = iulV2.riskAnalysis;
+  if (!risk || risk.overallRisk === "unclear") {
+    return answer(
+      risk?.explanation || "Visible lapse or loan pressure is still unclear because the current packet is incomplete.",
+      "low",
+      [supporting_data("Overall risk", risk?.overallRisk || "unclear")],
+      iulV2.missingData || [],
+      followups("Is the data complete enough to trust?", "Are charges hurting this policy?", "Is the policy being funded strongly enough?")
+    );
+  }
+  return answer(
+    risk.explanation,
+    risk.confidence || "moderate",
+    [
+      supporting_data("Overall risk", risk.overallRisk),
+      supporting_data("Risk score", risk.riskScore ?? "Unavailable"),
+      supporting_data("Lapse pressure", risk.lapsePressure),
+      ...risk.factors.slice(0, 3).map((item) => supporting_data(item.type.replace(/_/g, " "), item.message)),
+    ],
+    iulV2.missingData || [],
+    followups("Are charges hurting this policy?", "Are we ahead or behind the illustration?", "What should I review first?")
+  );
+}
+
+export function explainStrategyAllocation(context = {}) {
+  const iulV2 = getIulV2(context);
+  const strategy = iulV2.strategyAnalysis;
+  if (!strategy || !strategy.strategiesVisible) {
+    return buildInsufficientDataAnswer(
+      strategy?.explanation || "Strategy mix is not visible enough to explain the current allocation.",
+      ["Is the data complete enough to trust?", "Are charges hurting this policy?", "What should I review first?"]
+    );
+  }
+  return answer(
+    strategy.explanation,
+    strategy.confidence || "moderate",
+    [
+      supporting_data("Strategy count", strategy.strategyCount),
+      supporting_data("Concentration", strategy.concentrationLevel),
+      supporting_data("Indexed exposure", strategy.indexedExposurePercent !== null ? `${strategy.indexedExposurePercent}%` : "Unavailable"),
+      supporting_data("Fixed exposure", strategy.fixedExposurePercent !== null ? `${strategy.fixedExposurePercent}%` : "Unavailable"),
+      supporting_data("Cap rates", strategy.visibleTerms.capRates.join(", ") || "Unavailable"),
+      supporting_data("Participation rates", strategy.visibleTerms.participationRates.join(", ") || "Unavailable"),
+      supporting_data("Spreads", strategy.visibleTerms.spreads.join(", ") || "Unavailable"),
+    ],
+    iulV2.missingData || [],
+    followups("Are we ahead or behind the illustration?", "Are charges hurting this policy?", "Is the policy being funded strongly enough?")
+  );
+}
+
 export function explainWholeLifeBehavior({ lifePolicy }) {
   return answer(
     lifePolicy?.values?.cashValue
@@ -310,14 +456,17 @@ export function answerPolicyQuestion(questionText, context = {}) {
   if (question.includes("healthy") || question.includes("performing well")) return explainPolicyHealth(context);
   if (question.includes("review first")) return explainWhatToReviewFirst(context);
   if (question.includes("complete enough") || question.includes("trust")) return explainDataCompleteness(context);
-  if (question.includes("risk")) return explainPolicyHealth(context);
+  if (question.includes("risk")) return policyType === "iul" ? explainIulRisk(context) : explainPolicyHealth(context);
 
   if (policyType === "iul" || policyType === "ul") {
+    if (question.includes("funded") || question.includes("funding")) return explainFundingSufficiency(context);
+    if (question.includes("lapse") || question.includes("loan pressure")) return explainIulRisk(context);
     if (question.includes("loan")) return explainLoans(context);
-    if (question.includes("strategy")) return explainStrategy(context);
-    if (question.includes("charge") || question.includes("fee")) return explainCharges(context);
+    if (question.includes("strategy mix") || question.includes("allocation")) return explainStrategyAllocation(context);
+    if (question.includes("strategy")) return explainStrategyAllocation(context);
+    if (question.includes("charge") || question.includes("fee")) return explainChargeDrag(context);
     if (question.includes("ahead") || question.includes("behind") || question.includes("illustration")) {
-      return explainIllustrationVariancePlaceholder(context);
+      return explainIllustrationVsActual(context);
     }
     return explainPerformance(context);
   }

@@ -142,21 +142,74 @@ async function getCurrentVaultedPolicyScope() {
   };
 }
 
-function normalizeExplicitVaultedPolicyScope(scopeOverride = null) {
+async function resolveAuthenticatedVaultedPolicyWriteScope(scopeOverride = null) {
+  const explicitScope = normalizeExplicitVaultedPolicyScope(scopeOverride);
+  const sessionScope = await getCurrentVaultedPolicyScope();
+  if (!sessionScope.userId) {
+    return {
+      ...buildBlockedVaultedPolicyScope("authenticated_write_scope_missing_user"),
+      mode: "authenticated_owned",
+    };
+  }
+  if (
+    import.meta.env.DEV &&
+    explicitScope?.userId &&
+    explicitScope.userId !== sessionScope.userId
+  ) {
+    console.warn("[VaultedShield] explicit policy write scope did not match the active Supabase auth session. Using the live auth user.", {
+      explicitUserId: explicitScope.userId,
+      authSessionUserId: sessionScope.userId,
+      scopeSource: explicitScope.source || "unknown",
+    });
+  }
+  return {
+    userId: sessionScope.userId,
+    mode: "authenticated_owned",
+    source: explicitScope?.source || "resolved_authenticated_write_session",
+    blocked: false,
+  };
+}
+
+function buildBlockedVaultedPolicyScope(source = "explicit_scope_blocked") {
+  return {
+    userId: null,
+    mode: "blocked",
+    source,
+    blocked: true,
+  };
+}
+
+export function normalizeExplicitVaultedPolicyScope(scopeOverride = null) {
   if (!scopeOverride) return null;
   if (typeof scopeOverride === "string") {
+    if (!scopeOverride.trim()) {
+      return buildBlockedVaultedPolicyScope("explicit_user_id_missing");
+    }
     return {
       userId: scopeOverride || null,
       mode: scopeOverride ? "authenticated_owned" : "guest_shared",
       source: "explicit_user_id",
+      blocked: false,
     };
   }
   if (typeof scopeOverride === "object") {
     const userId = scopeOverride.userId || null;
+    const ownershipMode = scopeOverride.ownershipMode || null;
+    const householdId = scopeOverride.householdId || null;
+    const guestFallbackActive = Boolean(scopeOverride.guestFallbackActive);
+    const source = scopeOverride.source || "explicit_scope";
+    const explicitAuthScope =
+      ownershipMode === "authenticated_owned" ||
+      Boolean(householdId) ||
+      (!guestFallbackActive && ownershipMode !== "guest_shared");
+    if (explicitAuthScope && !userId) {
+      return buildBlockedVaultedPolicyScope(`${source}_missing_user`);
+    }
     return {
       userId,
       mode: userId ? "authenticated_owned" : "guest_shared",
-      source: scopeOverride.source || "explicit_scope",
+      source,
+      blocked: false,
     };
   }
   return null;
@@ -165,13 +218,78 @@ function normalizeExplicitVaultedPolicyScope(scopeOverride = null) {
 async function resolveVaultedPolicyScope(scopeOverride = null) {
   const explicitScope = normalizeExplicitVaultedPolicyScope(scopeOverride);
   if (explicitScope) return explicitScope;
-  return getCurrentVaultedPolicyScope();
+  const currentScope = await getCurrentVaultedPolicyScope();
+  return {
+    ...currentScope,
+    blocked: false,
+    source: "resolved_current_session",
+  };
 }
 
 export function buildVaultedPolicyScopeFilter(userId) {
   return userId
     ? { column: "user_id", operator: "eq", value: userId }
     : { column: "user_id", operator: "is", value: null };
+}
+
+function scopeBlockedResult(scope, emptyValue) {
+  if (!scope?.blocked) return null;
+  if (import.meta.env.DEV) {
+    console.warn("[VaultedShield] blocked vaulted policy query because account scope was unresolved", {
+      scopeSource: scope?.source || "unknown",
+    });
+  }
+  return { data: emptyValue, error: null };
+}
+
+function blockedVaultedWriteResult(scope) {
+  if (!scope?.blocked) return null;
+  if (import.meta.env.DEV) {
+    console.warn("[VaultedShield] blocked vaulted policy write because account scope was unresolved", {
+      scopeSource: scope?.source || "unknown",
+    });
+  }
+  return {
+    data: null,
+    error: new Error("Vaulted policy writes are blocked until the authenticated account scope is fully resolved."),
+  };
+}
+
+function warnUnexpectedVaultedPolicyRowScope(row, scope, context) {
+  if (!import.meta.env.DEV || !row || scope?.blocked) return;
+  const expectedUserId = scope?.userId || null;
+  const actualUserId = row?.user_id || null;
+  if (scope?.mode === "authenticated_owned" && !actualUserId) {
+    console.warn("[VaultedShield] authenticated policy read returned a null-owned policy row", {
+      context,
+      expectedUserId,
+      actualUserId,
+      policyId: row?.id || row?.policy_id || null,
+      scopeSource: scope?.source || "unknown",
+    });
+    return;
+  }
+  if (expectedUserId !== actualUserId) {
+    console.warn("[VaultedShield] policy row user scope mismatch", {
+      context,
+      expectedUserId,
+      actualUserId,
+      policyId: row?.id || row?.policy_id || null,
+      scopeSource: scope?.source || "unknown",
+    });
+  }
+}
+
+function warnInsertedVaultedPolicyOwnership(row, context) {
+  if (!import.meta.env.DEV || !row) return;
+  if (!row.user_id) {
+    console.warn("[VaultedShield] inserted or updated policy row is missing user_id", {
+      context,
+      policyId: row.id || null,
+      carrierKey: row.carrier_key || null,
+      policyNumberMasked: row.policy_number_masked || null,
+    });
+  }
 }
 
 function isRecognizedQuality(value) {
@@ -928,7 +1046,14 @@ export async function compareVaultedPolicies(policyIds = [], scopeOverride = nul
     };
   }
 
-  const bundleResults = await Promise.all(uniqueIds.map((policyId) => getVaultedPolicyBundle(policyId, scopeOverride)));
+  const scope = await resolveVaultedPolicyScope(scopeOverride);
+  const blocked = scopeBlockedResult(scope, {
+    policy_summaries: [],
+    comparison_rows: [],
+  });
+  if (blocked) return blocked;
+
+  const bundleResults = await Promise.all(uniqueIds.map((policyId) => getVaultedPolicyBundle(policyId, scope)));
   const error = bundleResults.find((result) => result?.error)?.error || null;
   if (error) {
     return { data: null, error };
@@ -1024,6 +1149,8 @@ async function findVaultedPolicyByIdentity({ policyNumber, carrierKey, scopeOver
   }
 
   const scope = await resolveVaultedPolicyScope(scopeOverride);
+  const blockedWrite = blockedVaultedWriteResult(scope);
+  if (blockedWrite) return blockedWrite;
   const { data, error } = await supabase
     .from("vaulted_policies")
     .select("*")
@@ -1048,7 +1175,9 @@ export async function upsertVaultedPolicyFromAnalysis({
     return { data: null, error: new Error("Supabase not configured") };
   }
 
-  const scope = await resolveVaultedPolicyScope(scopeOverride);
+  const scope = await resolveAuthenticatedVaultedPolicyWriteScope(scopeOverride);
+  const blockedWrite = blockedVaultedWriteResult(scope);
+  if (blockedWrite) return blockedWrite;
   const payload = {
     user_id: scope.userId,
     policy_number: normalizedPolicy?.policy_identity?.policy_number || null,
@@ -1067,10 +1196,11 @@ export async function upsertVaultedPolicyFromAnalysis({
   if (payload.policy_number && payload.carrier_key) {
     const { data, error } = await supabase
       .from("vaulted_policies")
-      .upsert(payload, { onConflict: "policy_number,carrier_key" })
+      .upsert(payload, { onConflict: "user_id,policy_number,carrier_key" })
       .select()
       .single();
 
+    warnInsertedVaultedPolicyOwnership(data, "upsertVaultedPolicyFromAnalysis");
     if (!error || !isMissingUpsertConstraintError(error)) {
       return { data, error };
     }
@@ -1085,13 +1215,26 @@ export async function upsertVaultedPolicyFromAnalysis({
     }
 
     if (existingResult.data?.id) {
-      return updateRecord("vaulted_policies", existingResult.data.id, payload);
+      const updateResult = await updateRecord("vaulted_policies", existingResult.data.id, payload);
+      warnInsertedVaultedPolicyOwnership(updateResult.data, "upsertVaultedPolicyFromAnalysis:updateFallback");
+      return updateResult;
     }
 
-    return insertRecord("vaulted_policies", payload);
+    const insertResult = await insertRecord("vaulted_policies", payload);
+    warnInsertedVaultedPolicyOwnership(insertResult.data, "upsertVaultedPolicyFromAnalysis:insertFallback");
+    return insertResult;
   }
 
-  return insertRecord("vaulted_policies", payload);
+  const insertResult = await insertRecord("vaulted_policies", payload);
+  warnInsertedVaultedPolicyOwnership(insertResult.data, "upsertVaultedPolicyFromAnalysis:insertUnkeyed");
+  return insertResult;
+}
+
+async function ensureWritableVaultedPolicy(policyId, scopeOverride = null) {
+  const writeScope = await resolveAuthenticatedVaultedPolicyWriteScope(scopeOverride);
+  const blockedWrite = blockedVaultedWriteResult(writeScope);
+  if (blockedWrite) return blockedWrite;
+  return ensureAccessibleVaultedPolicy(policyId, writeScope);
 }
 
 export async function createVaultedDocumentRecord({
@@ -1199,7 +1342,12 @@ export async function createVaultedSnapshot({
   strategyReferenceHits,
   parserVersion,
   parserStructuredData,
+  scopeOverride = null,
 }) {
+  const accessResult = await ensureWritableVaultedPolicy(policyId, scopeOverride);
+  if (accessResult.error) {
+    return { data: null, error: accessResult.error };
+  }
   return insertSnapshotRecord(buildVaultedSnapshotPayload({
     policy_id: policyId,
     document_id: documentId ?? null,
@@ -1231,7 +1379,12 @@ export async function createVaultedAnalytics({
   healthStatus,
   coverageStatus,
   reviewFlags,
+  scopeOverride = null,
 }) {
+  const accessResult = await ensureWritableVaultedPolicy(policyId, scopeOverride);
+  if (accessResult.error) {
+    return { data: null, error: accessResult.error };
+  }
   return insertRecord("vaulted_policy_analytics", {
     policy_id: policyId,
     snapshot_id: snapshotId ?? null,
@@ -1248,6 +1401,7 @@ export async function upsertVaultedStatementRows({
   policyId,
   snapshotId,
   statements = [],
+  scopeOverride = null,
 }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -1256,6 +1410,11 @@ export async function upsertVaultedStatementRows({
 
   if (!statements.length) {
     return { data: [], error: null };
+  }
+
+  const accessResult = await ensureWritableVaultedPolicy(policyId, scopeOverride);
+  if (accessResult.error) {
+    return { data: null, error: accessResult.error };
   }
 
   const payload = statements.map((statement) => ({
@@ -1287,25 +1446,8 @@ export async function upsertVaultedStatementRows({
   return { data, error };
 }
 
-export async function getVaultedPolicyWithHistory(policyId) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return { data: null, error: new Error("Supabase not configured") };
-  }
-
-  const { data, error } = await supabase
-    .from("vaulted_policies")
-    .select(`
-      *,
-      vaulted_policy_documents (*),
-      vaulted_policy_snapshots (*),
-      vaulted_policy_analytics (*),
-      vaulted_policy_statements (*)
-    `)
-    .eq("id", policyId)
-    .single();
-
-  return { data, error };
+export async function getVaultedPolicyWithHistory(policyId, scopeOverride = null) {
+  return getVaultedPolicyBundle(policyId, scopeOverride);
 }
 
 export async function listVaultedPolicies(scopeOverride = null) {
@@ -1315,6 +1457,8 @@ export async function listVaultedPolicies(scopeOverride = null) {
   }
 
   const scope = await resolveVaultedPolicyScope(scopeOverride);
+  const blocked = scopeBlockedResult(scope, []);
+  if (blocked) return blocked;
   let query = supabase.from("vaulted_policies").select(`
       *,
       vaulted_policy_statements (statement_date),
@@ -1325,6 +1469,7 @@ export async function listVaultedPolicies(scopeOverride = null) {
   query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
 
   const { data, error } = await query;
+  safeArray(data).forEach((row) => warnUnexpectedVaultedPolicyRowScope(row, scope, "listVaultedPolicies"));
 
   return {
     data: safeArray(data).map((row) => ({
@@ -1343,9 +1488,12 @@ export async function getVaultedPolicyById(policyId, scopeOverride = null) {
   }
 
   const scope = await resolveVaultedPolicyScope(scopeOverride);
+  const blocked = scopeBlockedResult(scope, null);
+  if (blocked) return blocked;
   let query = supabase.from("vaulted_policies").select("*").eq("id", policyId);
   query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
   const { data, error } = await query.single();
+  warnUnexpectedVaultedPolicyRowScope(data, scope, "getVaultedPolicyById");
 
   return { data, error };
 }
@@ -1494,7 +1642,12 @@ async function createOrReuseVaultedDocument({
   classificationConfidence,
   rawTextExcerpt,
   metadata = {},
+  scopeOverride = null,
 }) {
+  const accessResult = await ensureWritableVaultedPolicy(policyId, scopeOverride);
+  if (accessResult.error) {
+    return { data: null, error: accessResult.error };
+  }
   const sourceHash = file ? await buildDocumentSourceHash(file) : null;
   const existingByHash = sourceHash
     ? await findVaultedDocumentByHash({ policyId, sourceHash })
@@ -1645,6 +1798,12 @@ export async function persistVaultedPolicyAnalysis({
         baselineStructuredDataPresent: hasStructuredPayloadContent(baseline?.structuredData),
         statementStructuredDataCount: safeArray(statements).filter((statement) => hasStructuredPayloadContent(statement?.structuredData)).length,
       });
+      if (scopeOverride && !scopeOverride.userId && scopeOverride.ownershipMode === "authenticated_owned") {
+        console.warn("[VaultedShield] persistVaultedPolicyAnalysis received unresolved authenticated scope", {
+          scopeSource: scopeOverride.source || "unknown",
+          householdId: scopeOverride.householdId || null,
+        });
+      }
     }
 
     const policyResult = await upsertVaultedPolicyFromAnalysis({
@@ -1729,16 +1888,17 @@ export async function persistVaultedPolicyAnalysis({
           carrierKey: carrierProfile?.key || null,
           classificationConfidence: baseline.documentType?.confidence,
           rawTextExcerpt: baseline.text?.slice(0, 1000) || "",
-        metadata: {
-          evidence: baseline.documentType?.evidence || [],
-          storage_bucket: baselineStorageResult.storageBucket,
-          storage_path: baselineStorageResult.storagePath,
-          upload_status: baselineStorageResult.succeeded ? "uploaded" : baselineStorageResult.attempted ? "failed" : "not_attempted",
-          source_type: baseline.extractionMeta?.source_type || "pdf",
-          ocr_confidence: baseline.extractionMeta?.ocr_confidence ?? null,
-          extraction_method: baseline.extractionMeta?.extraction_method || "pdf_text",
-          extraction_warnings: baseline.extractionMeta?.extraction_warnings || [],
-        },
+          metadata: {
+            evidence: baseline.documentType?.evidence || [],
+            storage_bucket: baselineStorageResult.storageBucket,
+            storage_path: baselineStorageResult.storagePath,
+            upload_status: baselineStorageResult.succeeded ? "uploaded" : baselineStorageResult.attempted ? "failed" : "not_attempted",
+            source_type: baseline.extractionMeta?.source_type || "pdf",
+            ocr_confidence: baseline.extractionMeta?.ocr_confidence ?? null,
+            extraction_method: baseline.extractionMeta?.extraction_method || "pdf_text",
+            extraction_warnings: baseline.extractionMeta?.extraction_warnings || [],
+          },
+          scopeOverride,
       })
       : { data: null, error: null, duplicateStatus: null, sourceHash: baselineSourceHash };
 
@@ -1787,6 +1947,7 @@ export async function persistVaultedPolicyAnalysis({
       strategyReferenceHits,
       parserVersion: baseline?.structuredData ? VAULTED_PARSER_VERSION : null,
       parserStructuredData: sanitizeParserStructuredData(baseline?.structuredData),
+      scopeOverride,
     });
 
     if (import.meta.env.DEV) {
@@ -1911,6 +2072,7 @@ export async function persistVaultedPolicyAnalysis({
           extraction_method: statement.extractionMeta?.extraction_method || "pdf_text",
           extraction_warnings: statement.extractionMeta?.extraction_warnings || [],
         },
+        scopeOverride,
       });
 
       if (documentResult.error) {
@@ -2005,6 +2167,7 @@ export async function persistVaultedPolicyAnalysis({
         strategyReferenceHits,
         parserVersion: statement?.structuredData ? VAULTED_PARSER_VERSION : null,
         parserStructuredData: sanitizeParserStructuredData(statement?.structuredData),
+        scopeOverride,
       });
 
       if (import.meta.env.DEV) {
@@ -2068,6 +2231,7 @@ export async function persistVaultedPolicyAnalysis({
       healthStatus: normalizedAnalytics?.policy_health_score?.status ?? null,
       coverageStatus: completenessAssessment?.status ?? null,
       reviewFlags: normalizedAnalytics?.review_flags || [],
+      scopeOverride,
     });
 
     if (analyticsResult.error) {
@@ -2114,6 +2278,7 @@ export async function persistVaultedPolicyAnalysis({
       policyId: status.policyId,
       snapshotId: baselineSnapshotResult.data?.id || null,
       statements: statementRows,
+      scopeOverride,
     });
 
     if (statementRowResult.error) {

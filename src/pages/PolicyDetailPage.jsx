@@ -12,6 +12,7 @@ import {
 import { buildPolicyInsightSummary } from "../lib/ai/policyInsightEngine";
 import { answerPolicyQuestion as answerPolicyAssistantQuestion } from "../lib/ai/policyQuestionHandlers";
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
+import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getVaultedPolicyAnalytics,
@@ -87,6 +88,13 @@ function getAiStatusTone(status) {
   if (status === "moderate") return "warning";
   if (status === "insufficient_data") return "info";
   return "alert";
+}
+
+function getIulStatusTone(value) {
+  if (["ahead", "on_track", "sufficient", "low", "strong", "diversified"].includes(value)) return "good";
+  if (["behind", "underfunded", "high", "limited", "concentrated"].includes(value)) return "alert";
+  if (["moderate", "mixed", "rising", "aggressive"].includes(value)) return "warning";
+  return "info";
 }
 
 function getCoiInterpretation(sourceKind, confidence) {
@@ -460,6 +468,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       comparisonSummary,
       interpretation: policyInterpretation,
       insightSummary: policyAiSummary,
+      iulV2,
     });
 
     setAssistantHistory((current) => [
@@ -503,7 +512,13 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     async function loadPolicyDetail() {
       setLoading(true);
       setLoadError("");
-      const policyScope = { userId: debug.authUserId, source: "policy_detail_page" };
+      const policyScope = {
+        userId: debug.authUserId,
+        householdId: debug.householdId,
+        ownershipMode: debug.ownershipMode,
+        guestFallbackActive: debug.sharedFallbackActive,
+        source: "policy_detail_page",
+      };
 
       const [policyResult, analyticsResult, statementsResult] = await Promise.all([
         getVaultedPolicyById(policyId, policyScope),
@@ -522,11 +537,16 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       });
       setLoadError(
         policyResult.error?.message ||
+          (!policyResult.data ? "This policy is not available in the current account scope." : "") ||
           analyticsResult.error?.message ||
           statementsResult.error?.message ||
           ""
       );
       setLoading(false);
+
+      if (!policyResult.data?.id) {
+        return;
+      }
 
       const [documentsResult, snapshotsResult] = await Promise.all([
         getVaultedPolicyDocuments(policyId, policyScope),
@@ -610,6 +630,17 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
         interpretation: policyInterpretation,
       }),
     [comparisonSummary, lifePolicy, normalizedAnalytics, policyInterpretation, statementTimeline]
+  );
+  const iulV2 = useMemo(
+    () =>
+      lifePolicy?.meta?.policyType === "iul"
+        ? buildIulV2Analytics({
+            lifePolicy,
+            normalizedAnalytics,
+            statementRows: statementTimeline,
+          })
+        : null,
+    [lifePolicy, normalizedAnalytics, statementTimeline]
   );
   const reviewReport = useMemo(
     () =>
@@ -1169,6 +1200,95 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   </div>
                 </div>
 
+                {lifePolicy?.meta?.policyType === "iul" && iulV2 ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "14px",
+                      padding: "16px 18px",
+                      borderRadius: "18px",
+                      background: "#ffffff",
+                      border: "1px solid rgba(147, 197, 253, 0.28)",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: "6px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        IUL V2 Summary
+                      </div>
+                      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                        {iulV2.summary.headline}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <StatusBadge
+                        label={`Illustration ${iulV2.illustrationComparison.status.replace(/_/g, " ")}`}
+                        tone={getIulStatusTone(iulV2.illustrationComparison.status)}
+                      />
+                      <StatusBadge
+                        label={`Charge drag ${iulV2.chargeAnalysis.chargeDragLevel}`}
+                        tone={getIulStatusTone(iulV2.chargeAnalysis.chargeDragLevel)}
+                      />
+                      <StatusBadge
+                        label={`Funding ${iulV2.fundingAnalysis.status}`}
+                        tone={getIulStatusTone(iulV2.fundingAnalysis.status)}
+                      />
+                      <StatusBadge
+                        label={`Risk ${iulV2.riskAnalysis.overallRisk}`}
+                        tone={getIulStatusTone(iulV2.riskAnalysis.overallRisk)}
+                      />
+                      <StatusBadge
+                        label={`Strategy ${iulV2.summary.strategyVisibility}`}
+                        tone={getIulStatusTone(iulV2.summary.strategyVisibility)}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Illustration Read</div>
+                        <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
+                          {iulV2.illustrationComparison.explanation}
+                        </div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Charge Read</div>
+                        <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
+                          {iulV2.chargeAnalysis.explanation}
+                        </div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Funding Read</div>
+                        <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
+                          {iulV2.fundingAnalysis.explanation}
+                        </div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Strategy Read</div>
+                        <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
+                          {iulV2.strategyAnalysis.explanation}
+                        </div>
+                      </div>
+                    </div>
+
+                    {iulV2.missingData?.length > 0 ? (
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>IUL V2 Missing Data</div>
+                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                          {iulV2.missingData.slice(0, 5).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {policyAiSummary.insights.length > 0 ? (
                   <div style={{ display: "grid", gap: "10px" }}>
                     {policyAiSummary.insights.slice(0, 3).map((insight, index) => (
@@ -1705,6 +1825,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                               response_confidence: latestAssistantEntry.response?.confidence || null,
                               supporting_data: latestAssistantEntry.response?.supporting_data || [],
                               suggested_followups: latestAssistantEntry.response?.suggested_followups || [],
+                              iul_v2: iulV2,
                               }
                             : { note: "No assistant question asked in this session." },
                           null,

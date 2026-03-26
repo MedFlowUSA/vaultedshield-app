@@ -436,6 +436,23 @@ export default function LifePolicyUploadPage({ onNavigate }) {
   const statementScan = useScanSession();
 
   useEffect(() => {
+    setIllustrationFile(null);
+    setStatementFiles([]);
+    setLoading(false);
+    setLoadingMessage("");
+    setError("");
+    setSaveStatus(null);
+    setCameraLoadingTarget("");
+    setSelectedIllustrationPageId(null);
+    setSelectedStatementPageId(null);
+    setPendingReplacement({ target: "", pageId: null });
+    setExtractionStatus({ phase: "", progress: 0, currentFile: "", detail: "" });
+    setDocumentDiagnostics({ illustration: null, statements: [] });
+    illustrationScan.clearSession();
+    statementScan.clearSession();
+  }, [debug.authUserId, debug.householdId]);
+
+  useEffect(() => {
     if (!selectedIllustrationPageId && illustrationScan.pages[0]) {
       setSelectedIllustrationPageId(illustrationScan.pages[0].id);
     }
@@ -768,7 +785,13 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         statements: sortedStatements,
         illustrationFile: illustrationPersistenceFile,
         statementFiles: statementPersistenceFiles,
-        scopeOverride: { userId: debug.authUserId, source: "life_policy_upload_page" },
+        scopeOverride: {
+          userId: debug.authUserId,
+          householdId: debug.householdId,
+          ownershipMode: debug.ownershipMode,
+          guestFallbackActive: debug.sharedFallbackActive,
+          source: "life_policy_upload_page",
+        },
       });
 
       setSaveStatus({

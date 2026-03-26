@@ -95,7 +95,12 @@ export function normalizeLifePolicy({
     },
     funding: {
       plannedPremium: display(funding?.planned_premium),
+      minimumPremium: display(funding?.minimum_premium),
       guidelinePremiumLimit: display(funding?.guideline_premium_limit),
+      totalPremiumPaid:
+        funding?.total_premium_paid ??
+        normalizedAnalytics?.growth_attribution?.visible_total_premium_paid ??
+        null,
       paymentMode: display(funding?.payment_mode),
     },
     values: {

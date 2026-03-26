@@ -20,6 +20,7 @@ import {
   buildInitialPersistenceStepResults,
   buildVaultedSnapshotPayload,
   isMissingUpsertConstraintError,
+  normalizeExplicitVaultedPolicyScope,
   VAULTED_PARSER_VERSION,
   rehydrateStructuredParserData,
   rehydrateVaultedPolicyBundle,
@@ -31,6 +32,7 @@ import { resolveCarrierParsingProfile } from "../src/lib/domain/parsing/carrierP
 import { detectPageType } from "../src/lib/domain/parsing/pageTypeDetection.js";
 import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconstruction.js";
 import { buildIulReaderModel } from "../src/features/iul-reader/readerModel.js";
+import { buildIulV2Analytics } from "../src/lib/insurance/iulV2Analytics.js";
 import { resolveResponsiveLayout } from "../src/lib/ui/responsiveLayout.js";
 
 function field(value, confidence = "high", displayValue = null) {
@@ -1189,6 +1191,130 @@ runTest("comparison analysis reflects uneven structured support across mixed-ver
 
   assert.equal(analysis.analysis_items.find((item) => item.id === "statement_support").stronger_policy, "comparison");
   assert.equal(analysis.summary.includes("uneven structured parser support"), true);
+});
+
+runTest("buildIulV2Analytics explains illustration drift and funding pressure responsibly", () => {
+  const result = buildIulV2Analytics({
+    lifePolicy: {
+      funding: {
+        plannedPremium: "$5,000.00",
+        totalPremiumPaid: 3600,
+      },
+      values: {
+        accumulationValue: "$70,000.00",
+        cashValue: "$66,000.00",
+      },
+      loans: {
+        loanBalance: "$25,000.00",
+      },
+      typeSpecific: {
+        strategy: "S&P 500 Strategy",
+        allocationPercent: "100%",
+        capRate: "11%",
+        participationRate: "100%",
+        spread: "0%",
+      },
+      meta: {
+        statementCount: 1,
+      },
+    },
+    normalizedAnalytics: {
+      illustration_projection: {
+        comparison_possible: true,
+        current_projection_match: {
+          matched_policy_year: 10,
+          actual_policy_year: 10,
+          projected_accumulation_value: "$82,000.00",
+          actual_accumulation_value: "$70,000.00",
+          accumulation_variance: -12000,
+        },
+        narrative: "Actual accumulation value is trailing the extracted illustration checkpoint by $12,000.00.",
+        limitations: [],
+      },
+      charge_summary: {
+        total_coi: 2800,
+        total_visible_policy_charges: 7400,
+        coi_confidence: "strong",
+      },
+      growth_attribution: {
+        visible_total_premium_paid: 3600,
+      },
+    },
+    statementRows: [
+      {
+        statement_date: "2024-12-31",
+        visible_charges: 1800,
+        loan_balance: 25000,
+      },
+    ],
+  });
+
+  assert.equal(result.illustrationComparison.status, "behind");
+  assert.equal(result.chargeAnalysis.chargeDragLevel, "high");
+  assert.equal(result.fundingAnalysis.status, "underfunded");
+  assert.equal(result.riskAnalysis.overallRisk, "high");
+});
+
+runTest("buildIulV2Analytics stays indeterminate when illustration alignment is weak", () => {
+  const result = buildIulV2Analytics({
+    lifePolicy: {
+      funding: {
+        plannedPremium: "$5,000.00",
+      },
+      values: {
+        accumulationValue: "$42,000.00",
+      },
+      loans: {},
+      typeSpecific: {},
+      meta: {
+        statementCount: 0,
+      },
+    },
+    normalizedAnalytics: {
+      charge_summary: {
+        total_coi: null,
+        total_visible_policy_charges: null,
+        coi_confidence: "weak",
+      },
+      illustration_projection: {
+        comparison_possible: false,
+        narrative: "Illustration checkpoints were identified, but the latest statement does not align cleanly enough by policy year for a direct projected-versus-actual comparison.",
+      },
+    },
+    statementRows: [],
+  });
+
+  assert.equal(result.illustrationComparison.status, "indeterminate");
+  assert.equal(result.fundingAnalysis.status, "unclear");
+  assert.equal(result.riskAnalysis.overallRisk, "unclear");
+  assert.equal(result.missingData.some((item) => item.includes("Illustration checkpoints")), true);
+});
+
+runTest("normalizeExplicitVaultedPolicyScope blocks unresolved authenticated account scopes", () => {
+  const blocked = normalizeExplicitVaultedPolicyScope({
+    userId: null,
+    householdId: "household-1",
+    ownershipMode: "authenticated_owned",
+    guestFallbackActive: false,
+    source: "test_scope",
+  });
+
+  assert.equal(blocked.blocked, true);
+  assert.equal(blocked.mode, "blocked");
+  assert.equal(blocked.source, "test_scope_missing_user");
+});
+
+runTest("normalizeExplicitVaultedPolicyScope preserves guest-shared scope when explicitly guest", () => {
+  const guestScope = normalizeExplicitVaultedPolicyScope({
+    userId: null,
+    ownershipMode: "guest_shared",
+    guestFallbackActive: true,
+    source: "guest_test_scope",
+  });
+
+  assert.equal(guestScope.blocked, false);
+  assert.equal(guestScope.mode, "guest_shared");
+  assert.equal(guestScope.userId, null);
 });
 
 console.log("All IUL regression checks passed.");

@@ -48,9 +48,11 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
   const [countsState, setCountsState] = useState({ data: null, error: "", loading: false });
   const [bundleState, setBundleState] = useState({ data: null, error: "", loading: false });
   const [insuranceState, setInsuranceState] = useState(buildEmptyInsuranceState);
+  const householdLoadRef = useRef({ requestKey: "", inFlight: false });
   const insuranceLoadRef = useRef({ requestKey: "", inFlight: false });
 
   useEffect(() => {
+    householdLoadRef.current = { requestKey: "", inFlight: false };
     insuranceLoadRef.current = { requestKey: "", inFlight: false };
     setCountsState({ data: null, error: "", loading: false });
     setBundleState({ data: null, error: "", loading: false });
@@ -62,11 +64,14 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
 
   const refreshHouseholdData = useCallback(async () => {
     if (!canLoadShellData) {
+      householdLoadRef.current = { requestKey: "", inFlight: false };
       setCountsState({ data: null, error: "", loading: false });
       setBundleState({ data: null, error: "", loading: false });
       return;
     }
 
+    const requestKey = scopeKey;
+    householdLoadRef.current = { requestKey, inFlight: true };
     setCountsState((current) => ({ ...current, loading: true, error: "" }));
     setBundleState((current) => ({ ...current, loading: true, error: "" }));
 
@@ -75,6 +80,10 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
         getHouseholdPlatformCounts(householdId),
         getHouseholdIntelligenceBundle(householdId),
       ]);
+
+      if (householdLoadRef.current.requestKey !== requestKey) {
+        return;
+      }
 
       setCountsState({
         data: countsResult.data || null,
@@ -87,11 +96,18 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
         loading: false,
       });
     } catch (error) {
+      if (householdLoadRef.current.requestKey !== requestKey) {
+        return;
+      }
       const message = error?.message || "Household data could not be loaded.";
       setCountsState({ data: null, error: message, loading: false });
       setBundleState({ data: null, error: message, loading: false });
+    } finally {
+      if (householdLoadRef.current.requestKey === requestKey) {
+        householdLoadRef.current = { requestKey, inFlight: false };
+      }
     }
-  }, [canLoadShellData, householdId]);
+  }, [canLoadShellData, householdId, scopeKey]);
 
   const refreshInsurancePortfolio = useCallback(
     async ({ force = false } = {}) => {
@@ -117,7 +133,13 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       setInsuranceState((current) => ({ ...current, loading: true, error: "" }));
 
       try {
-        const policyScope = { userId: authUserId, source: "platform_shell_provider" };
+        const policyScope = {
+          userId: authUserId,
+          householdId,
+          ownershipMode,
+          guestFallbackActive,
+          source: "platform_shell_provider",
+        };
         const policiesResult = await listVaultedPolicies(policyScope);
         const savedPolicies = policiesResult.data || [];
         const policyIds = savedPolicies.map((policy) => policy?.id).filter(Boolean);
@@ -125,6 +147,10 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
           policyIds.length > 0
             ? await compareVaultedPolicies(policyIds, policyScope)
             : { data: { comparison_rows: [] }, error: null };
+
+        if (insuranceLoadRef.current.requestKey !== requestKey) {
+          return;
+        }
 
         setInsuranceState({
           savedPolicies,
@@ -135,16 +161,30 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
           scopeSource: authUserId ? "authenticated_query" : "guest_query",
         });
       } catch (error) {
+        if (insuranceLoadRef.current.requestKey !== requestKey) {
+          return;
+        }
         setInsuranceState({
           ...buildEmptyInsuranceState(),
           error: error?.message || "Insurance portfolio could not be loaded.",
           scopeSource: authUserId ? "authenticated_query" : "guest_query",
         });
       } finally {
-        insuranceLoadRef.current = { requestKey, inFlight: false };
+        if (insuranceLoadRef.current.requestKey === requestKey) {
+          insuranceLoadRef.current = { requestKey, inFlight: false };
+        }
       }
     },
-    [authUserId, canLoadShellData, insuranceState.comparisonLoaded, scope.scopeSource, scopeKey]
+    [
+      authUserId,
+      canLoadShellData,
+      guestFallbackActive,
+      householdId,
+      insuranceState.comparisonLoaded,
+      ownershipMode,
+      scope.scopeSource,
+      scopeKey,
+    ]
   );
 
   useEffect(() => {
@@ -178,6 +218,7 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       debug: {
         authUserId,
         householdId,
+        ownershipMode,
         guestModeActive: !authUserId,
         sharedFallbackActive: guestFallbackActive,
         policyScopeSource: insuranceState.scopeSource,
