@@ -19,6 +19,7 @@ import {
 } from "../lib/ai/policyAssistantIntents";
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
+import { buildPolicyOptimizationEngine } from "../lib/insurance/policyOptimizationEngine";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getVaultedPolicyAnalytics,
@@ -100,6 +101,13 @@ function getIulStatusTone(value) {
   if (["ahead", "on_track", "sufficient", "low", "strong", "diversified"].includes(value)) return "good";
   if (["behind", "underfunded", "high", "limited", "concentrated"].includes(value)) return "alert";
   if (["moderate", "mixed", "rising", "aggressive"].includes(value)) return "warning";
+  return "info";
+}
+
+function getOptimizationTone(value) {
+  if (["healthy", "low"].includes(value)) return "good";
+  if (["watch", "medium"].includes(value)) return "warning";
+  if (["at_risk", "high"].includes(value)) return "alert";
   return "info";
 }
 
@@ -476,6 +484,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       interpretation: policyInterpretation,
       insightSummary: policyAiSummary,
       iulV2,
+      optimizationAnalysis,
     });
 
     setAssistantHistory((current) => [
@@ -636,7 +645,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
   );
   const iulV2 = useMemo(
     () =>
-      lifePolicy?.meta?.policyType === "iul"
+      ["iul", "ul"].includes(lifePolicy?.meta?.policyType)
         ? buildIulV2Analytics({
             lifePolicy,
             normalizedAnalytics,
@@ -644,6 +653,19 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           })
         : null,
     [lifePolicy, normalizedAnalytics, statementTimeline]
+  );
+  const optimizationAnalysis = useMemo(
+    () =>
+      buildPolicyOptimizationEngine({
+        lifePolicy,
+        normalizedPolicy,
+        normalizedAnalytics,
+        iulV2,
+        illustrationComparison: iulV2?.illustrationComparison || null,
+        statementRows: statementTimeline,
+        policyType: lifePolicy?.meta?.policyType || "unknown",
+      }),
+    [iulV2, lifePolicy, normalizedAnalytics, normalizedPolicy, statementTimeline]
   );
   const reviewReport = useMemo(
     () =>
@@ -1361,6 +1383,104 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         </ul>
                       </div>
                     ) : null}
+                  </div>
+                ) : null}
+
+                {optimizationAnalysis ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "14px",
+                      padding: "16px 18px",
+                      borderRadius: "18px",
+                      background: "#ffffff",
+                      border: "1px solid rgba(148, 163, 184, 0.18)",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: "6px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Optimization
+                      </div>
+                      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                        {optimizationAnalysis.explanation}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <StatusBadge
+                        label={optimizationAnalysis.overallStatus.replace(/_/g, " ")}
+                        tone={getOptimizationTone(optimizationAnalysis.overallStatus)}
+                      />
+                      <StatusBadge
+                        label={`Priority ${optimizationAnalysis.priorityLevel}`}
+                        tone={getOptimizationTone(optimizationAnalysis.priorityLevel)}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "grid", gap: "10px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Top Recommendations</div>
+                        <div style={{ display: "grid", gap: "10px" }}>
+                          {optimizationAnalysis.recommendations.slice(0, 2).map((item) => (
+                            <div key={item.title} style={{ padding: "12px 14px", borderRadius: "14px", background: "#ffffff", border: "1px solid #dbeafe", display: "grid", gap: "6px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                                <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.title}</div>
+                                <StatusBadge label={item.impact} tone={getOptimizationTone(item.impact)} />
+                              </div>
+                              <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.message}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Risk Flags</div>
+                        {optimizationAnalysis.risks.length > 0 ? (
+                          <div style={{ display: "grid", gap: "10px" }}>
+                            {optimizationAnalysis.risks.slice(0, 2).map((item) => (
+                              <div key={item.type} style={{ padding: "12px 14px", borderRadius: "14px", background: "#ffffff", border: "1px solid rgba(148, 163, 184, 0.18)", display: "grid", gap: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                                  <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.type.replace(/_/g, " ")}</div>
+                                  <StatusBadge label={item.severity} tone={getOptimizationTone(item.severity)} />
+                                </div>
+                                <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.message}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                            No major optimization risk is standing out from the current visible data.
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Opportunities</div>
+                        {optimizationAnalysis.opportunities.length > 0 ? (
+                          <div style={{ display: "grid", gap: "10px" }}>
+                            {optimizationAnalysis.opportunities.slice(0, 2).map((item) => (
+                              <div key={item.type} style={{ padding: "12px 14px", borderRadius: "14px", background: "#ffffff", border: "1px solid rgba(148, 163, 184, 0.18)", display: "grid", gap: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+                                  <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.type.replace(/_/g, " ")}</div>
+                                  <StatusBadge label={item.potentialImpact} tone={getOptimizationTone(item.potentialImpact)} />
+                                </div>
+                                <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.message}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                            No clear optimization opportunity stands out beyond regular monitoring yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 

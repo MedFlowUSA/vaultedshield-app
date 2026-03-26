@@ -9,6 +9,7 @@ import {
   explainIulRisk,
   explainPerformance,
   explainPolicyHealth,
+  explainPolicyOptimization,
   explainPolicyType,
   explainStrategyAllocation,
   explainTermConversionVisibility,
@@ -30,6 +31,7 @@ const INTENT_HANDLERS = {
   policy_type: explainPolicyType,
   what_to_review_first: explainWhatToReviewFirst,
   data_completeness: explainDataCompleteness,
+  policy_optimization: explainPolicyOptimization,
   performance: explainPerformance,
   charges: explainChargeDrag,
   illustration_vs_actual: explainIllustrationVsActual,
@@ -97,6 +99,7 @@ export function buildPolicyAssistantAnswer({
   interpretation = null,
   insightSummary = null,
   iulV2 = null,
+  optimizationAnalysis = null,
 } = {}) {
   const policyType = lifePolicy?.meta?.policyType || "unknown";
   const resolvedIntent = findPolicyAssistantIntent(intent, policyType);
@@ -119,6 +122,7 @@ export function buildPolicyAssistantAnswer({
     interpretation,
     insightSummary,
     iulV2,
+    optimizationAnalysis,
   });
 
   const response = normalizeResponse(resolvedIntent.id, policyType, rawResponse);

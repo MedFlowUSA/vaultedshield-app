@@ -1,4 +1,5 @@
 import { buildIulV2Analytics } from "../insurance/iulV2Analytics";
+import { buildPolicyOptimizationEngine } from "../insurance/policyOptimizationEngine";
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";
@@ -44,6 +45,22 @@ function getIulV2(context = {}) {
       lifePolicy: context.lifePolicy,
       normalizedAnalytics: context.normalizedAnalytics,
       statementRows: context.statementRows,
+    })
+  );
+}
+
+function getOptimizationAnalysis(context = {}) {
+  const iulV2 = getIulV2(context);
+  return (
+    context.optimizationAnalysis ||
+    buildPolicyOptimizationEngine({
+      lifePolicy: context.lifePolicy,
+      normalizedPolicy: context.normalizedPolicy,
+      normalizedAnalytics: context.normalizedAnalytics,
+      iulV2,
+      illustrationComparison: iulV2?.illustrationComparison,
+      statementRows: context.statementRows,
+      policyType: context.lifePolicy?.meta?.policyType || "unknown",
     })
   );
 }
@@ -112,6 +129,25 @@ export function explainDataCompleteness({ lifePolicy, comparisonSummary = {}, in
     ],
     [...new Set(missing)],
     followups("What should I review first?", "Are there any risk flags?", "What kind of policy is this?")
+  );
+}
+
+export function explainPolicyOptimization(context = {}) {
+  const optimization = getOptimizationAnalysis(context);
+  const topRecommendations = optimization.recommendations.slice(0, 2);
+  const topRisks = optimization.risks.slice(0, 2);
+
+  return answer(
+    optimization.explanation,
+    optimization.overallStatus === "insufficient_data" ? "low" : optimization.priorityLevel === "high" ? "high" : "moderate",
+    [
+      supporting_data("Overall status", optimization.overallStatus.replace(/_/g, " ")),
+      supporting_data("Priority", optimization.priorityLevel),
+      ...topRecommendations.map((item, index) => supporting_data(`Recommendation ${index + 1}`, item.title)),
+      ...topRisks.map((item, index) => supporting_data(`Risk ${index + 1}`, item.message)),
+    ],
+    optimization.missingData || [],
+    followups("Is funding strong enough?", "Are charges hurting this policy?", "Are we ahead or behind the illustration?")
   );
 }
 
@@ -462,6 +498,9 @@ export function answerPolicyQuestion(questionText, context = {}) {
   const policyType = context?.lifePolicy?.meta?.policyType || "unknown";
 
   if (question.includes("what kind")) return explainPolicyType(context);
+  if (question.includes("what should i do") || question.includes("improve") || question.includes("at risk")) {
+    return explainPolicyOptimization(context);
+  }
   if (question.includes("healthy") || question.includes("performing well")) return explainPolicyHealth(context);
   if (question.includes("review first")) return explainWhatToReviewFirst(context);
   if (question.includes("complete enough") || question.includes("trust")) return explainDataCompleteness(context);

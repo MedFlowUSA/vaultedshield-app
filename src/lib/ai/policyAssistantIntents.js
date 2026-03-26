@@ -19,6 +19,11 @@ const UNIVERSAL_INTENTS = [
     label: "Is the data complete enough to trust?",
     aliases: [],
   },
+  {
+    id: "policy_optimization",
+    label: "What should I do with this policy?",
+    aliases: ["How can I improve this?", "Is this policy at risk?"],
+  },
 ];
 
 const TYPE_INTENTS = {
