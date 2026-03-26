@@ -10,7 +10,13 @@ import {
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
 import { buildPolicyInsightSummary } from "../lib/ai/policyInsightEngine";
-import { answerPolicyQuestion as answerPolicyAssistantQuestion } from "../lib/ai/policyQuestionHandlers";
+import {
+  buildPolicyAssistantAnswer,
+} from "../lib/ai/policyAssistantEngine";
+import {
+  findPolicyAssistantIntent,
+  getPolicyAssistantIntents,
+} from "../lib/ai/policyAssistantIntents";
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -418,7 +424,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
   const [loadError, setLoadError] = useState("");
   const [activeFollowupSection, setActiveFollowupSection] = useState("");
   const [showReviewReport, setShowReviewReport] = useState(false);
-  const [assistantQuestion, setAssistantQuestion] = useState("");
+  const [selectedAssistantIntent, setSelectedAssistantIntent] = useState("");
   const [assistantHistory, setAssistantHistory] = useState([]);
 
   function setSectionRef(key, node) {
@@ -456,11 +462,12 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     }
   }
 
-  function handleAssistantPrompt(questionText) {
-    const cleanQuestion = String(questionText || "").trim();
-    if (!cleanQuestion) return;
+  function handleAssistantPrompt(intentValue) {
+    const resolvedIntent = findPolicyAssistantIntent(intentValue, lifePolicy?.meta?.policyType || "unknown");
+    if (!resolvedIntent) return;
 
-    const response = answerPolicyAssistantQuestion(cleanQuestion, {
+    const response = buildPolicyAssistantAnswer({
+      intent: resolvedIntent.id,
       lifePolicy,
       normalizedPolicy,
       normalizedAnalytics,
@@ -474,17 +481,13 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     setAssistantHistory((current) => [
       {
         id: `${Date.now()}-${current.length}`,
-        question: cleanQuestion,
+        intent: resolvedIntent.id,
+        question: resolvedIntent.label,
         response,
       },
       ...current,
     ].slice(0, 6));
-    setAssistantQuestion("");
-  }
-
-  function handleAssistantSubmit(event) {
-    event.preventDefault();
-    handleAssistantPrompt(assistantQuestion);
+    setSelectedAssistantIntent(resolvedIntent.id);
   }
 
   function scrollToPolicySection(section) {
@@ -571,7 +574,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
 
   useEffect(() => {
     setAssistantHistory([]);
-    setAssistantQuestion("");
+    setSelectedAssistantIntent("");
   }, [policyId]);
 
   const comparisonRow = useMemo(
@@ -683,12 +686,10 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     { label: "Total COI", value: formatDisplayValue(comparisonRow?.total_coi) },
     { label: "Latest Statement", value: formatDate(comparisonRow?.latest_statement_date) },
   ];
-  const assistantPrompts = lifePolicy?.meta?.suggestedQuestions || [
-    "What kind of policy is this?",
-    "Is this policy healthy?",
-    "What should I review first?",
-    "Is the data complete enough to trust?",
-  ];
+  const assistantPrompts = useMemo(
+    () => getPolicyAssistantIntents(lifePolicy?.meta?.policyType || "unknown"),
+    [lifePolicy?.meta?.policyType]
+  );
   const latestAssistantEntry = assistantHistory[0] || null;
 
   return (
@@ -1145,7 +1146,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
 
           <SectionCard
             title="Ask Vault AI"
-            subtitle="A policy-aware assistant that explains this policy using the analytics and statement evidence already loaded on this page."
+            subtitle="These answers are based on the uploaded policy data and visible statement history."
             accent="#bfdbfe"
           >
             <div style={{ display: "grid", gap: "18px" }}>
@@ -1246,14 +1247,88 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                         gap: "12px",
                       }}
                     >
+                      <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "grid", gap: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                          <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Illustration vs Actual</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <StatusBadge
+                              label={iulV2.illustrationComparison.status.replace(/_/g, " ")}
+                              tone={getIulStatusTone(iulV2.illustrationComparison.status)}
+                            />
+                            <StatusBadge
+                              label={`Confidence ${iulV2.illustrationComparison.confidence}`}
+                              tone={
+                                iulV2.illustrationComparison.confidence === "high"
+                                  ? "good"
+                                  : iulV2.illustrationComparison.confidence === "moderate"
+                                    ? "warning"
+                                    : "info"
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div style={{ color: "#475569", fontSize: "13px", lineHeight: "1.6" }}>
+                          {iulV2.illustrationComparison.confidenceExplanation}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Illustrated {iulV2.illustrationComparison.selectedMetricLabel || "Value"}
+                            </div>
+                            <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                              {iulV2.illustrationComparison.selectedMetricData?.illustratedDisplay || "Unavailable"}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Actual {iulV2.illustrationComparison.selectedMetricLabel || "Value"}
+                            </div>
+                            <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                              {iulV2.illustrationComparison.selectedMetricData?.actualDisplay || "Unavailable"}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Variance</div>
+                            <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                              {iulV2.illustrationComparison.varianceDisplay || "Unavailable"} ({iulV2.illustrationComparison.variancePercentDisplay || "Unavailable"})
+                            </div>
+                          </div>
+                        </div>
+                        {iulV2.illustrationComparison.drivers?.length > 0 ? (
+                          <div style={{ display: "grid", gap: "6px" }}>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Drivers</div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {iulV2.illustrationComparison.drivers.slice(0, 3).map((driver) => (
+                                <div
+                                  key={driver.key}
+                                  style={{
+                                    padding: "8px 10px",
+                                    borderRadius: "999px",
+                                    background: "#ffffff",
+                                    border: "1px solid #dbeafe",
+                                    color: "#1d4ed8",
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {driver.label}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        <div style={{ color: "#0f172a", lineHeight: "1.7", fontWeight: 600 }}>
+                          {iulV2.illustrationComparison.shortExplanation}
+                        </div>
+                      </div>
                       <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                         <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Illustration Read</div>
                         <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
-                          {iulV2.illustrationComparison.explanation}
+                          {iulV2.illustrationComparison.context}
                         </div>
                       </div>
                       <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -1374,68 +1449,33 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 ) : null}
               </div>
 
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Choose a question</div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 {assistantPrompts.map((prompt) => (
                   <button
-                    key={prompt}
+                    key={prompt.id}
                     type="button"
-                    onClick={() => handleAssistantPrompt(prompt)}
+                    onClick={() => handleAssistantPrompt(prompt.id)}
                     style={{
                       padding: "10px 12px",
                       borderRadius: "999px",
-                      border: "1px solid #dbeafe",
-                      background: "#eff6ff",
+                      border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
+                      background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#eff6ff",
                       color: "#1d4ed8",
                       fontWeight: 700,
                       cursor: "pointer",
+                      fontSize: "13px",
                     }}
                   >
-                    {prompt}
+                    {prompt.label}
                   </button>
                 ))}
-              </div>
-
-              <form onSubmit={handleAssistantSubmit} style={{ display: "grid", gap: "12px" }}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: "12px",
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    value={assistantQuestion}
-                    onChange={(event) => setAssistantQuestion(event.target.value)}
-                    placeholder="Ask a question about this policy..."
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "14px",
-                      border: "1px solid #cbd5e1",
-                      background: "#ffffff",
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!assistantQuestion.trim()}
-                    style={{
-                      padding: "12px 16px",
-                      borderRadius: "12px",
-                      border: "none",
-                      background: assistantQuestion.trim() ? "#0f172a" : "#94a3b8",
-                      color: "#ffffff",
-                      cursor: assistantQuestion.trim() ? "pointer" : "not-allowed",
-                      fontWeight: 700,
-                      width: "100%",
-                    }}
-                  >
-                    Ask
-                  </button>
+                  </div>
                 </div>
-              </form>
 
-              {latestAssistantEntry ? (
-                <div
+               {latestAssistantEntry ? (
+                 <div
                   style={{
                     display: "grid",
                     gap: "16px",
@@ -1472,24 +1512,41 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                       />
                     </div>
 
-                    {latestAssistantEntry.response.supporting_data?.length > 0 ? (
-                      <div>
-                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Evidence</div>
-                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                          {latestAssistantEntry.response.supporting_data.map((point) => (
-                            <li key={`${point.label}-${point.value}`}>
-                              <strong style={{ color: "#0f172a" }}>{point.label}:</strong> {point.value}
-                            </li>
-                          ))}
-                        </ul>
+                    {latestAssistantEntry.response.confidenceExplanation ? (
+                      <div style={{ color: "#475569", lineHeight: "1.7", fontSize: "14px" }}>
+                        {latestAssistantEntry.response.confidenceExplanation}
                       </div>
                     ) : null}
 
-                    {latestAssistantEntry.response.missing_data?.length > 0 ? (
+                    {latestAssistantEntry.response.supportingData?.length > 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Data</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                          {latestAssistantEntry.response.supportingData.map((point) => (
+                            <div
+                              key={`${point.label}-${point.value}`}
+                              style={{
+                                padding: "12px 14px",
+                                borderRadius: "14px",
+                                background: "#ffffff",
+                                border: "1px solid rgba(148, 163, 184, 0.18)",
+                                display: "grid",
+                                gap: "6px",
+                              }}
+                            >
+                              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{point.label}</div>
+                              <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{point.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {latestAssistantEntry.response.missingData?.length > 0 ? (
                       <div>
                         <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Missing Data</div>
                         <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                          {latestAssistantEntry.response.missing_data.map((item) => (
+                          {latestAssistantEntry.response.missingData.map((item) => (
                             <li key={item}>{item}</li>
                           ))}
                         </ul>
@@ -1499,7 +1556,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     <div>
                       <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
                       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        {(latestAssistantEntry.response.suggested_followups || []).map((prompt) => (
+                        {(latestAssistantEntry.response.suggestedFollowUps || []).map((prompt) => (
                           <button
                             key={prompt}
                             type="button"
@@ -1520,9 +1577,9 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     </div>
                   </div>
                 </div>
-                ) : (
-                  <div
-                    style={{
+                 ) : (
+                   <div
+                     style={{
                     padding: "18px 20px",
                     borderRadius: "18px",
                     background: "#f8fafc",
@@ -1531,7 +1588,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                       lineHeight: "1.8",
                     }}
                   >
-                  Ask a focused question to get a policy-specific answer grounded in live statements, charges, performance support, and known evidence gaps.
+                  Pick one of the supported questions to get a concise answer grounded in the policy data already visible on this page.
                   </div>
                 )}
 
@@ -1543,7 +1600,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                       <button
                         key={entry.id}
                         type="button"
-                        onClick={() => handleAssistantPrompt(entry.question)}
+                        onClick={() => handleAssistantPrompt(entry.intent || entry.question)}
                         style={{
                           padding: "14px 16px",
                           borderRadius: "14px",
@@ -1823,8 +1880,10 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                           latestAssistantEntry
                             ? {
                               response_confidence: latestAssistantEntry.response?.confidence || null,
-                              supporting_data: latestAssistantEntry.response?.supporting_data || [],
-                              suggested_followups: latestAssistantEntry.response?.suggested_followups || [],
+                              intent: latestAssistantEntry.intent || null,
+                              supporting_data: latestAssistantEntry.response?.supportingData || [],
+                              missing_data: latestAssistantEntry.response?.missingData || [],
+                              suggested_followups: latestAssistantEntry.response?.suggestedFollowUps || [],
                               iul_v2: iulV2,
                               }
                             : { note: "No assistant question asked in this session." },

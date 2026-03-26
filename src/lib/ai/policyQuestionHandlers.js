@@ -16,13 +16,14 @@ function followups(...items) {
   return [...new Set(items.filter(Boolean))];
 }
 
-function answer(answerText, confidence, supporting = [], missing = [], suggestions = []) {
+function answer(answerText, confidence, supporting = [], missing = [], suggestions = [], extras = {}) {
   return {
     answer: answerText,
     confidence,
     supporting_data: supporting,
     missing_data: missing,
     suggested_followups: suggestions,
+    ...extras,
   };
 }
 
@@ -214,26 +215,34 @@ export function explainIllustrationVsActual(context = {}) {
   const comparison = iulV2.illustrationComparison;
   if (!comparison || comparison.status === "indeterminate") {
     return answer(
-      comparison?.explanation ||
+      comparison?.directAnswer ||
+        comparison?.explanation ||
         "Illustration-versus-actual alignment is still indeterminate from the current packet.",
       "low",
-      [],
-      [...new Set([...(iulV2.missingData || []), "A trusted illustration checkpoint was not matched cleanly to the latest statement."])],
-      followups("Is the policy being funded strongly enough?", "Are charges hurting this policy?", "Is the data complete enough to trust?")
+      [
+        supporting_data("Alignment confidence", comparison?.alignmentConfidence || "low"),
+        supporting_data("Status", comparison?.status || "indeterminate"),
+      ],
+      [...new Set([...(comparison?.missingData || iulV2.missingData || []), "A trusted illustration checkpoint was not matched cleanly to the latest statement."])],
+      followups("Is funding strong enough?", "Are charges hurting this policy?", "What should I review first?"),
+      { confidence_explanation: comparison?.confidenceExplanation }
     );
   }
   return answer(
-    comparison.explanation,
+    comparison.shortExplanation || comparison.explanation,
     comparison.confidence || "moderate",
     [
-      supporting_data("Comparison basis", comparison.comparisonMetric?.replace(/_/g, " ") || "Unavailable"),
-      supporting_data("Illustrated value", formatCurrency(comparison.illustratedValue)),
-      supporting_data("Actual value", formatCurrency(comparison.actualValue)),
-      supporting_data("Variance", formatCurrency(comparison.varianceAmount)),
-      supporting_data("Variance percent", comparison.variancePercent !== null ? `${comparison.variancePercent.toFixed(1)}%` : "Unavailable"),
+      supporting_data("Status", comparison.status?.replace(/_/g, " ") || "Unavailable"),
+      supporting_data("Alignment confidence", comparison.alignmentConfidence || "Unavailable"),
+      supporting_data(`Illustrated ${comparison.selectedMetricLabel || "value"}`, comparison.selectedMetricData?.illustratedDisplay || "Unavailable"),
+      supporting_data(`Actual ${comparison.selectedMetricLabel || "value"}`, comparison.selectedMetricData?.actualDisplay || "Unavailable"),
+      supporting_data("Variance", comparison.varianceDisplay || "Unavailable"),
+      supporting_data("Variance percent", comparison.variancePercentDisplay || "Unavailable"),
+      supporting_data("Primary driver", comparison.drivers?.[0]?.label || "No dominant driver isolated"),
     ],
-    iulV2.missingData || [],
-    followups("Are charges hurting this policy?", "Is the policy being funded strongly enough?", "What should I review first?")
+    comparison.missingData || iulV2.missingData || [],
+    followups("Is funding strong enough?", "Are charges hurting this policy?", "What should I review first?"),
+    { confidence_explanation: comparison.confidenceExplanation }
   );
 }
 

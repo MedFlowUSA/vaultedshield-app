@@ -1,3 +1,5 @@
+import { buildIllustrationVsActualAnalysis } from "./illustrationVsActualEngine";
+
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -48,101 +50,6 @@ function sortStatements(statementRows = []) {
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function buildIllustrationComparison({ lifePolicy, normalizedAnalytics, statementRows, missingData }) {
-  const projection = normalizedAnalytics?.illustration_projection || {};
-  const legacy = normalizedAnalytics?.illustration_comparison || {};
-  const currentMatch = projection?.current_projection_match || null;
-  const growthAttribution = normalizedAnalytics?.growth_attribution || {};
-  const illustratedValue = toNumber(currentMatch?.projected_accumulation_value)
-    ?? toNumber(currentMatch?.projected_cash_surrender_value);
-  const actualValue = toNumber(currentMatch?.actual_accumulation_value)
-    ?? toNumber(currentMatch?.actual_cash_surrender_value);
-  const varianceAmount = toNumber(currentMatch?.accumulation_variance)
-    ?? toNumber(currentMatch?.cash_surrender_variance)
-    ?? (isFiniteNumber(actualValue) && isFiniteNumber(illustratedValue) ? actualValue - illustratedValue : null);
-  const variancePercent =
-    isFiniteNumber(varianceAmount) && isFiniteNumber(illustratedValue) && illustratedValue !== 0
-      ? (varianceAmount / illustratedValue) * 100
-      : null;
-  const benchmark = safeArray(projection?.benchmark_rows)[0] || null;
-  const projectedPremiumOutlay = toNumber(benchmark?.premium_outlay);
-  const totalPremiumPaid =
-    toNumber(lifePolicy?.funding?.totalPremiumPaid) ??
-    toNumber(growthAttribution?.visible_total_premium_paid) ??
-    null;
-  const premiumGapAmount =
-    isFiniteNumber(projectedPremiumOutlay) && isFiniteNumber(totalPremiumPaid)
-      ? totalPremiumPaid - projectedPremiumOutlay
-      : null;
-
-  if (projection?.comparison_possible && currentMatch) {
-    const status =
-      !isFiniteNumber(varianceAmount)
-        ? "indeterminate"
-        : Math.abs(varianceAmount) <= Math.max(illustratedValue || 0, 1) * 0.03
-          ? "on_track"
-          : varianceAmount > 0
-            ? "ahead"
-            : "behind";
-    const comparisonMetric = isFiniteNumber(toNumber(currentMatch?.projected_accumulation_value))
-      ? "accumulation_value"
-      : "cash_surrender_value";
-    return {
-      status,
-      comparisonMetric,
-      illustratedValue,
-      actualValue,
-      varianceAmount,
-      variancePercent,
-      explanation: projection?.narrative || legacy?.narrative || "Illustration checkpoints were matched against the latest visible statement.",
-      confidence: projection?.limitations?.length ? "moderate" : "high",
-    };
-  }
-
-  if (legacy?.comparison_possible && isFiniteNumber(premiumGapAmount)) {
-    return {
-      status:
-        Math.abs(premiumGapAmount) <= Math.max(projectedPremiumOutlay || 0, 1) * 0.03
-          ? "on_track"
-          : premiumGapAmount > 0
-            ? "ahead"
-            : "behind",
-      comparisonMetric: "premium_pace",
-      illustratedValue: projectedPremiumOutlay,
-      actualValue: totalPremiumPaid,
-      varianceAmount: premiumGapAmount,
-      variancePercent:
-        projectedPremiumOutlay && projectedPremiumOutlay !== 0
-          ? (premiumGapAmount / projectedPremiumOutlay) * 100
-          : null,
-      explanation:
-        "Illustration ledger alignment is limited, so the visible comparison is currently strongest on premium pace rather than projected account values.",
-      confidence: "low",
-    };
-  }
-
-  if (!projection?.comparison_possible) {
-    missingData.push("Illustration checkpoints are not aligned cleanly enough for a projected-versus-actual comparison.");
-  }
-  if (!safeArray(statementRows).length) {
-    missingData.push("No statement history is available for illustration comparison.");
-  }
-
-  return {
-    status: "indeterminate",
-    comparisonMetric: null,
-    illustratedValue: null,
-    actualValue: null,
-    varianceAmount: null,
-    variancePercent: null,
-    explanation:
-      projection?.narrative ||
-      legacy?.narrative ||
-      "Illustration-versus-actual comparison is indeterminate because the current packet does not align the latest statement cleanly with a trusted illustration checkpoint.",
-    confidence: "low",
-  };
 }
 
 function buildChargeAnalysis({ lifePolicy, normalizedAnalytics, statementRows, missingData }) {
@@ -567,13 +474,6 @@ export function buildIulV2Analytics({
   statementRows = [],
 } = {}) {
   const missingData = [];
-
-  const illustrationComparison = buildIllustrationComparison({
-    lifePolicy,
-    normalizedAnalytics,
-    statementRows,
-    missingData,
-  });
   const chargeAnalysis = buildChargeAnalysis({
     lifePolicy,
     normalizedAnalytics,
@@ -588,6 +488,14 @@ export function buildIulV2Analytics({
   const strategyAnalysis = buildStrategyAnalysis({
     lifePolicy,
     normalizedAnalytics,
+    missingData,
+  });
+  const illustrationComparison = buildIllustrationVsActualAnalysis({
+    lifePolicy,
+    normalizedAnalytics,
+    statementRows,
+    chargeAnalysis,
+    fundingAnalysis,
     missingData,
   });
   const riskAnalysis = buildRiskAnalysis({
