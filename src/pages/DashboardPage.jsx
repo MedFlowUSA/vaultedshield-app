@@ -546,6 +546,7 @@ export default function DashboardPage({ onNavigate }) {
     intelligenceBundle,
     savedPolicies,
     insuranceRows: savedPolicyRows,
+    debug,
     errors,
     loadingStates,
   } = usePlatformShellData();
@@ -558,14 +559,22 @@ export default function DashboardPage({ onNavigate }) {
   const loadError = errors.householdData || "";
   const policyCompareError = errors.insurancePortfolio || "";
 
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: debug.authUserId || null,
+    }),
+    [debug.authUserId, householdState.context.householdId]
+  );
+
   useEffect(() => {
     setReviewWorkflowState(
-      getHouseholdReviewWorkflowState(householdState.context.householdId)
+      getHouseholdReviewWorkflowState(reviewScope)
     );
     setReviewDigestSnapshot(
-      getHouseholdReviewDigestSnapshot(householdState.context.householdId)
+      getHouseholdReviewDigestSnapshot(reviewScope)
     );
-  }, [householdState.context.householdId]);
+  }, [reviewScope]);
 
   const assetCounts = intelligenceBundle?.assetCountsByCategory || {};
   const propertySummary = intelligenceBundle?.propertyStackSummary || {};
@@ -732,7 +741,7 @@ export default function DashboardPage({ onNavigate }) {
     };
 
     setReviewWorkflowState(nextState);
-    saveHouseholdReviewWorkflowState(householdId, nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
   }
 
   function handleRefreshDigestSnapshot() {
@@ -740,7 +749,7 @@ export default function DashboardPage({ onNavigate }) {
     if (!householdId) return;
     const snapshot = reviewDigest.current_snapshot;
     setReviewDigestSnapshot(snapshot);
-    saveHouseholdReviewDigestSnapshot(householdId, snapshot);
+    saveHouseholdReviewDigestSnapshot(reviewScope, snapshot);
   }
 
   function handlePrintHouseholdReport() {

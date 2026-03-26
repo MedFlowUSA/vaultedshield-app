@@ -1,5 +1,7 @@
-const REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v1";
-const REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v1";
+const REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v2";
+const REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v2";
+const LEGACY_REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v1";
+const LEGACY_REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v1";
 
 export const REVIEW_WORKFLOW_STATUSES = {
   open: {
@@ -56,33 +58,70 @@ function toTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-export function getHouseholdReviewWorkflowState(householdId) {
-  if (!householdId) return {};
-  const allState = safeReadStorage();
-  return allState[householdId] || {};
+function resolveReviewScope(input) {
+  if (!input) {
+    return { key: null, householdId: null, userId: null };
+  }
+  if (typeof input === "string") {
+    return {
+      key: `legacy:${input}`,
+      householdId: input,
+      userId: null,
+    };
+  }
+  const householdId = input.householdId || null;
+  const userId = input.userId || null;
+  if (!householdId) {
+    return { key: null, householdId: null, userId };
+  }
+  return {
+    key: `${userId || "guest"}:${householdId}`,
+    householdId,
+    userId,
+  };
 }
 
-export function saveHouseholdReviewWorkflowState(householdId, nextState) {
-  if (!householdId) return;
+export function clearLegacyHouseholdReviewStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LEGACY_REVIEW_WORKFLOW_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_REVIEW_WORKFLOW_DIGEST_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup failures so the app can continue safely.
+  }
+}
+
+export function getHouseholdReviewWorkflowState(scopeInput) {
+  const scope = resolveReviewScope(scopeInput);
+  if (!scope.key) return {};
+  const allState = safeReadStorage();
+  return allState[scope.key] || {};
+}
+
+export function saveHouseholdReviewWorkflowState(scopeInput, nextState) {
+  const scope = resolveReviewScope(scopeInput);
+  if (!scope.key) return;
   const allState = safeReadStorage();
   safeWriteStorage({
     ...allState,
-    [householdId]: nextState || {},
+    [scope.key]: nextState || {},
   });
 }
 
-export function getHouseholdReviewDigestSnapshot(householdId) {
-  if (!householdId) return null;
+export function getHouseholdReviewDigestSnapshot(scopeInput) {
+  const scope = resolveReviewScope(scopeInput);
+  if (!scope.key) return null;
   const allState = safeReadDigestStorage();
-  return allState[householdId] || null;
+  return allState[scope.key] || null;
 }
 
-export function saveHouseholdReviewDigestSnapshot(householdId, snapshot) {
-  if (!householdId) return;
+export function saveHouseholdReviewDigestSnapshot(scopeInput, snapshot) {
+  const scope = resolveReviewScope(scopeInput);
+  if (!scope.key) return;
   const allState = safeReadDigestStorage();
   safeWriteDigestStorage({
     ...allState,
-    [householdId]: snapshot || null,
+    [scope.key]: snapshot || null,
   });
 }
 

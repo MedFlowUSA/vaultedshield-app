@@ -40,6 +40,7 @@ import ReportsPage from "./pages/ReportsPage";
 import ContactsPage from "./pages/ContactsPage";
 import SettingsPage from "./pages/SettingsPage";
 import { hasTierAccess, useAccessPortal } from "./lib/auth/accessPortal";
+import { clearLegacyHouseholdReviewStorage } from "./lib/domain/platformIntelligence/reviewWorkflowState";
 import { PlatformShellDataProvider } from "./lib/intelligence/PlatformShellDataContext";
 import { getRouteByPath } from "./lib/navigation/routes";
 import { useHashRoute } from "./lib/navigation/useHashRoute";
@@ -54,6 +55,7 @@ function clearLegacyScopedStorage(userId = null) {
   if (typeof window === "undefined") return;
   try {
     LEGACY_GLOBAL_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+    clearLegacyHouseholdReviewStorage();
     if (!window.sessionStorage.getItem("vaultedshield_legacy_storage_cleanup_v1")) {
       window.sessionStorage.setItem("vaultedshield_legacy_storage_cleanup_v1", "done");
     }

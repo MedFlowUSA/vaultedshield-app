@@ -218,12 +218,15 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       debug: {
         authUserId,
         householdId,
+        householdName: bundleState.data?.household?.household_name || householdState.household?.household_name || null,
         ownershipMode,
         guestModeActive: !authUserId,
         sharedFallbackActive: guestFallbackActive,
         policyScopeSource: insuranceState.scopeSource,
         scopedPropertyCount: bundleState.data?.properties?.length || 0,
         scopedMortgageCount: bundleState.data?.mortgageLoans?.length || 0,
+        scopedEmergencyContactCount: bundleState.data?.emergencyContacts?.length || 0,
+        scopedProfessionalContactCount: bundleState.data?.keyProfessionalContacts?.length || 0,
         usedFallbackPlatformData: Boolean(authUserId && guestFallbackActive),
       },
       loadingStates: {

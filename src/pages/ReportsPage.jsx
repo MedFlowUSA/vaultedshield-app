@@ -214,9 +214,16 @@ function ReportView({ report, onPrint, label }) {
 }
 
 export default function ReportsPage({ onNavigate }) {
-  const { householdState, intelligenceBundle: bundle, insuranceRows: rows, errors, loadingStates } = usePlatformShellData();
+  const { householdState, intelligenceBundle: bundle, insuranceRows: rows, debug, errors, loadingStates } = usePlatformShellData();
   const [activeReport, setActiveReport] = useState("household");
   const loadError = errors.householdData || errors.insurancePortfolio;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: debug.authUserId || null,
+    }),
+    [debug.authUserId, householdState.context.householdId]
+  );
 
   const intelligence = useMemo(() => (bundle ? buildHouseholdIntelligence(bundle) : null), [bundle]);
   const householdMap = useMemo(
@@ -224,12 +231,12 @@ export default function ReportsPage({ onNavigate }) {
     [bundle, intelligence, rows]
   );
   const reviewWorkflowState = useMemo(
-    () => getHouseholdReviewWorkflowState(householdState.context.householdId),
-    [householdState.context.householdId]
+    () => getHouseholdReviewWorkflowState(reviewScope),
+    [reviewScope]
   );
   const reviewDigestSnapshot = useMemo(
-    () => getHouseholdReviewDigestSnapshot(householdState.context.householdId),
-    [householdState.context.householdId]
+    () => getHouseholdReviewDigestSnapshot(reviewScope),
+    [reviewScope]
   );
   const queueItems = useMemo(
     () => annotateReviewWorkflowItems(householdMap.review_priorities || [], reviewWorkflowState),

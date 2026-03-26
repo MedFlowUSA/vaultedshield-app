@@ -95,6 +95,14 @@ function writeStoredHouseholdId(householdId) {
   window.localStorage.setItem(HOUSEHOLD_CONTEXT_KEY, householdId);
 }
 
+function isBootstrapSelfMember(member) {
+  return Boolean(
+    member?.metadata?.bootstrap &&
+      member?.role_type === "self" &&
+      member?.is_primary
+  );
+}
+
 async function insertRecord(table, payload) {
   const { supabase, error } = getClientOrError();
   if (error) return { data: null, error };
@@ -363,7 +371,7 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
       relationship_label: "Primary",
       email: authUser?.email || null,
       is_primary: true,
-      is_emergency_contact: true,
+      is_emergency_contact: false,
       metadata: { bootstrap: true, auth_user_id: authUser.id },
     });
 
@@ -470,7 +478,7 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
     role_type: "self",
     relationship_label: "Primary",
     is_primary: true,
-    is_emergency_contact: true,
+    is_emergency_contact: false,
     metadata: { bootstrap: true },
   });
 
@@ -794,7 +802,8 @@ export async function getEmergencyModeBundle(householdId) {
   const emergencyContacts = [
     ...householdMembers.filter(
       (member) =>
-        member.is_primary ||
+        (!isBootstrapSelfMember(member) &&
+          member.is_primary) ||
         member.is_emergency_contact ||
         emergencyMemberRoles.includes(member.role_type)
     ),
@@ -902,7 +911,8 @@ export async function getHouseholdIntelligenceBundle(householdId) {
   const emergencyContacts = [
     ...householdMembers.filter(
       (member) =>
-        member.is_primary ||
+        (!isBootstrapSelfMember(member) &&
+          member.is_primary) ||
         member.is_emergency_contact ||
         emergencyMemberRoles.includes(member.role_type)
     ),

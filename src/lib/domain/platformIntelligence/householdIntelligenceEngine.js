@@ -366,10 +366,40 @@ function toPercent(score) {
 }
 
 function toStatus(score) {
+  if (score === null || score === undefined) return "Starter";
   if (score >= 85) return "Strong";
   if (score >= 65) return "Moderate";
   if (score >= 40) return "Weak";
   return "At Risk";
+}
+
+function isBootstrapOnlyMember(member) {
+  return Boolean(
+    member?.metadata?.bootstrap &&
+      member?.role_type === "self" &&
+      member?.is_primary
+  );
+}
+
+function isBlankHouseholdForOnboarding(bundle = {}, savedPolicyRows = []) {
+  const householdMembers = bundle.householdMembers || [];
+  const explicitMembers = householdMembers.filter((member) => !isBootstrapOnlyMember(member));
+  return (
+    (savedPolicyRows || []).length === 0 &&
+    (bundle.assets || []).length === 0 &&
+    (bundle.documents || []).length === 0 &&
+    (bundle.openAlerts || []).length === 0 &&
+    (bundle.openTasks || []).length === 0 &&
+    (bundle.reports || []).length === 0 &&
+    (bundle.emergencyContacts || []).length === 0 &&
+    (bundle.keyProfessionalContacts || []).length === 0 &&
+    explicitMembers.length === 0 &&
+    (bundle.contacts || []).length === 0 &&
+    (bundle.portalReadiness?.portalCount || 0) === 0 &&
+    (bundle.properties || []).length === 0 &&
+    (bundle.mortgageLoans || []).length === 0 &&
+    (bundle.homeownersPolicies || []).length === 0
+  );
 }
 
 function toVisibilityLabel(value) {
@@ -752,6 +782,56 @@ export function buildCrossAssetDependencySignals(bundle = {}, savedPolicyRows = 
 }
 
 export function buildHouseholdRiskContinuityMap(bundle = {}, intelligence = null, savedPolicyRows = []) {
+  if (isBlankHouseholdForOnboarding(bundle, savedPolicyRows)) {
+    return {
+      overall_score: null,
+      overall_status: "Starter",
+      bottom_line:
+        "This household is still in onboarding. Add contacts, documents, assets, or policies before VaultedShield starts a live continuity review.",
+      focus_areas: [
+        {
+          key: "household_onboarding",
+          title: "Household Onboarding",
+          score: null,
+          status: "Starter",
+          route: "/guidance",
+          action_label: "Open guidance",
+          summary: "No persisted household continuity evidence is visible yet, so the app is holding a neutral onboarding posture.",
+          metrics: [
+            { label: "Assets", value: 0 },
+            { label: "Policies", value: 0 },
+            { label: "Documents", value: 0 },
+          ],
+        },
+      ],
+      review_priorities: [],
+      strength_signals: [],
+      visibility_gaps: [],
+      dependency_signals: {
+        dependency_flags: [],
+        continuity_risks: [],
+        alignment_strength: {
+          score: null,
+          status: "Starter",
+          summary: "Cross-asset dependency review has not started because the household record is still blank.",
+        },
+        priority_issues: [],
+        action_candidates: [],
+        evidence_by_flag: {},
+      },
+      cross_asset_summary: {
+        insurance_visible: 0,
+        property_visible: 0,
+        retirement_visible: 0,
+        estate_visible: 0,
+        portals_visible: 0,
+      },
+      debug: {
+        onboardingBlankState: true,
+      },
+    };
+  }
+
   const documentScore = toPercent(intelligence?.document_completeness?.score_value);
   const portalScore = toPercent(intelligence?.portal_continuity?.score_value);
   const emergencyScore = toPercent(intelligence?.emergency_readiness?.score_value);
