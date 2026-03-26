@@ -2,6 +2,8 @@ export const ROUTES = {
   login: { path: "/login", title: "Login", section: "Auth", minimumTier: "free" },
   signup: { path: "/signup", title: "Sign Up", section: "Auth", minimumTier: "free" },
   pricing: { path: "/pricing", title: "Pricing", section: "Auth", minimumTier: "free" },
+  privacyPolicy: { path: "/privacy-policy", title: "Privacy Policy", section: "Legal", minimumTier: "free" },
+  termsOfService: { path: "/terms-of-service", title: "Terms of Service", section: "Legal", minimumTier: "free" },
   dashboard: { path: "/dashboard", title: "Dashboard", section: "Core", minimumTier: "free" },
   guidance: { path: "/guidance", title: "Guidance Center", section: "Core", minimumTier: "free" },
   vault: { path: "/vault", title: "Vault", section: "Core", minimumTier: "free" },

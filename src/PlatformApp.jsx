@@ -3,8 +3,10 @@ import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
 import TopNav from "./components/layout/TopNav";
 import PricingPage from "./pages/PricingPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import AuthLoginPage from "./pages/AuthLoginPage";
 import AuthSignupPage from "./pages/AuthSignupPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
 import DashboardPage from "./pages/DashboardPage";
 import GuidanceCenterPage from "./pages/GuidanceCenterPage";
 import VaultPage from "./pages/VaultPage";
@@ -42,6 +44,26 @@ import { PlatformShellDataProvider } from "./lib/intelligence/PlatformShellDataC
 import { getRouteByPath } from "./lib/navigation/routes";
 import { useHashRoute } from "./lib/navigation/useHashRoute";
 import useResponsiveLayout from "./lib/ui/useResponsiveLayout";
+
+const LEGACY_GLOBAL_STORAGE_KEYS = [
+  "vaultedshield-results",
+  "vaultedshield-current-household-id",
+];
+
+function clearLegacyScopedStorage(userId = null) {
+  if (typeof window === "undefined") return;
+  try {
+    LEGACY_GLOBAL_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+    if (!window.sessionStorage.getItem("vaultedshield_legacy_storage_cleanup_v1")) {
+      window.sessionStorage.setItem("vaultedshield_legacy_storage_cleanup_v1", "done");
+    }
+    if (import.meta.env.DEV && !userId) {
+      console.warn("[VaultedShield] cleared legacy global storage keys after auth scope changed to signed-out or guest state.");
+    }
+  } catch {
+    // Ignore storage cleanup failures so auth and routing can continue safely.
+  }
+}
 
 class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -162,6 +184,10 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <AuthSignupPage onNavigate={navigate} accessPortal={accessPortal} returnPath={returnPath} />;
     case "/pricing":
       return <PricingPage onNavigate={navigate} accessPortal={accessPortal} returnPath={returnPath} />;
+    case "/privacy-policy":
+      return <PrivacyPolicyPage />;
+    case "/terms-of-service":
+      return <TermsOfServicePage />;
     case "/dashboard":
       return <DashboardPage onNavigate={navigate} />;
     case "/guidance":
@@ -218,6 +244,11 @@ export default function PlatformApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pricingReturnPath, setPricingReturnPath] = useState("/dashboard");
   const postAuthHome = "/insurance";
+  const isPublicRoute =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/privacy-policy" ||
+    pathname === "/terms-of-service";
   const isAuthRoute = pathname === "/login" || pathname === "/signup";
   const resolvedPathname = accessPortal.isAuthenticated && isAuthRoute ? postAuthHome : pathname;
   const route = getRouteByPath(resolvedPathname);
@@ -234,6 +265,10 @@ export default function PlatformApp() {
     resolvedPathname === "/pricing" && accessPortal.isAuthenticated
       ? pricingReturnPath || postAuthHome
       : intendedPath;
+
+  useEffect(() => {
+    clearLegacyScopedStorage(accessPortal.session?.userId || null);
+  }, [accessPortal.session?.userId]);
 
   useEffect(() => {
     if (!useCompactShell) {
@@ -260,7 +295,7 @@ export default function PlatformApp() {
     );
   }
 
-  if (!accessPortal.isAuthenticated && !resolvedIsAuthRoute) {
+  if (!accessPortal.isAuthenticated && !resolvedIsAuthRoute && !isPublicRoute) {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
         <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={intendedPath} />
@@ -268,10 +303,10 @@ export default function PlatformApp() {
     );
   }
 
-  if (resolvedIsAuthRoute) {
+  if (resolvedIsAuthRoute || (!accessPortal.isAuthenticated && isPublicRoute)) {
       return (
         <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-          {renderRoute(resolvedPathname, navigate, accessPortal, postAuthHome)}
+          {renderRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
         </div>
       );
   }
