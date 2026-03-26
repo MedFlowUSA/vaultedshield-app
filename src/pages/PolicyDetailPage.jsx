@@ -4,14 +4,15 @@ import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import {
-  answerPolicyQuestion,
   buildPolicyInterpretation,
   buildPolicyReviewReport,
   buildPolicyTrendSummary,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import { buildPolicyInsightSummary } from "../lib/ai/policyInsightEngine";
+import { answerPolicyQuestion as answerPolicyAssistantQuestion } from "../lib/ai/policyQuestionHandlers";
+import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
-import { executeSmartAction } from "../lib/navigation/smartActions";
 import {
   getVaultedPolicyAnalytics,
   getVaultedPolicyById,
@@ -56,6 +57,11 @@ function formatDate(value) {
   });
 }
 
+function formatConfidencePercent(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return `${Math.round(Number(value) * 100)}%`;
+}
+
 function getTone(status) {
   if (status === "Strong") return "good";
   if (status === "Moderate") return "warning";
@@ -74,6 +80,13 @@ function getInterpretationTone(status) {
   if (status === "mixed_needs_review") return "warning";
   if (status === "underperforming") return "alert";
   return "info";
+}
+
+function getAiStatusTone(status) {
+  if (status === "strong") return "good";
+  if (status === "moderate") return "warning";
+  if (status === "insufficient_data") return "info";
+  return "alert";
 }
 
 function getCoiInterpretation(sourceKind, confidence) {
@@ -383,17 +396,6 @@ function ReportView({ title, subtitle, report, onPrint }) {
   );
 }
 
-const POLICY_ASSISTANT_STARTERS = [
-  "Is this policy performing well?",
-  "Why is this policy rated this way?",
-  "How much are charges affecting growth?",
-  "What information is missing?",
-  "Review strategy visibility",
-  "Compare this to another IUL",
-  "Are we ahead or behind the original illustration?",
-  "What should I review first?",
-];
-
 export default function PolicyDetailPage({ policyId, onNavigate }) {
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
@@ -450,15 +452,14 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     const cleanQuestion = String(questionText || "").trim();
     if (!cleanQuestion) return;
 
-    const response = answerPolicyQuestion({
-      questionText: cleanQuestion,
+    const response = answerPolicyAssistantQuestion(cleanQuestion, {
+      lifePolicy,
       normalizedPolicy,
       normalizedAnalytics,
       statementRows: statementTimeline,
       comparisonSummary,
       interpretation: policyInterpretation,
-      trendSummary,
-      policyId,
+      insightSummary: policyAiSummary,
     });
 
     setAssistantHistory((current) => [
@@ -589,6 +590,27 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     () => buildPolicyInterpretation(normalizedPolicy, normalizedAnalytics, statementTimeline),
     [normalizedAnalytics, normalizedPolicy, statementTimeline]
   );
+  const lifePolicy = useMemo(
+    () =>
+      normalizeLifePolicy({
+        normalizedPolicy,
+        normalizedAnalytics,
+        comparisonSummary,
+        statementRows: statementTimeline,
+      }),
+    [comparisonSummary, normalizedAnalytics, normalizedPolicy, statementTimeline]
+  );
+  const policyAiSummary = useMemo(
+    () =>
+      buildPolicyInsightSummary({
+        lifePolicy,
+        normalizedAnalytics,
+        statementRows: statementTimeline,
+        comparisonSummary,
+        interpretation: policyInterpretation,
+      }),
+    [comparisonSummary, lifePolicy, normalizedAnalytics, policyInterpretation, statementTimeline]
+  );
   const reviewReport = useMemo(
     () =>
       buildPolicyReviewReport({
@@ -629,6 +651,12 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     { label: "Death Benefit", value: formatDisplayValue(comparisonRow?.death_benefit) },
     { label: "Total COI", value: formatDisplayValue(comparisonRow?.total_coi) },
     { label: "Latest Statement", value: formatDate(comparisonRow?.latest_statement_date) },
+  ];
+  const assistantPrompts = lifePolicy?.meta?.suggestedQuestions || [
+    "What kind of policy is this?",
+    "Is this policy healthy?",
+    "What should I review first?",
+    "Is the data complete enough to trust?",
   ];
   const latestAssistantEntry = assistantHistory[0] || null;
 
@@ -1085,13 +1113,149 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           </div>
 
           <SectionCard
-            title="Ask About This Policy"
-            subtitle="Ask focused questions about this policy and get evidence-backed answers grounded in the live intelligence already loaded on this page."
+            title="Ask Vault AI"
+            subtitle="A policy-aware assistant that explains this policy using the analytics and statement evidence already loaded on this page."
             accent="#bfdbfe"
           >
             <div style={{ display: "grid", gap: "18px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "14px",
+                  padding: "20px 22px",
+                  borderRadius: "20px",
+                  background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                  border: "1px solid rgba(147, 197, 253, 0.28)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ display: "grid", gap: "8px", maxWidth: "820px" }}>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      AI Summary
+                    </div>
+                    <div style={{ fontSize: "18px", lineHeight: "1.7", color: "#0f172a", fontWeight: 700 }}>
+                      {policyAiSummary.summary}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <StatusBadge
+                      label={lifePolicy?.meta?.policyTypeLabel || "Life Insurance Policy"}
+                      tone="info"
+                    />
+                    {lifePolicy?.meta?.policyTypeDetection?.confidence ? (
+                      <StatusBadge
+                        label={`Type confidence ${formatConfidencePercent(lifePolicy.meta.policyTypeDetection.confidence)}`}
+                        tone={
+                          lifePolicy.meta.policyTypeDetection.confidence >= 0.8
+                            ? "good"
+                            : lifePolicy.meta.policyTypeDetection.confidence >= 0.6
+                              ? "warning"
+                              : "info"
+                        }
+                      />
+                    ) : null}
+                    <StatusBadge
+                      label={
+                        policyAiSummary.status === "strong"
+                          ? "Performing Well"
+                          : policyAiSummary.status === "moderate"
+                            ? "Needs Review"
+                            : policyAiSummary.status === "insufficient_data"
+                              ? "Insufficient Data"
+                              : "Below Expectations"
+                      }
+                      tone={getAiStatusTone(policyAiSummary.status)}
+                    />
+                  </div>
+                </div>
+
+                {policyAiSummary.insights.length > 0 ? (
+                  <div style={{ display: "grid", gap: "10px" }}>
+                    {policyAiSummary.insights.slice(0, 3).map((insight, index) => (
+                      <div
+                        key={`${insight.type}-${index}`}
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "16px",
+                          background: "#ffffff",
+                          border: "1px solid rgba(148, 163, 184, 0.18)",
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                          <StatusBadge
+                            label={insight.type.charAt(0).toUpperCase() + insight.type.slice(1)}
+                            tone={insight.severity === "high" ? "alert" : insight.severity === "medium" ? "warning" : "good"}
+                          />
+                          <StatusBadge
+                            label={`${insight.severity.charAt(0).toUpperCase() + insight.severity.slice(1)} severity`}
+                            tone={insight.severity === "high" ? "alert" : insight.severity === "medium" ? "warning" : "good"}
+                          />
+                        </div>
+                        <div style={{ color: "#0f172a", lineHeight: "1.7", fontWeight: 600 }}>{insight.message}</div>
+                        {insight.supporting_data?.length > 0 ? (
+                          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                            {insight.supporting_data.map((item) => (
+                              <div
+                                key={`${insight.type}-${item.label}`}
+                                style={{
+                                  padding: "8px 10px",
+                                  borderRadius: "999px",
+                                  background: "#f8fafc",
+                                  border: "1px solid #e2e8f0",
+                                  color: "#475569",
+                                  fontSize: "13px",
+                                }}
+                              >
+                                <strong style={{ color: "#0f172a" }}>{item.label}:</strong> {item.value}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {policyAiSummary.missingData?.length > 0 ? (
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Missing Data Notes</div>
+                    <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                      {policyAiSummary.missingData.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {lifePolicy?.meta?.policyTypeDetection?.evidence?.length > 0 ? (
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Policy Type Evidence</div>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      {lifePolicy.meta.policyTypeDetection.evidence.slice(0, 4).map((item) => (
+                        <div
+                          key={item}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: "999px",
+                            background: "#ffffff",
+                            border: "1px solid #dbeafe",
+                            color: "#1d4ed8",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                {POLICY_ASSISTANT_STARTERS.map((prompt) => (
+                {assistantPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
@@ -1115,7 +1279,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr auto",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: "12px",
                     alignItems: "center",
                   }}
@@ -1142,6 +1306,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                       color: "#ffffff",
                       cursor: assistantQuestion.trim() ? "pointer" : "not-allowed",
                       fontWeight: 700,
+                      width: "100%",
                     }}
                   >
                     Ask
@@ -1160,82 +1325,64 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     border: "1px solid rgba(147, 197, 253, 0.28)",
                   }}
                 >
-                  <div style={{ display: "grid", gap: "8px" }}>
-                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Latest Answer
-                    </div>
-                    <div style={{ fontWeight: 700, color: "#0f172a" }}>{latestAssistantEntry.question}</div>
-                    <div style={{ color: "#0f172a", lineHeight: "1.8", fontSize: "16px", fontWeight: 600 }}>
-                      {latestAssistantEntry.response.answer_text}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <StatusBadge
-                      label={`Intent: ${latestAssistantEntry.response.intent.replace(/_/g, " ")}`}
-                      tone="info"
-                    />
-                    <StatusBadge
-                      label={`Confidence: ${latestAssistantEntry.response.confidence_label}`}
-                      tone={
-                        latestAssistantEntry.response.confidence_label === "strong"
-                          ? "good"
-                          : latestAssistantEntry.response.confidence_label === "moderate"
-                            ? "warning"
-                            : "info"
-                      }
-                    />
-                  </div>
-
-                  {latestAssistantEntry.response.evidence_points?.length > 0 ? (
-                    <div>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Evidence</div>
-                      <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                        {latestAssistantEntry.response.evidence_points.map((point) => (
-                          <li key={point}>{point}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {(latestAssistantEntry.response.actions || []).length > 0 ? (
-                    <div>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Suggested Actions</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        {latestAssistantEntry.response.actions.map((action) => (
-                          <button
-                            key={action.id}
-                            type="button"
-                            onClick={() =>
-                              executeSmartAction(action, {
-                                navigate: onNavigate,
-                                scrollToSection: scrollToPolicySection,
-                              })
-                            }
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: "999px",
-                              border: "1px solid #dbeafe",
-                              background: "#ffffff",
-                              color: "#1d4ed8",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {action.label}
-                          </button>
-                        ))}
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Latest Answer
+                      </div>
+                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{latestAssistantEntry.question}</div>
+                      <div style={{ color: "#0f172a", lineHeight: "1.8", fontSize: "16px", fontWeight: 600 }}>
+                        {latestAssistantEntry.response.answer}
                       </div>
                     </div>
-                  ) : null}
 
-                  <div>
-                    <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
                     <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      {(latestAssistantEntry.response.followup_prompts || []).map((prompt) => (
-                        <button
-                          key={prompt}
-                          type="button"
+                      <StatusBadge
+                        label="Grounded answer"
+                        tone="info"
+                      />
+                      <StatusBadge
+                        label={`Confidence: ${latestAssistantEntry.response.confidence}`}
+                        tone={
+                          latestAssistantEntry.response.confidence === "high"
+                            ? "good"
+                            : latestAssistantEntry.response.confidence === "moderate"
+                              ? "warning"
+                              : "info"
+                        }
+                      />
+                    </div>
+
+                    {latestAssistantEntry.response.supporting_data?.length > 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Evidence</div>
+                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                          {latestAssistantEntry.response.supporting_data.map((point) => (
+                            <li key={`${point.label}-${point.value}`}>
+                              <strong style={{ color: "#0f172a" }}>{point.label}:</strong> {point.value}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {latestAssistantEntry.response.missing_data?.length > 0 ? (
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Missing Data</div>
+                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                          {latestAssistantEntry.response.missing_data.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        {(latestAssistantEntry.response.suggested_followups || []).map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
                           onClick={() => handleAssistantPrompt(prompt)}
                           style={{
                             padding: "10px 12px",
@@ -1253,20 +1400,20 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div
-                  style={{
+                ) : (
+                  <div
+                    style={{
                     padding: "18px 20px",
                     borderRadius: "18px",
                     background: "#f8fafc",
                     border: "1px solid rgba(148, 163, 184, 0.18)",
-                    color: "#475569",
-                    lineHeight: "1.8",
-                  }}
-                >
-                  Ask a focused question to get a policy-specific answer grounded in continuity, charges, statement support, strategy visibility, and the current interpretation layer.
-                </div>
-              )}
+                      color: "#475569",
+                      lineHeight: "1.8",
+                    }}
+                  >
+                  Ask a focused question to get a policy-specific answer grounded in live statements, charges, performance support, and known evidence gaps.
+                  </div>
+                )}
 
               {assistantHistory.length > 1 ? (
                 <div style={{ display: "grid", gap: "10px" }}>
@@ -1289,7 +1436,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         }}
                       >
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{entry.question}</div>
-                        <div style={{ color: "#475569", lineHeight: "1.7" }}>{entry.response.answer_text}</div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>{entry.response.answer}</div>
                       </button>
                     ))}
                   </div>
@@ -1552,16 +1699,15 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   <div>
                     <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Policy Assistant</div>
                     <pre style={{ margin: 0, fontSize: "12px", color: "#475569", overflowX: "auto" }}>
-                      {JSON.stringify(
-                        latestAssistantEntry
-                          ? {
-                              classified_intent: latestAssistantEntry.response?.debug?.classified_intent || null,
-                              response_confidence: latestAssistantEntry.response?.confidence_label || null,
-                              evidence_fields_used: latestAssistantEntry.response?.debug?.evidence_fields_used || [],
-                              followup_prompts: latestAssistantEntry.response?.followup_prompts || [],
-                            }
-                          : { note: "No assistant question asked in this session." },
-                        null,
+                        {JSON.stringify(
+                          latestAssistantEntry
+                            ? {
+                              response_confidence: latestAssistantEntry.response?.confidence || null,
+                              supporting_data: latestAssistantEntry.response?.supporting_data || [],
+                              suggested_followups: latestAssistantEntry.response?.suggested_followups || [],
+                              }
+                            : { note: "No assistant question asked in this session." },
+                          null,
                         2
                       )}
                     </pre>
