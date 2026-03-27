@@ -53,6 +53,10 @@ function displayNullable(value) {
   return value === null || value === undefined || value === "" ? EMPTY_VALUE : value;
 }
 
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function getStatusTone(status) {
   if (status === "Strong") return { color: "#166534", background: "rgba(34, 197, 94, 0.12)" };
   if (status === "Moderate") return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
@@ -358,6 +362,147 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       bullets: uniqueBullets.slice(0, 5),
     };
   }, [atRiskPolicies.length, rankedPolicies, strongContinuityPolicies.length]);
+
+  const portfolioDepth = useMemo(() => {
+    const structuredPolicies = rankedPolicies.filter((row) => row.structured_data_present);
+    const missingStatementPolicies = rankedPolicies.filter((row) => !row.latest_statement_date);
+    const limitedChargePolicies = rankedPolicies.filter(
+      (row) => row.total_visible_charges === null || row.total_visible_charges === undefined
+    );
+    const limitedStrategyPolicies = rankedPolicies.filter(
+      (row) => row.strategy_visibility === "limited" || row.strategy_visibility === "basic"
+    );
+    const weakCoiPolicies = rankedPolicies.filter((row) => row.coi_confidence === "weak");
+    const missingFieldPolicies = rankedPolicies.filter((row) => (row.missing_fields || []).length > 0);
+    const latestStatementPolicy = rankedPolicies
+      .filter((row) => row.latest_statement_date)
+      .sort((left, right) => new Date(right.latest_statement_date) - new Date(left.latest_statement_date))[0] || null;
+
+    const topReviewPolicy = portfolioBrief.priority_policies[0] || null;
+    const deepestReadPolicy = rankedPolicies.find(
+      (row) =>
+        row.structured_data_present &&
+        row.latest_statement_date &&
+        row.coi_confidence !== "weak" &&
+        (row.missing_fields || []).length === 0
+    ) || rankedPolicies[0] || null;
+
+    return {
+      cards: [
+        {
+          title: "Evidence Quality",
+          summary:
+            structuredPolicies.length === rankedPolicies.length
+              ? "Every visible policy is benefiting from persisted structured parser support."
+              : `${pluralize(structuredPolicies.length, "policy")} currently have persisted structured parser support, while ${pluralize(
+                  Math.max(rankedPolicies.length - structuredPolicies.length, 0),
+                  "policy"
+                )} still rely on fallback reads.`,
+          bullets: [
+            `${pluralize(missingFieldPolicies.length, "policy")} still carry missing core fields.`,
+            `${pluralize(missingStatementPolicies.length, "policy")} are missing a resolved latest statement date.`,
+            deepestReadPolicy
+              ? `${deepestReadPolicy.product || "One policy"} is currently the deepest-supported read in the set.`
+              : "No policy has a complete evidence stack yet.",
+          ],
+        },
+        {
+          title: "Charge And COI Visibility",
+          summary:
+            weakCoiPolicies.length === 0 && limitedChargePolicies.length === 0
+              ? "COI and visible charge support are broadly present across the current portfolio."
+              : `${pluralize(weakCoiPolicies.length, "policy")} still show weak COI confidence, and ${pluralize(
+                  limitedChargePolicies.length,
+                  "policy"
+                )} still have limited visible charge support.`,
+          bullets: [
+            `Total visible COI currently reads as ${formatCurrency(totalCoi)}.`,
+            highestCostPolicy
+              ? `${highestCostPolicy.product || "Top policy"} is carrying the largest visible COI load at ${displayNullable(
+                  highestCostPolicy.total_coi
+                )}.`
+              : "No policy currently exposes a measurable COI total.",
+            weakestConfidencePolicy
+              ? `${weakestConfidencePolicy.product || "One policy"} is the weakest current COI-confidence read.`
+              : "No policy is currently flagged as weak on COI confidence.",
+          ],
+        },
+        {
+          title: "Statement And Strategy Support",
+          summary:
+            missingStatementPolicies.length === 0 && limitedStrategyPolicies.length === 0
+              ? "Statement freshness and strategy visibility are currently well supported."
+              : `${pluralize(missingStatementPolicies.length, "policy")} need fresher statement alignment and ${pluralize(
+                  limitedStrategyPolicies.length,
+                  "policy"
+                )} still have partial strategy visibility.`,
+          bullets: [
+            latestStatementPolicy
+              ? `The freshest visible statement is on ${latestStatementPolicy.product || "one policy"} dated ${formatDateValue(
+                  latestStatementPolicy.latest_statement_date
+                )}.`
+              : "No resolved latest statement date is visible yet.",
+            `${pluralize(limitedStrategyPolicies.length, "policy")} still need stronger primary-strategy support.`,
+            `${pluralize(missingStatementPolicies.length, "policy")} should be refreshed before deeper comparison is trusted.`,
+          ],
+        },
+        {
+          title: "Review Pressure",
+          summary:
+            portfolioBrief.priority_policies.length === 0
+              ? "No immediate portfolio-level priority queue is visible from the current continuity reads."
+              : `${pluralize(portfolioBrief.priority_policies.length, "policy")} currently sit in the immediate review queue, led by ${
+                  topReviewPolicy?.product || "the top flagged policy"
+                }.`,
+          bullets: [
+            `${pluralize(atRiskPolicies.length, "policy")} are currently at-risk on continuity.`,
+            `${pluralize(portfolioBrief.metrics.weak_policies, "policy")} are in weak continuity status.`,
+            topReviewPolicy
+              ? `Current lead review reason: ${topReviewPolicy.review_reason}`
+              : "No lead review reason is currently visible.",
+          ],
+        },
+      ],
+      scorecard: [
+        { label: "Structured Reads", value: `${structuredPolicies.length}/${rankedPolicies.length}` },
+        { label: "Latest Statements Resolved", value: `${rankedPolicies.length - missingStatementPolicies.length}/${rankedPolicies.length}` },
+        { label: "Strong COI Confidence", value: `${rankedPolicies.length - weakCoiPolicies.length}/${rankedPolicies.length}` },
+        { label: "Policies Missing Fields", value: missingFieldPolicies.length },
+        { label: "Policies With Limited Charges", value: limitedChargePolicies.length },
+        { label: "Policies With Limited Strategy", value: limitedStrategyPolicies.length },
+      ],
+    };
+  }, [
+    atRiskPolicies.length,
+    highestCostPolicy,
+    portfolioBrief.metrics.weak_policies,
+    portfolioBrief.priority_policies,
+    rankedPolicies,
+    totalCoi,
+    weakestConfidencePolicy,
+  ]);
+
+  const rankingHighlights = useMemo(() => {
+    return rankedPolicies.map((policy) => {
+      const penalties = Array.isArray(policy.ranking.penalties) ? policy.ranking.penalties : [];
+      const keySignals = [
+        policy.latest_statement_date ? `Latest statement ${formatDateValue(policy.latest_statement_date)}` : "Latest statement not resolved",
+        policy.coi_confidence ? `COI confidence ${policy.coi_confidence}` : "COI confidence unresolved",
+        policy.charge_visibility_status ? `Charge visibility ${policy.charge_visibility_status}` : "Charge visibility unresolved",
+        policy.strategy_visibility ? `Strategy visibility ${policy.strategy_visibility}` : "Strategy visibility unresolved",
+      ];
+
+      return {
+        policyId: policy.policy_id,
+        reviewReason:
+          policy.ranking.statusExplanation ||
+          policy.interpretation.bottom_line_summary ||
+          "Visible support is still incomplete.",
+        penalties: penalties.slice(0, 4),
+        signals: keySignals,
+      };
+    });
+  }, [rankedPolicies]);
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "22px 20px" : "26px 28px";
   const sectionRadius = isMobile ? "20px" : "24px";
   const briefColumns = isTablet ? "1fr" : "1.15fr 0.85fr";
@@ -597,6 +742,60 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Portfolio Read Depth</div>
+          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "980px" }}>
+            This layer explains how strong the current insurance read actually is. It separates portfolio quality into evidence depth, charge support, statement freshness, strategy visibility, and active review pressure so the household view feels more like an analyst brief than a thin dashboard.
+          </div>
+        </div>
+
+        {renderReportFactsGrid(portfolioDepth.scorecard, 3)}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+            gap: "14px",
+          }}
+        >
+          {portfolioDepth.cards.map((card) => (
+            <div
+              key={card.title}
+              style={{
+                padding: "18px 18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {card.title}
+              </div>
+              <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{card.summary}</div>
+              <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                {card.bullets.map((item) => (
+                  <li key={item} style={{ lineHeight: "1.7" }}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "10px" }}>
           <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Portfolio Review Brief</div>
           <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "960px" }}>{portfolioBrief.summary}</div>
         </div>
@@ -660,12 +859,19 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 <span>At Risk</span>
                 <strong>{portfolioBrief.metrics.at_risk_policies}</strong>
               </div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                <span>Visible Charges</span>
+                <strong>{formatCurrency(portfolioBrief.metrics.total_visible_charges)}</strong>
+              </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: "grid", gap: "12px" }}>
           <div style={{ fontWeight: 700, color: "#0f172a" }}>Priority Review Queue</div>
+          <div style={{ color: "#64748b", lineHeight: "1.7", maxWidth: "940px" }}>
+            The queue below is not just ranking weakness. It is the current set of policies where continuity pressure, missing support, statement freshness, or charge visibility gaps are large enough that a reviewer would likely start here first.
+          </div>
           {portfolioBrief.priority_policies.length > 0 ? (
             <div style={{ display: "grid", gap: "10px" }}>
               {portfolioBrief.priority_policies.map((policy) => (
@@ -719,6 +925,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             rankedPolicies.map((policy, index) => {
               const tone = getStatusTone(policy.ranking.status);
               const isExpanded = expandedPolicyId === policy.policy_id;
+              const highlight = rankingHighlights.find((item) => item.policyId === policy.policy_id) || null;
               return (
                 <div
                   key={policy.policy_id || `${policy.product}-${index}`}
@@ -807,15 +1014,62 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         gap: "12px",
                       }}
                     >
-                      <div style={{ display: "grid", gridTemplateColumns: DETAIL_GRID_COLUMNS, gap: "12px", fontSize: "13px" }}>
-                        <div><strong>Missing Fields:</strong> {(policy.missing_fields || []).join(", ") || EMPTY_VALUE}</div>
-                        <div><strong>COI Source:</strong> {displayNullable(policy.coi_source_kind)}</div>
-                        <div><strong>COI Confidence:</strong> {displayNullable(policy.coi_confidence)}</div>
-                        <div><strong>Charge Visibility:</strong> {displayNullable(policy.charge_visibility_status)}</div>
+                        <div style={{ display: "grid", gridTemplateColumns: DETAIL_GRID_COLUMNS, gap: "12px", fontSize: "13px" }}>
+                          <div><strong>Missing Fields:</strong> {(policy.missing_fields || []).join(", ") || EMPTY_VALUE}</div>
+                          <div><strong>COI Source:</strong> {displayNullable(policy.coi_source_kind)}</div>
+                          <div><strong>COI Confidence:</strong> {displayNullable(policy.coi_confidence)}</div>
+                          <div><strong>Charge Visibility:</strong> {displayNullable(policy.charge_visibility_status)}</div>
                         <div><strong>Latest Statement:</strong> {displayNullable(formatDateValue(policy.latest_statement_date))}</div>
                         <div><strong>Data Completeness:</strong> {displayNullable(policy.data_completeness_status)}</div>
-                        <div><strong>Policy Health:</strong> {displayNullable(policy.policy_health_status)}</div>
-                        <div><strong>Continuity Score:</strong> {policy.ranking.score}</div>
+                          <div><strong>Policy Health:</strong> {displayNullable(policy.policy_health_status)}</div>
+                          <div><strong>Continuity Score:</strong> {policy.ranking.score}</div>
+                        </div>
+                      <div
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "14px",
+                          background: "#ffffff",
+                          border: "1px solid rgba(148, 163, 184, 0.18)",
+                          display: "grid",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Why This Policy Lands Here</div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          {highlight?.reviewReason || policy.ranking.statusExplanation || policy.interpretation.bottom_line_summary}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: DETAIL_GRID_COLUMNS, gap: "10px" }}>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Core Signals
+                            </div>
+                            <ul style={{ margin: "8px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#475569" }}>
+                              {(highlight?.signals || []).map((item) => (
+                                <li key={item} style={{ lineHeight: "1.6" }}>
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Ranking Penalties
+                            </div>
+                            {highlight?.penalties?.length > 0 ? (
+                              <ul style={{ margin: "8px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#475569" }}>
+                                {highlight.penalties.map((item, penaltyIndex) => (
+                                  <li key={`${policy.policy_id || policy.product}-penalty-${penaltyIndex}`} style={{ lineHeight: "1.6" }}>
+                                    {typeof item === "string" ? item : JSON.stringify(item)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div style={{ marginTop: "8px", color: "#475569" }}>
+                                No material ranking penalties are visible beyond the current interpretation summary.
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                       <div style={{ display: "grid", gap: "10px" }}>
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>Interpretation Summary</div>
@@ -1052,6 +1306,21 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             </li>
           ))}
         </ul>
+        <div
+          style={{
+            padding: "16px 18px",
+            borderRadius: "16px",
+            background: "#f8fafc",
+            border: "1px solid rgba(148, 163, 184, 0.18)",
+            display: "grid",
+            gap: "10px",
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "#0f172a" }}>Portfolio Bottom Line</div>
+          <div style={{ color: "#475569", lineHeight: "1.7" }}>
+            {portfolioReport.sections.find((section) => section.id === "portfolio_bottom_line")?.summary || portfolioBrief.summary}
+          </div>
+        </div>
       </section>
     </div>
   );
