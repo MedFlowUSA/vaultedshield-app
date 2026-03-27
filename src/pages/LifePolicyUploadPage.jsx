@@ -79,6 +79,33 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function flattenDiagnostics(items, key) {
+  return ensureArray(items).reduce((all, item) => {
+    return [...all, ...ensureArray(item?.[key])];
+  }, []);
+}
+
+function safeDevLog(label, payload) {
+  if (!import.meta.env.DEV || typeof console === "undefined") {
+    return;
+  }
+
+  if (typeof console.groupCollapsed === "function") {
+    console.groupCollapsed(label);
+    if (typeof console.log === "function") {
+      console.log(payload);
+    }
+    if (typeof console.groupEnd === "function") {
+      console.groupEnd();
+    }
+    return;
+  }
+
+  if (typeof console.log === "function") {
+    console.log(label, payload);
+  }
+}
+
 function normalizeExtractionDocument(extraction, fallbackFileName = "document") {
   const pages = ensureArray(extraction?.pages).filter((page) => typeof page === "string");
   const text = typeof extraction?.text === "string" ? extraction.text : pages.join("\n\n");
@@ -553,17 +580,15 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.groupCollapsed("[VaultedShield] life policy annual statement input");
-    console.table({
+    safeDevLog("[VaultedShield] life policy annual statement input", {
       selectedFiles: uploadedStatementFiles.length,
       scanSessionPages: statementScanPages.length,
       normalizedInputCount: normalizedStatementInput.length,
       branches: normalizedStatementInput.map((item) => item.branch).join(", ") || "none",
+      selectedFileNames: uploadedStatementFiles.map((file) => file.name),
+      scanSessionState: statementScanPages.map((page) => ({ id: page.id, fileName: page.file?.name || null })),
+      normalizedAnalysisInput: normalizedStatementInput,
     });
-    console.log("selectedFiles", uploadedStatementFiles.map((file) => file.name));
-    console.log("scanSessionState", statementScanPages.map((page) => ({ id: page.id, fileName: page.file?.name || null })));
-    console.log("normalizedAnalysisInput", normalizedStatementInput);
-    console.groupEnd();
   }, [normalizedStatementInput, statementScanPages, uploadedStatementFiles]);
 
   const summaryItems = useMemo(
@@ -763,11 +788,11 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       const statementDiagnostics = [];
 
       if (import.meta.env.DEV) {
-        console.groupCollapsed("[VaultedShield] life policy analysis branch selection");
-        console.log("baselineBranch", illustrationFile ? "upload" : "scan");
-        console.log("statementBranches", normalizedStatementInput.map((item) => item.branch));
-        console.log("statementDocumentCount", normalizedStatementInput.length);
-        console.groupEnd();
+        safeDevLog("[VaultedShield] life policy analysis branch selection", {
+          baselineBranch: illustrationFile ? "upload" : "scan",
+          statementBranches: normalizedStatementInput.map((item) => item.branch),
+          statementDocumentCount: normalizedStatementInput.length,
+        });
       }
 
       for (const input of normalizedStatementInput) {
@@ -1235,18 +1260,20 @@ export default function LifePolicyUploadPage({ onNavigate }) {
                 {item.pageCount ? ` | ${item.pageCount} page${item.pageCount === 1 ? "" : "s"}` : ""}
               </div>
             ))}
-            {[documentDiagnostics.illustration, ...documentDiagnostics.statements]
-              .filter(Boolean)
-              .flatMap((item) => item.pageOcr || [])
+            {flattenDiagnostics(
+              [documentDiagnostics.illustration, ...documentDiagnostics.statements].filter(Boolean),
+              "pageOcr"
+            )
               .map((pageOcr) => (
                 <div key={`${pageOcr.page_number}-${pageOcr.quality_level}-${pageOcr.confidence ?? "na"}`} style={{ color: "#64748b", fontSize: "14px" }}>
                   Page {pageOcr.page_number}: {getQualityLabel(pageOcr.quality_level)} quality
                   {typeof pageOcr.confidence === "number" ? ` | OCR ${getConfidenceLabel(pageOcr.confidence)}` : ""}
                 </div>
               ))}
-            {[documentDiagnostics.illustration, ...documentDiagnostics.statements]
-              .filter(Boolean)
-              .flatMap((item) => item.extractionWarnings || [])
+            {flattenDiagnostics(
+              [documentDiagnostics.illustration, ...documentDiagnostics.statements].filter(Boolean),
+              "extractionWarnings"
+            )
               .filter(Boolean)
               .map((warning, index) => (
                 <div key={`${warning}-${index}`} style={{ color: "#92400e", fontSize: "14px" }}>
