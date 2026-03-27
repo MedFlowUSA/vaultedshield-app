@@ -1,5 +1,5 @@
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker?url";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import { extractTextFromImage } from "../ocr/extractTextFromImage";
 import { preprocessImageForOCR } from "../ocr/preprocessImageForOCR";
 
@@ -14,7 +14,10 @@ function isImageFile(file) {
 }
 
 async function extractPdfText(file) {
-  const arrayBuffer = await file.arrayBuffer();
+  const arrayBuffer =
+    typeof file?.arrayBuffer === "function"
+      ? await file.arrayBuffer()
+      : await new Response(file).arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pages = [];
 
