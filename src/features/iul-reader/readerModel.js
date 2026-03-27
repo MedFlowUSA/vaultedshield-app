@@ -369,10 +369,74 @@ function buildProjectionView(results) {
   };
 }
 
+function buildUnifiedFocusCards(results = {}) {
+  const iulV2 = results.iulV2 || null;
+  if (!iulV2) return [];
+
+  const illustration = iulV2.illustrationComparison || {};
+  const charge = iulV2.chargeAnalysis || {};
+  const funding = iulV2.fundingAnalysis || {};
+  const risk = iulV2.riskAnalysis || {};
+  const strategy = iulV2.strategyAnalysis || {};
+
+  return [
+    {
+      title: "Illustration vs Actual",
+      status: illustration.status || "limited",
+      value:
+        illustration.varianceDisplay ||
+        illustration.selectedMetricData?.actualDisplay ||
+        illustration.selectedMetricData?.illustratedDisplay ||
+        "Limited",
+      detail: illustration.confidenceExplanation || "",
+      explanation: illustration.shortExplanation || illustration.explanation || "Illustration alignment is still forming.",
+    },
+    {
+      title: "Charge Drag",
+      status: charge.chargeDragLevel || "unknown",
+      value: charge.totalVisibleCharges !== null && charge.totalVisibleCharges !== undefined
+        ? formatCurrencyValue(charge.totalVisibleCharges)
+        : "Limited",
+      detail: charge.coiVisible ? "Visible COI support is present." : "COI visibility is still limited.",
+      explanation: charge.explanation || "Charge visibility is still forming.",
+    },
+    {
+      title: "Funding Pace",
+      status: funding.status || "unclear",
+      value: funding.observedFundingPace !== null && funding.observedFundingPace !== undefined
+        ? formatCurrencyValue(funding.observedFundingPace)
+        : "Limited",
+      detail:
+        funding.plannedPremium !== null && funding.plannedPremium !== undefined
+          ? `Visible target premium ${formatCurrencyValue(funding.plannedPremium)}.`
+          : "Visible premium target is still limited.",
+      explanation: funding.explanation || "Funding sufficiency is still forming.",
+    },
+    {
+      title: "Risk Pressure",
+      status: risk.overallRisk || "unclear",
+      value: risk.riskScore !== null && risk.riskScore !== undefined ? `${risk.riskScore}/100` : "Limited",
+      detail: risk.lapsePressure ? `Lapse pressure reads ${risk.lapsePressure}.` : "",
+      explanation: risk.explanation || "Risk pressure is still forming.",
+    },
+    {
+      title: "Strategy Mix",
+      status: strategy.concentrationLevel || "unknown",
+      value: strategy.strategyCount ? `${strategy.strategyCount} visible ${strategy.strategyCount === 1 ? "strategy" : "strategies"}` : "Limited",
+      detail:
+        strategy.indexedExposurePercent !== null && strategy.fixedExposurePercent !== null
+          ? `Indexed ${strategy.indexedExposurePercent}% / Fixed ${strategy.fixedExposurePercent}%.`
+          : "Allocation percentages are still limited.",
+      explanation: strategy.explanation || "Strategy visibility is still forming.",
+    },
+  ].filter((card) => card.explanation || card.value !== "Limited");
+}
+
 export function buildIulReaderModel(results) {
+  const statementResults = Array.isArray(results.statementResults) ? results.statementResults : [];
   const baselineSummary = results.illustrationSummary || {};
   const baselineMeta = baselineSummary.__meta || {};
-  const latestStatement = results.statementResults?.at(-1) || null;
+  const latestStatement = statementResults.at(-1) || null;
   const latestSummary = latestStatement?.summary || {};
   const latestMeta = latestSummary.__meta || {};
 
@@ -464,7 +528,7 @@ export function buildIulReaderModel(results) {
   ) {
     warnings.push("Carrier identity differs between the illustration and latest statement. This can indicate a misclassified page or mixed packet.");
   }
-  if (results.statementResults.length >= 2 && !results.analytics?.growth_trend?.value) {
+  if (statementResults.length >= 2 && !results.analytics?.growth_trend?.value) {
     warnings.push("Multiple statements are loaded, but growth trend quality is still limited because one or more statement dates or values were not confirmed strongly enough.");
   }
   if (results.analytics?.performance_summary?.illustration_variance === "Not found") {
@@ -472,7 +536,7 @@ export function buildIulReaderModel(results) {
   }
 
   const nextSteps = [];
-  if (results.statementResults.length === 0) {
+  if (statementResults.length === 0) {
     nextSteps.push("Upload the most recent annual statement to unlock the live policy reading.");
   }
   if (missing.some((field) => ["Issue Date", "Policy Number", "Death Benefit", "Planned Premium"].includes(field.label))) {
@@ -498,6 +562,10 @@ export function buildIulReaderModel(results) {
   const funding = results.normalizedPolicy?.funding || {};
   const deathBenefit = results.normalizedPolicy?.death_benefit || {};
   const performanceSummary = results.normalizedAnalytics?.performance_summary || {};
+  const policyInterpretation = results.policyInterpretation || null;
+  const optimizationAnalysis = results.optimizationAnalysis || null;
+  const groupedIssues = Array.isArray(results.groupedIssues) ? results.groupedIssues : [];
+  const unifiedCards = buildUnifiedFocusCards(results);
 
   const readerTables = [
     buildUniformTable("Values And Funding", "The main numbers most clients expect in an initial policy read.", [
@@ -602,10 +670,30 @@ export function buildIulReaderModel(results) {
         : "Carrier-specific pattern support is still generic.",
     },
     headline:
+      policyInterpretation?.bottom_line_summary ||
       results.normalizedAnalytics?.presentation_values?.confirmed_summary ||
       "This reader emphasizes the values and comparisons that have enough support to trust first.",
+    narrative:
+      [
+        policyInterpretation?.policy_overview_summary,
+        policyInterpretation?.current_position_summary,
+      ]
+        .filter(Boolean)
+        .join(" ") || "",
     productExplanation: buildProductExplanation(results),
     initialReading: buildInitialReading(results),
     readerTables,
+    unifiedCards,
+    issueGroups: groupedIssues,
+    optimization: optimizationAnalysis
+      ? {
+          explanation: optimizationAnalysis.explanation,
+          overallStatus: optimizationAnalysis.overallStatus || "insufficient_data",
+          priorityLevel: optimizationAnalysis.priorityLevel || "low",
+          recommendations: Array.isArray(optimizationAnalysis.recommendations) ? optimizationAnalysis.recommendations : [],
+          risks: Array.isArray(optimizationAnalysis.risks) ? optimizationAnalysis.risks : [],
+          opportunities: Array.isArray(optimizationAnalysis.opportunities) ? optimizationAnalysis.opportunities : [],
+        }
+      : null,
   };
 }

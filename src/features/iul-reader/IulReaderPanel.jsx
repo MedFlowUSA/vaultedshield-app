@@ -32,6 +32,19 @@ function BenchmarkTone(status) {
   return { background: "#e2e8f0", color: "#334155", border: "#cbd5e1" };
 }
 
+function FocusTone(status) {
+  if (["good", "ahead", "on_track", "low", "healthy", "sufficient", "diversified"].includes(status)) {
+    return { background: "#dcfce7", color: "#166534", border: "#bbf7d0" };
+  }
+  if (["watch", "moderate", "mixed", "medium", "concentrated"].includes(status)) {
+    return { background: "#fef3c7", color: "#92400e", border: "#fde68a" };
+  }
+  if (["risk", "behind", "high", "at_risk", "underfunded"].includes(status)) {
+    return { background: "#fee2e2", color: "#991b1b", border: "#fecaca" };
+  }
+  return { background: "#e2e8f0", color: "#334155", border: "#cbd5e1" };
+}
+
 function TableTone(status) {
   if (status === "confirmed") return "#166534";
   if (status === "review") return "#92400e";
@@ -136,6 +149,9 @@ export function IulReaderPanel({ reader, results }) {
               <h3 style={{ marginTop: "8px", marginBottom: "8px" }}>What This Policy Appears To Be Doing</h3>
               <div style={{ marginBottom: "12px", fontWeight: 700, color: "#0f172a", lineHeight: "1.6" }}>{reader.headline}</div>
               <p style={{ margin: "0 0 12px 0", color: "#475569", lineHeight: "1.7" }}>{reader.laymanSummary}</p>
+              {reader.narrative ? (
+                <p style={{ margin: "0 0 12px 0", color: "#475569", lineHeight: "1.7" }}>{reader.narrative}</p>
+              ) : null}
               <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#ffffff", border: "1px solid #e2e8f0" }}>
                 <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px" }}>Direction Of Travel</div>
                 <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{reader.projectionSummary}</div>
@@ -250,6 +266,49 @@ export function IulReaderPanel({ reader, results }) {
         </div>
 
         <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+          {reader.unifiedCards?.length > 0 ? (
+            <div style={{ marginBottom: "18px", display: "grid", gap: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Unified IUL Read</div>
+                  <h3 style={{ margin: "8px 0 0 0" }}>Performance, COI, Funding, Risk, And Strategy</h3>
+                  <p style={{ margin: "6px 0 0 0", color: "#64748b", lineHeight: "1.6" }}>
+                    One canonical read path for the main IUL levers instead of splitting them across separate cards.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {reader.unifiedCards.map((card) => {
+                  const tone = FocusTone(card.status);
+                  return (
+                    <div
+                      key={card.title}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        background: tone.background,
+                        color: tone.color,
+                        border: `1px solid ${tone.border}`,
+                        display: "grid",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "baseline", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "12px", opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.title}</div>
+                        <ReaderStatusBadge status={card.status === "limited" || card.status === "unknown" || card.status === "unclear" ? "missing" : card.status === "good" || card.status === "healthy" || card.status === "on_track" || card.status === "ahead" || card.status === "low" || card.status === "sufficient" ? "confirmed" : "review"}>
+                          {String(card.status || "limited").replace(/_/g, " ")}
+                        </ReaderStatusBadge>
+                      </div>
+                      <div style={{ fontSize: "24px", fontWeight: 700 }}>{card.value}</div>
+                      {card.detail ? <div style={{ fontSize: "13px", lineHeight: "1.6" }}>{card.detail}</div> : null}
+                      <div style={{ fontSize: "13px", lineHeight: "1.6" }}>{card.explanation}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Policy Performance</div>
@@ -340,6 +399,76 @@ export function IulReaderPanel({ reader, results }) {
             )}
           </div>
         </div>
+
+        {(reader.optimization || reader.issueGroups?.length > 0) ? (
+          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+            <div style={{ display: "grid", gap: "16px" }}>
+              {reader.optimization ? (
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Optimization</div>
+                      <h3 style={{ margin: "8px 0 0 0" }}>What To Watch Next</h3>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <ReaderStatusBadge status={reader.optimization.overallStatus === "healthy" ? "confirmed" : reader.optimization.overallStatus === "watch" ? "review" : "missing"}>
+                        {reader.optimization.overallStatus.replace(/_/g, " ")}
+                      </ReaderStatusBadge>
+                      <ReaderStatusBadge status={reader.optimization.priorityLevel === "low" ? "confirmed" : reader.optimization.priorityLevel === "medium" ? "review" : "missing"}>
+                        Priority {reader.optimization.priorityLevel}
+                      </ReaderStatusBadge>
+                    </div>
+                  </div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{reader.optimization.explanation}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "grid", gap: "10px" }}>
+                      <div style={{ fontSize: "12px", color: "#1d4ed8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Recommendations</div>
+                      {reader.optimization.recommendations.slice(0, 2).map((item) => (
+                        <div key={item.title} style={{ background: "#ffffff", border: "1px solid #dbeafe", borderRadius: "12px", padding: "10px 12px", display: "grid", gap: "6px" }}>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
+                          <div style={{ color: "#475569", lineHeight: "1.6" }}>{item.message}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Risk And Opportunity</div>
+                      {reader.optimization.risks.slice(0, 2).map((item) => (
+                        <div key={`risk-${item.type}`} style={{ color: "#475569", lineHeight: "1.6" }}>
+                          <strong style={{ color: "#0f172a" }}>{item.type.replace(/_/g, " ")}:</strong> {item.message}
+                        </div>
+                      ))}
+                      {reader.optimization.opportunities.slice(0, 2).map((item) => (
+                        <div key={`opportunity-${item.type}`} style={{ color: "#475569", lineHeight: "1.6" }}>
+                          <strong style={{ color: "#0f172a" }}>{item.type.replace(/_/g, " ")}:</strong> {item.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {reader.issueGroups?.length > 0 ? (
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Confidence And Missing Data
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                    {reader.issueGroups.slice(0, 3).map((group) => (
+                      <div key={group.title} style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fed7aa", display: "grid", gap: "8px" }}>
+                        <div style={{ fontWeight: 700, color: "#9a3412" }}>{group.title}</div>
+                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#7c2d12" }}>
+                          {group.items.slice(0, 4).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
           <div style={{ minWidth: 0 }}>

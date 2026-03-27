@@ -3,6 +3,8 @@ import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
+import { IulReaderPanel } from "../features/iul-reader/IulReaderPanel.jsx";
+import { buildIulReaderModel } from "../features/iul-reader/readerModel.js";
 import {
   buildPolicyInterpretation,
   buildPolicyReviewReport,
@@ -27,6 +29,7 @@ import {
   getVaultedPolicyDocuments,
   getVaultedPolicySnapshots,
   getVaultedPolicyStatements,
+  rehydrateVaultedPolicyBundle,
 } from "../lib/supabase/vaultedPolicies";
 
 function actionButtonStyle(primary = false) {
@@ -595,6 +598,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     [comparisonRow]
   );
   const latestAnalytics = bundle.analytics[0] || null;
+  const readerResults = useMemo(() => rehydrateVaultedPolicyBundle(bundle), [bundle]);
   const normalizedPolicy = latestAnalytics?.normalized_policy || {};
   const normalizedAnalytics = latestAnalytics?.normalized_analytics || {};
   const chargeSummary = latestAnalytics?.normalized_analytics?.charge_summary || {};
@@ -666,6 +670,20 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
         policyType: lifePolicy?.meta?.policyType || "unknown",
       }),
     [iulV2, lifePolicy, normalizedAnalytics, normalizedPolicy, statementTimeline]
+  );
+  const showUnifiedIulReader = ["iul", "ul"].includes(lifePolicy?.meta?.policyType);
+  const iulReader = useMemo(
+    () =>
+      showUnifiedIulReader
+        ? buildIulReaderModel({
+            ...readerResults,
+            iulV2,
+            optimizationAnalysis,
+            policyInterpretation,
+            groupedIssues,
+          })
+        : null,
+    [groupedIssues, iulV2, optimizationAnalysis, policyInterpretation, readerResults, showUnifiedIulReader]
   );
   const reviewReport = useMemo(
     () =>
@@ -845,6 +863,11 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             </div>
           </section>
 
+          {showUnifiedIulReader && iulReader ? (
+            <IulReaderPanel reader={iulReader} results={readerResults} />
+          ) : null}
+
+          {!showUnifiedIulReader ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px", alignItems: "start" }}>
             <SectionCard
               title="Cost of Insurance"
@@ -959,7 +982,9 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             </SectionCard>
             </div>
           </div>
+          ) : null}
 
+          {!showUnifiedIulReader ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px", alignItems: "start" }}>
             <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
             <SectionCard title="Charge Breakdown" subtitle="Visible charge components from the current vaulted analytics bundle.">
@@ -1031,7 +1056,9 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             </SectionCard>
             </div>
           </div>
+          ) : null}
 
+          {!showUnifiedIulReader ? (
           <div ref={(node) => setSectionRef("interpretation", node)} style={getSectionHighlight("interpretation")}>
           <SectionCard
             title="Policy Interpretation"
@@ -1165,6 +1192,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             </div>
           </SectionCard>
           </div>
+          ) : null}
 
           <SectionCard
             title="Ask Vault AI"
