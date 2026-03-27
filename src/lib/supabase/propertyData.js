@@ -37,6 +37,7 @@ import {
   mapCreationError,
   rollbackCreatedAsset,
   resolveUserAndHouseholdDependencies,
+  traceModuleCreation,
 } from "./platformCreation";
 import {
   getAssetById,
@@ -612,6 +613,12 @@ export async function createPropertyWithDependencies(payload) {
   });
 
   if (propertyResult.error || !propertyResult.data?.id) {
+    traceModuleCreation("property", "module_record_creation_failed", {
+      userId: user.id,
+      householdId: household.id,
+      assetId: asset.id,
+      error: propertyResult.error?.message || null,
+    });
     await rollbackCreatedAsset({
       context: "property",
       assetId: asset.id,
@@ -638,6 +645,13 @@ export async function createPropertyWithDependencies(payload) {
       ),
     };
   }
+
+  traceModuleCreation("property", "created_module_record", {
+    userId: user.id,
+    householdId: household.id,
+    assetId: asset.id,
+    propertyId: propertyResult.data.id,
+  });
 
   return {
     data: {

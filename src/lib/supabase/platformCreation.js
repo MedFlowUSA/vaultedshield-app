@@ -11,6 +11,20 @@ function warnCreation(context, message, details = {}) {
   }
 }
 
+function traceCreation(context, stage, details = {}) {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  const sanitizedDetails = Object.fromEntries(
+    Object.entries(details).filter(([, value]) => value !== undefined)
+  );
+
+  console.groupCollapsed(`[VaultedShield] ${context} :: ${stage}`);
+  console.table(sanitizedDetails);
+  console.groupEnd();
+}
+
 /**
  * Map raw auth / database / RLS failures into UI-safe creation messages.
  *
@@ -106,6 +120,12 @@ export async function resolveUserAndHouseholdDependencies({
     resolvedHousehold = householdResult.data;
   }
 
+  traceCreation(context, "resolved_dependencies", {
+    userId: authResult.data.id,
+    preferredHouseholdId: preferredHouseholdId || null,
+    householdId: resolvedHousehold.id,
+  });
+
   return {
     data: {
       user: authResult.data,
@@ -178,6 +198,12 @@ export async function createAssetWithDependencies({
     };
   }
 
+  traceCreation(context, "created_asset", {
+    userId: user.id,
+    householdId: household.id,
+    assetId: assetResult.data.id,
+  });
+
   return {
     data: {
       user,
@@ -217,7 +243,17 @@ export async function rollbackCreatedAsset({
       error: rollbackResult.error?.message || null,
       ...details,
     });
+    return;
   }
+
+  traceCreation(context, "rolled_back_asset", {
+    assetId,
+    ...details,
+  });
+}
+
+export function traceModuleCreation(context, stage, details = {}) {
+  traceCreation(context, stage, details);
 }
 
 /**

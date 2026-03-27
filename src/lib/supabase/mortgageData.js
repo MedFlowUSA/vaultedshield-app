@@ -18,6 +18,7 @@ import {
   createAssetWithDependencies,
   mapCreationError,
   rollbackCreatedAsset,
+  traceModuleCreation,
 } from "./platformCreation";
 import {
   getAssetById,
@@ -452,6 +453,12 @@ export async function createMortgageLoanWithDependencies(payload) {
   });
 
   if (loanResult.error || !loanResult.data?.id) {
+    traceModuleCreation("mortgage loan", "module_record_creation_failed", {
+      userId: user.id,
+      householdId: household.id,
+      assetId: asset.id,
+      error: loanResult.error?.message || null,
+    });
     await rollbackCreatedAsset({
       context: "mortgage loan",
       assetId: asset.id,
@@ -478,6 +485,13 @@ export async function createMortgageLoanWithDependencies(payload) {
       ),
     };
   }
+
+  traceModuleCreation("mortgage loan", "created_module_record", {
+    userId: user.id,
+    householdId: household.id,
+    assetId: asset.id,
+    mortgageLoanId: loanResult.data.id,
+  });
 
   return {
     data: {
