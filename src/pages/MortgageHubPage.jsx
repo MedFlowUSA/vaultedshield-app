@@ -71,9 +71,9 @@ export default function MortgageHubPage({ onNavigate }) {
     };
   }, [householdState.loading, householdState.context.householdId]);
 
-  async function refreshMortgageLoans() {
-    if (!householdState.context.householdId) return;
-    const result = await listMortgageLoans(householdState.context.householdId);
+  async function refreshMortgageLoans(targetHouseholdId = householdState.context.householdId) {
+    if (!targetHouseholdId) return;
+    const result = await listMortgageLoans(targetHouseholdId);
     setMortgageLoans(result.data || []);
     setLoadError(result.error?.message || "");
   }
@@ -100,9 +100,16 @@ export default function MortgageHubPage({ onNavigate }) {
 
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
+    if (creating) return;
     if (!canCreateMortgage || !form.mortgage_loan_type_key) {
       if (!householdState.context.currentAuthUserId) {
         setCreateError("Please sign in before creating a mortgage loan.");
+      }
+      if (import.meta.env.DEV && !canCreateMortgage) {
+        console.warn("[VaultedShield] mortgage creation attempted before household ownership was resolved in the UI.", {
+          householdId: householdState.context.householdId || null,
+          ownershipMode: householdState.context.ownershipMode || "unknown",
+        });
       }
       return;
     }
@@ -134,7 +141,7 @@ export default function MortgageHubPage({ onNavigate }) {
       return;
     }
 
-    await refreshMortgageLoans();
+    await refreshMortgageLoans(result.data?.householdId || householdState.context.householdId);
     setForm(DEFAULT_FORM);
     setCreating(false);
   }

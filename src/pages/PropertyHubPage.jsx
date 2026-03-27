@@ -11,7 +11,7 @@ import {
   listPropertyTypes,
 } from "../lib/domain/property";
 import {
-  createPropertyAssetWithRecord,
+  createPropertyWithDependencies,
   listProperties,
 } from "../lib/supabase/propertyData";
 
@@ -42,10 +42,14 @@ export default function PropertyHubPage({ onNavigate }) {
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
+  const canCreateProperty =
+    Boolean(householdState.context.currentAuthUserId) && !householdState.loading;
 
   useEffect(() => {
     if (householdState.loading) return;
     if (!householdState.context.householdId) {
+      setProperties([]);
+      setLoadError("");
       setLoading(false);
       return;
     }
@@ -66,9 +70,9 @@ export default function PropertyHubPage({ onNavigate }) {
     };
   }, [householdState.loading, householdState.context.householdId]);
 
-  async function refreshPropertyRecords() {
-    if (!householdState.context.householdId) return;
-    const result = await listProperties(householdState.context.householdId);
+  async function refreshPropertyRecords(targetHouseholdId = householdState.context.householdId) {
+    if (!targetHouseholdId) return;
+    const result = await listProperties(targetHouseholdId);
     setProperties(result.data || []);
     setLoadError(result.error?.message || "");
   }
@@ -94,12 +98,24 @@ export default function PropertyHubPage({ onNavigate }) {
 
   async function handleCreateProperty(event) {
     event.preventDefault();
-    if (!householdState.context.householdId || !form.property_type_key) return;
+    if (creating) return;
+    if (!canCreateProperty || !form.property_type_key) {
+      if (!householdState.context.currentAuthUserId) {
+        setCreateError("Please sign in again before creating a property.");
+      }
+      if (import.meta.env.DEV && !canCreateProperty) {
+        console.warn("[VaultedShield] property creation attempted before household ownership was resolved in the UI.", {
+          householdId: householdState.context.householdId || null,
+          ownershipMode: householdState.context.ownershipMode || "unknown",
+        });
+      }
+      return;
+    }
 
     setCreating(true);
     setCreateError("");
-    const result = await createPropertyAssetWithRecord({
-      household_id: householdState.context.householdId,
+    const result = await createPropertyWithDependencies({
+      household_id: householdState.context.householdId || null,
       property_type_key: form.property_type_key,
       property_name: form.property_name,
       property_address: form.property_address,
@@ -111,12 +127,19 @@ export default function PropertyHubPage({ onNavigate }) {
     });
 
     if (result.error) {
-      setCreateError(result.error.message || "Property record could not be created.");
+      if (import.meta.env.DEV) {
+        console.warn("[VaultedShield] property creation failed in PropertyHubPage", {
+          error: result.error.message || null,
+          householdId: householdState.context.householdId || null,
+          authUserId: householdState.context.currentAuthUserId || null,
+        });
+      }
+      setCreateError(result.error.message || "We could not create this property record yet. Please try again.");
       setCreating(false);
       return;
     }
 
-    await refreshPropertyRecords();
+    await refreshPropertyRecords(result.data?.householdId || householdState.context.householdId);
     setForm(DEFAULT_FORM);
     setCreating(false);
   }
@@ -215,11 +238,21 @@ export default function PropertyHubPage({ onNavigate }) {
                 <option value="inactive">inactive</option>
                 <option value="sold">sold</option>
               </select>
-              <button type="submit" disabled={creating || !householdState.context.householdId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+              <button type="submit" disabled={creating || !canCreateProperty} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: creating || !canCreateProperty ? "not-allowed" : "pointer", fontWeight: 700, opacity: creating || !canCreateProperty ? 0.7 : 1 }}>
                 {creating ? "Creating Property..." : "Create Property"}
               </button>
               {createError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{createError}</div> : null}
               {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
+              {!householdState.context.currentAuthUserId && !householdState.loading ? (
+                <div style={{ color: "#991b1b", fontSize: "14px" }}>
+                  Please sign in again before creating a property.
+                </div>
+              ) : null}
+              {householdState.context.currentAuthUserId && !canCreateProperty ? (
+                <div style={{ color: "#991b1b", fontSize: "14px" }}>
+                  We could not initialize your household profile yet. Please try again.
+                </div>
+              ) : null}
             </form>
           </SectionCard>
 

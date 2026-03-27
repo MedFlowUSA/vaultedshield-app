@@ -32,16 +32,44 @@ import {
   updatePropertyAddressFacts,
 } from "./propertyValuationData";
 import { getSupabaseClient } from "./client";
-import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
+import {
+  createAssetWithDependencies,
+  mapCreationError,
+  rollbackCreatedAsset,
+  resolveUserAndHouseholdDependencies,
+} from "./platformCreation";
+import {
+  getAssetById,
+  uploadGenericAssetDocument,
+} from "./platformData";
 import {
   appendHouseholdScope,
   buildScopedAccessError,
+  normalizePlatformScope,
 } from "./platformScope";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
   if (!supabase) return { supabase: null, error: new Error("Supabase not configured") };
   return { supabase, error: null };
+}
+
+function warnPropertyIsolation(message, context = {}) {
+  if (import.meta.env.DEV) {
+    console.warn(`[VaultedShield] ${message}`, context);
+  }
+}
+
+function warnNullOwnerPropertyHousehold(property) {
+  if (!import.meta.env.DEV || !property?.id || property?.households?.owner_user_id) return;
+  warnPropertyIsolation("property row belongs to a household with owner_user_id = null", {
+    propertyId: property.id,
+    householdId: property.household_id || null,
+  });
+}
+
+function getScopedHouseholdId(scopeOverride = null) {
+  return normalizePlatformScope(scopeOverride).householdId || null;
 }
 
 async function insertRecord(table, payload) {
@@ -145,9 +173,31 @@ function buildPropertyAssetPayload(payload = {}) {
 }
 
 export async function createProperty(payload) {
+  const dependencyResult = await resolveUserAndHouseholdDependencies({
+    preferredHouseholdId: payload?.household_id || null,
+    context: "property record",
+  });
+  if (dependencyResult.error || !dependencyResult.data?.household?.id) {
+    warnPropertyIsolation("property creation was attempted before household ownership was resolved.", {
+      householdId: payload?.household_id || null,
+      error: dependencyResult.error?.message || null,
+    });
+    return {
+      data: null,
+      error: new Error(
+        mapCreationError(
+          dependencyResult.error,
+          "We could not initialize your household profile yet. Please try again.",
+          "property"
+        )
+      ),
+    };
+  }
+
+  const resolvedHouseholdId = dependencyResult.data.household.id;
   const defaults = buildPropertyDefaults(payload);
   return insertRecord("properties", {
-    household_id: payload.household_id,
+    household_id: resolvedHouseholdId,
     asset_id: payload.asset_id,
     property_type_key: payload.property_type_key,
     property_name: defaults.propertyName,
@@ -178,22 +228,39 @@ export async function createProperty(payload) {
 }
 
 export async function getPropertyById(propertyId, scopeOverride = null) {
+  if (!getScopedHouseholdId(scopeOverride)) {
+    warnPropertyIsolation("blocked property read without household scope", { propertyId });
+    return { data: null, error: buildScopedAccessError("Property") };
+  }
   return maybeSingleRecord("properties", appendHouseholdScope([{ column: "id", value: propertyId }], scopeOverride), {
     select:
-      "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+      "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata), households(owner_user_id)",
   });
 }
 
 export async function listProperties(householdId) {
-  return listRecords(
+  if (!householdId) {
+    warnPropertyIsolation("blocked property list without household scope");
+    return { data: [], error: null };
+  }
+  const result = await listRecords(
     "properties",
     householdId ? [{ column: "household_id", value: householdId }] : [],
     {
       select:
-        "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+        "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata), households(owner_user_id)",
       orderBy: "updated_at",
     }
   );
+  (result.data || []).forEach((row) => warnNullOwnerPropertyHousehold(row));
+  const mismatchedRows = (result.data || []).filter((row) => row.household_id && row.household_id !== householdId);
+  if (mismatchedRows.length > 0) {
+    warnPropertyIsolation("property rows loaded outside requested household scope", {
+      householdId,
+      propertyIds: mismatchedRows.map((row) => row.id),
+    });
+  }
+  return result;
 }
 
 export async function createPropertyDocument(payload) {
@@ -392,6 +459,11 @@ export async function uploadPropertyDocument({
 }
 
 export async function getPropertyBundle(propertyId, scopeOverride = null) {
+  if (!getScopedHouseholdId(scopeOverride)) {
+    warnPropertyIsolation("blocked property bundle load without household scope", { propertyId });
+    return { data: null, error: buildScopedAccessError("Property") };
+  }
+  const scopedHouseholdId = getScopedHouseholdId(scopeOverride);
   const [propertyResult, propertyDocumentsResult, propertySnapshotsResult, propertyAnalyticsResult, stackResult, latestValuationResult, valuationHistoryResult] =
     await Promise.all([
       getPropertyById(propertyId, scopeOverride),
@@ -436,6 +508,20 @@ export async function getPropertyBundle(propertyId, scopeOverride = null) {
     latestValuationCompsResult.error ||
     propertyEquityResult.error ||
     null;
+
+  if (!error && propertyResult.data?.household_id && propertyResult.data.household_id !== scopedHouseholdId) {
+    warnPropertyIsolation("loaded property row belongs to a different household than the active scope", {
+      propertyId,
+      scopedHouseholdId,
+      propertyHouseholdId: propertyResult.data.household_id,
+    });
+    return {
+      data: null,
+      error: buildScopedAccessError("Property"),
+    };
+  }
+
+  warnNullOwnerPropertyHousehold(propertyResult.data);
 
   return {
     data: error
@@ -483,34 +569,80 @@ export async function runPropertyVirtualValuation(propertyId, scopeOverride = nu
 }
 
 export async function createPropertyAssetWithRecord(payload) {
-  if (!payload?.household_id || !payload?.property_type_key) {
+  return createPropertyWithDependencies(payload);
+}
+
+export async function createPropertyWithDependencies(payload) {
+  if (!payload?.property_type_key) {
     return {
       data: null,
-      error: new Error("household_id and property_type_key are required"),
+      error: new Error("A property type is required before a property can be created."),
     };
   }
 
-  const assetResult = await createAsset(buildPropertyAssetPayload(payload));
-  if (assetResult.error || !assetResult.data?.id) {
-    return { data: null, error: assetResult.error || new Error("Asset creation failed") };
+  const assetDependencyResult = await createAssetWithDependencies({
+    context: "property",
+    preferredHouseholdId: payload?.household_id || null,
+    payload,
+    buildAssetPayload: (resolvedPayload) => buildPropertyAssetPayload(resolvedPayload),
+  });
+  if (assetDependencyResult.error || !assetDependencyResult.data?.asset?.id) {
+    warnPropertyIsolation("property asset dependency resolution failed", {
+      householdId: payload?.household_id || null,
+      error: assetDependencyResult.error?.message || null,
+    });
+    return {
+      data: null,
+      error: new Error(
+        mapCreationError(
+          assetDependencyResult.error,
+          "We could not create the base asset for this property. Please try again.",
+          "property"
+        )
+      ),
+    };
   }
+
+  const { user, household, asset } = assetDependencyResult.data;
 
   const propertyResult = await createProperty({
     ...payload,
-    asset_id: assetResult.data.id,
+    household_id: household.id,
+    asset_id: asset.id,
   });
 
   if (propertyResult.error || !propertyResult.data?.id) {
-    await deleteAssetById(assetResult.data.id);
+    await rollbackCreatedAsset({
+      context: "property",
+      assetId: asset.id,
+      deleteAsset: deleteAssetById,
+      details: {
+        householdId: household.id,
+        authUserId: user.id,
+      },
+    });
+    warnPropertyIsolation("property record creation failed after asset creation", {
+      householdId: household.id,
+      assetId: asset.id,
+      authUserId: user.id,
+      error: propertyResult.error?.message || null,
+    });
     return {
       data: null,
-      error: propertyResult.error || new Error("Property record creation failed"),
+      error: new Error(
+        mapCreationError(
+          propertyResult.error,
+          "We could not create this property record yet. Please try again.",
+          "property"
+        )
+      ),
     };
   }
 
   return {
     data: {
-      asset: assetResult.data,
+      householdId: household.id,
+      asset,
       property: propertyResult.data,
     },
     error: null,
@@ -518,9 +650,13 @@ export async function createPropertyAssetWithRecord(payload) {
 }
 
 export async function getPropertyForAsset(assetId, scopeOverride = null) {
+  if (!getScopedHouseholdId(scopeOverride)) {
+    warnPropertyIsolation("blocked property asset link read without household scope", { assetId });
+    return { data: null, error: buildScopedAccessError("Property asset link") };
+  }
   return maybeSingleRecord("properties", appendHouseholdScope([{ column: "asset_id", value: assetId }], scopeOverride), {
     select:
-      "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+      "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata), households(owner_user_id)",
   });
 }
 

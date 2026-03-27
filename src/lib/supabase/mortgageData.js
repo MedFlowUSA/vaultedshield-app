@@ -15,11 +15,12 @@ import {
 } from "./propertyStackLinks";
 import { getSupabaseClient } from "./client";
 import {
-  createAsset,
+  createAssetWithDependencies,
+  mapCreationError,
+  rollbackCreatedAsset,
+} from "./platformCreation";
+import {
   getAssetById,
-  getCurrentUserOrThrow,
-  getOrCreateCurrentHousehold,
-  getOwnedHouseholdById,
   uploadGenericAssetDocument,
 } from "./platformData";
 import {
@@ -37,21 +38,6 @@ function warnMortgageCreation(message, context = {}) {
   if (import.meta.env.DEV) {
     console.warn(`[VaultedShield] ${message}`, context);
   }
-}
-
-function mapMortgageCreationError(error, fallbackMessage) {
-  const message = String(error?.message || error?.details || "").toLowerCase();
-  if (!message) return fallbackMessage;
-  if (message.includes("owner_user_id") && message.includes("null value")) {
-    return "We could not initialize your household profile yet. Please try again.";
-  }
-  if (message.includes("row-level security")) {
-    return "We could not save this mortgage inside your current household yet. Please try again.";
-  }
-  if (message.includes("signed in") || message.includes("authenticated")) {
-    return "Please sign in again before creating a mortgage loan.";
-  }
-  return fallbackMessage;
 }
 
 async function insertRecord(table, payload) {
@@ -423,17 +409,6 @@ export async function createMortgageAssetWithLoan(payload) {
 }
 
 export async function createMortgageLoanWithDependencies(payload) {
-  const authResult = await getCurrentUserOrThrow();
-  if (authResult.error || !authResult.data?.id) {
-    warnMortgageCreation("mortgage creation blocked because no authenticated user was available", {
-      householdId: payload?.household_id || null,
-    });
-    return {
-      data: null,
-      error: new Error("Please sign in again before creating a mortgage loan."),
-    };
-  }
-
   if (!payload?.mortgage_loan_type_key) {
     return {
       data: null,
@@ -441,94 +416,73 @@ export async function createMortgageLoanWithDependencies(payload) {
     };
   }
 
-  let resolvedHouseholdId = payload?.household_id || null;
-  if (resolvedHouseholdId) {
-    const ownedHouseholdResult = await getOwnedHouseholdById(resolvedHouseholdId, authResult.data.id);
-    if (ownedHouseholdResult.error) {
-      return {
-        data: null,
-        error: new Error(
-          mapMortgageCreationError(
-            ownedHouseholdResult.error,
-            "We could not verify your household profile yet. Please try again."
-          )
-        ),
-      };
-    }
-    if (!ownedHouseholdResult.data?.id) {
-      warnMortgageCreation("mortgage creation attempted with a household outside the current user scope", {
-        householdId: resolvedHouseholdId,
-        authUserId: authResult.data.id,
-      });
-      resolvedHouseholdId = null;
-    }
-  }
-
-  if (!resolvedHouseholdId) {
-    const householdResult = await getOrCreateCurrentHousehold();
-    if (householdResult.error || !householdResult.data?.id) {
-      warnMortgageCreation("mortgage creation failed while initializing the current household", {
-        authUserId: authResult.data.id,
-        error: householdResult.error?.message || null,
-      });
-      return {
-        data: null,
-        error: new Error(
-          mapMortgageCreationError(
-            householdResult.error,
-            "We could not initialize your household profile yet. Please try again."
-          )
-        ),
-      };
-    }
-    resolvedHouseholdId = householdResult.data.id;
-  }
-
-  const resolvedPayload = {
-    ...payload,
-    household_id: resolvedHouseholdId,
-  };
-
-  const assetResult = await createAsset(buildMortgageAssetPayload(resolvedPayload));
-  if (assetResult.error || !assetResult.data?.id) {
-    warnMortgageCreation("mortgage asset creation failed", {
-      householdId: resolvedHouseholdId,
-      authUserId: authResult.data.id,
-      error: assetResult.error?.message || null,
+  const assetDependencyResult = await createAssetWithDependencies({
+    context: "mortgage loan",
+    preferredHouseholdId: payload?.household_id || null,
+    payload,
+    buildAssetPayload: (resolvedPayload) => buildMortgageAssetPayload(resolvedPayload),
+  });
+  if (assetDependencyResult.error || !assetDependencyResult.data?.asset?.id) {
+    warnMortgageCreation("mortgage asset dependency resolution failed", {
+      householdId: payload?.household_id || null,
+      error: assetDependencyResult.error?.message || null,
     });
     return {
       data: null,
       error: new Error(
-        mapMortgageCreationError(assetResult.error, "We could not create the mortgage asset record yet. Please try again.")
+        mapCreationError(
+          assetDependencyResult.error,
+          "We could not create the base asset for this mortgage loan. Please try again.",
+          "mortgage loan"
+        )
       ),
     };
   }
 
+  const {
+    user,
+    household,
+    asset,
+  } = assetDependencyResult.data;
+
   const loanResult = await createMortgageLoan({
-    ...resolvedPayload,
-    asset_id: assetResult.data.id,
+    ...payload,
+    household_id: household.id,
+    asset_id: asset.id,
   });
 
   if (loanResult.error || !loanResult.data?.id) {
-    await deleteAssetById(assetResult.data.id);
+    await rollbackCreatedAsset({
+      context: "mortgage loan",
+      assetId: asset.id,
+      deleteAsset: deleteAssetById,
+      details: {
+        householdId: household.id,
+        authUserId: user.id,
+      },
+    });
     warnMortgageCreation("mortgage loan creation failed after asset creation", {
-      householdId: resolvedHouseholdId,
-      assetId: assetResult.data.id,
-      authUserId: authResult.data.id,
+      householdId: household.id,
+      assetId: asset.id,
+      authUserId: user.id,
       error: loanResult.error?.message || null,
     });
     return {
       data: null,
       error: new Error(
-        mapMortgageCreationError(loanResult.error, "We could not create the mortgage loan yet. Please try again.")
+        mapCreationError(
+          loanResult.error,
+          "We could not save this mortgage loan. Please try again.",
+          "mortgage loan"
+        )
       ),
     };
   }
 
   return {
     data: {
-      householdId: resolvedHouseholdId,
-      asset: assetResult.data,
+      householdId: household.id,
+      asset,
       mortgageLoan: loanResult.data,
     },
     error: null,
