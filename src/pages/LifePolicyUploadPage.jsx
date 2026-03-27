@@ -106,6 +106,42 @@ function safeDevLog(label, payload) {
   }
 }
 
+function buildStageError(stageLabel, error, fallbackMessage) {
+  const baseError = error instanceof Error ? error : new Error(String(error || fallbackMessage));
+  const nextError = new Error(baseError.message || fallbackMessage);
+  nextError.analysisStage = stageLabel;
+  nextError.cause = baseError;
+  return nextError;
+}
+
+async function runAnalysisStage(stageLabel, work, fallbackMessage) {
+  try {
+    return await work();
+  } catch (error) {
+    throw buildStageError(stageLabel, error, fallbackMessage);
+  }
+}
+
+function formatAnalyzeFailure(error) {
+  const stageLabel = error?.analysisStage || "";
+  const rawMessage = String(error?.message || "").trim();
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (normalizedMessage.includes("undefined is not a function")) {
+    return stageLabel
+      ? `Life policy analysis hit a mobile compatibility issue during ${stageLabel}. Please retry after refresh.`
+      : "Life policy analysis hit a mobile compatibility issue. Please retry after refresh.";
+  }
+
+  if (rawMessage) {
+    return stageLabel ? `${rawMessage} (${stageLabel})` : rawMessage;
+  }
+
+  return stageLabel
+    ? `There was a problem during ${stageLabel}. Please retry with the same files.`
+    : "There was a problem extracting or parsing one of the selected documents.";
+}
+
 function normalizeExtractionDocument(extraction, fallbackFileName = "document") {
   const pages = ensureArray(extraction?.pages).filter((page) => typeof page === "string");
   const text = typeof extraction?.text === "string" ? extraction.text : pages.join("\n\n");
@@ -734,33 +770,49 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       let illustrationPersistenceFile = illustrationFile;
 
       if (illustrationFile) {
-        illustrationExtraction = normalizeExtractionDocument(await extractDocumentText(illustrationFile, {
-          onProgress: (progressMessage) => {
-            setExtractionStatus({
-              phase:
-                illustrationFile.type?.startsWith("image/")
-                  ? "Reading text from image..."
-                  : "Reading PDF text...",
-              progress: Math.round((progressMessage?.progress || 0) * 100),
-              currentFile: illustrationFile.name,
-              detail: "",
-            });
-          },
-        }), illustrationFile.name);
+        illustrationExtraction = normalizeExtractionDocument(
+          await runAnalysisStage(
+            "baseline extraction",
+            () =>
+              extractDocumentText(illustrationFile, {
+                onProgress: (progressMessage) => {
+                  setExtractionStatus({
+                    phase:
+                      illustrationFile.type?.startsWith("image/")
+                        ? "Reading text from image..."
+                        : "Reading PDF text...",
+                    progress: Math.round((progressMessage?.progress || 0) * 100),
+                    currentFile: illustrationFile.name,
+                    detail: "",
+                  });
+                },
+              }),
+            "We could not extract the initial policy PDF."
+          ),
+          illustrationFile.name
+        );
       } else {
         illustrationPersistenceFile = null;
-        illustrationExtraction = normalizeExtractionDocument(await extractScanSessionDocument(illustrationScan.pages, "Initial Policy", {
-          patchPage: illustrationScan.patchPage,
-          onStage: (phase, progress) => {
-            setExtractionStatus({
-              phase,
-              progress,
-              currentFile: "Initial policy scan session",
-              detail: `${illustrationScan.pages.length} page${illustrationScan.pages.length === 1 ? "" : "s"}`,
-            });
-          },
-          onProgress: setExtractionStatus,
-        }), "initial-policy-scan.jpg");
+        illustrationExtraction = normalizeExtractionDocument(
+          await runAnalysisStage(
+            "baseline scan extraction",
+            () =>
+              extractScanSessionDocument(illustrationScan.pages, "Initial Policy", {
+                patchPage: illustrationScan.patchPage,
+                onStage: (phase, progress) => {
+                  setExtractionStatus({
+                    phase,
+                    progress,
+                    currentFile: "Initial policy scan session",
+                    detail: `${illustrationScan.pages.length} page${illustrationScan.pages.length === 1 ? "" : "s"}`,
+                  });
+                },
+                onProgress: setExtractionStatus,
+              }),
+            "We could not extract the scanned initial policy pages."
+          ),
+          "initial-policy-scan.jpg"
+        );
       }
 
       if (!illustrationExtraction.text.trim() || !illustrationExtraction.pages.length) {
@@ -770,10 +822,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       }
 
       setLoadingMessage("Analyzing policy data...");
-      const baseline = parseIllustrationDocument({
+      const baseline = await runAnalysisStage("baseline parsing", () => Promise.resolve(parseIllustrationDocument({
         pages: illustrationExtraction.pages,
         fileName: illustrationFile?.name || illustrationExtraction.fileName || "initial-policy-scan.jpg",
-      });
+      })), "We could not parse the initial policy document.");
       baseline.extractionMeta = {
         source_type: illustrationExtraction.sourceType,
         ocr_confidence: illustrationExtraction.ocrConfidence,
@@ -804,34 +856,50 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
         if (input.branch === "upload" && input.file) {
           setLoadingMessage(`Extracting ${input.file.name}...`);
-          extraction = normalizeExtractionDocument(await extractDocumentText(input.file, {
-            onProgress: (progressMessage) => {
-              setExtractionStatus({
-                phase:
-                  input.file.type?.startsWith("image/")
-                    ? "Reading text from image..."
-                    : "Reading PDF text...",
-                progress: Math.round((progressMessage?.progress || 0) * 100),
-                currentFile: input.file.name,
-                detail: "",
-              });
-            },
-          }), input.file.name);
+          extraction = normalizeExtractionDocument(
+            await runAnalysisStage(
+              `statement extraction: ${input.file.name}`,
+              () =>
+                extractDocumentText(input.file, {
+                  onProgress: (progressMessage) => {
+                    setExtractionStatus({
+                      phase:
+                        input.file.type?.startsWith("image/")
+                          ? "Reading text from image..."
+                          : "Reading PDF text...",
+                      progress: Math.round((progressMessage?.progress || 0) * 100),
+                      currentFile: input.file.name,
+                      detail: "",
+                    });
+                  },
+                }),
+              `We could not extract ${input.file.name}.`
+            ),
+            input.file.name
+          );
           fileName = input.file.name;
           persistenceFile = input.file;
         } else if (input.branch === "scan" && input.pages?.length) {
-          extraction = normalizeExtractionDocument(await extractScanSessionDocument(input.pages, "Annual Statement", {
-            patchPage: statementScan.patchPage,
-            onStage: (phase, progress) => {
-              setExtractionStatus({
-                phase,
-                progress,
-                currentFile: "Annual statement scan session",
-                detail: `${input.pages.length} page${input.pages.length === 1 ? "" : "s"}`,
-              });
-            },
-            onProgress: setExtractionStatus,
-          }), buildSessionFileName("Annual Statement", input.pages.length));
+          extraction = normalizeExtractionDocument(
+            await runAnalysisStage(
+              "statement scan extraction",
+              () =>
+                extractScanSessionDocument(input.pages, "Annual Statement", {
+                  patchPage: statementScan.patchPage,
+                  onStage: (phase, progress) => {
+                    setExtractionStatus({
+                      phase,
+                      progress,
+                      currentFile: "Annual statement scan session",
+                      detail: `${input.pages.length} page${input.pages.length === 1 ? "" : "s"}`,
+                    });
+                  },
+                  onProgress: setExtractionStatus,
+                }),
+              "We could not extract the scanned annual statement pages."
+            ),
+            buildSessionFileName("Annual Statement", input.pages.length)
+          );
           fileName = extraction.fileName;
         } else {
           throw new Error("No annual statement pages are ready for analysis.");
@@ -846,10 +914,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         }
 
         setLoadingMessage(`Parsing ${fileName}...`);
-        const statement = parseStatementDocument({
+        const statement = await runAnalysisStage(`statement parsing: ${fileName}`, () => Promise.resolve(parseStatementDocument({
           pages: extraction.pages,
           fileName,
-        });
+        })), `We could not parse ${fileName}.`);
         if (!statement || typeof statement !== "object") {
           throw new Error(`VaultedShield could not parse ${fileName} into a statement result.`);
         }
@@ -888,27 +956,27 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
       const sortedStatements = sortStatementsChronologically(ensureArray(statementResults));
       setLoadingMessage("Computing policy analytics...");
-      const analytics = computeDerivedAnalytics(baseline, sortedStatements);
-      const vaultAiSummary = buildVaultAiSummary(baseline, sortedStatements, analytics);
-      buildCashValueGrowthExplanation(baseline, sortedStatements, analytics);
-      buildChargeAnalysisExplanation(sortedStatements, analytics);
-      buildStrategyReviewNote(sortedStatements, analytics);
-      buildVaultAiPolicyExplanation(baseline, sortedStatements, analytics);
-      buildPolicyRecord({
+      const analytics = await runAnalysisStage("analytics computation", () => Promise.resolve(computeDerivedAnalytics(baseline, sortedStatements)), "We could not compute policy analytics from the uploaded files.");
+      const vaultAiSummary = await runAnalysisStage("vault summary generation", () => Promise.resolve(buildVaultAiSummary(baseline, sortedStatements, analytics)), "We could not generate the policy summary from the uploaded files.");
+      await runAnalysisStage("growth explanation", () => Promise.resolve(buildCashValueGrowthExplanation(baseline, sortedStatements, analytics)), "We could not build the growth explanation.");
+      await runAnalysisStage("charge explanation", () => Promise.resolve(buildChargeAnalysisExplanation(sortedStatements, analytics)), "We could not build the charge explanation.");
+      await runAnalysisStage("strategy review", () => Promise.resolve(buildStrategyReviewNote(sortedStatements, analytics)), "We could not build the strategy review.");
+      await runAnalysisStage("policy explanation", () => Promise.resolve(buildVaultAiPolicyExplanation(baseline, sortedStatements, analytics)), "We could not build the policy explanation.");
+      await runAnalysisStage("policy record assembly", () => Promise.resolve(buildPolicyRecord({
         baseline,
         statements: sortedStatements,
         vaultAiSummary,
-      });
+      })), "We could not assemble the policy record from the extracted data.");
 
-      const intelligence = buildPolicyIntelligence({
+      const intelligence = await runAnalysisStage("intelligence assembly", () => Promise.resolve(buildPolicyIntelligence({
         baseline,
         statements: sortedStatements,
         legacyAnalytics: analytics,
         vaultAiSummary,
-      });
+      })), "We could not assemble the insurance intelligence output.");
 
       setLoadingMessage("Saving policy record...");
-      const persistenceStatus = await persistVaultedPolicyAnalysis({
+      const persistenceStatus = await runAnalysisStage("policy persistence", () => persistVaultedPolicyAnalysis({
         normalizedPolicy: intelligence.normalizedPolicy,
         normalizedAnalytics: intelligence.normalizedAnalytics,
         completenessAssessment: intelligence.completenessAssessment,
@@ -926,7 +994,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           guestFallbackActive: debug.sharedFallbackActive,
           source: "life_policy_upload_page",
         },
-      });
+      }), "We could not save the analyzed policy record.");
 
       setSaveStatus({
         succeeded: Boolean(persistenceStatus?.succeeded),
@@ -947,10 +1015,15 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         errorSummary: persistenceStatus?.errorSummary || "",
       });
     } catch (analysisError) {
-      setError(
-        analysisError?.message ||
-          "There was a problem extracting or parsing one of the selected documents."
-      );
+      if (import.meta.env.DEV) {
+        safeDevLog("[VaultedShield] life policy analysis failure", {
+          stage: analysisError?.analysisStage || "unknown",
+          message: analysisError?.message || null,
+          stack: analysisError?.stack || null,
+          causeMessage: analysisError?.cause?.message || null,
+        });
+      }
+      setError(formatAnalyzeFailure(analysisError));
     } finally {
       setLoading(false);
       setLoadingMessage("");
