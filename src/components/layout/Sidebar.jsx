@@ -23,16 +23,21 @@ export default function Sidebar({
         color: "#e2e8f0",
         minHeight: isDrawer ? "100dvh" : "100vh",
         height: isDrawer ? "100dvh" : "auto",
-        padding: isDrawer ? "22px 16px 28px" : "28px 18px",
+        padding: isDrawer
+          ? "max(22px, calc(env(safe-area-inset-top, 0px) + 12px)) 16px max(28px, calc(env(safe-area-inset-bottom, 0px) + 16px))"
+          : "28px 18px",
         boxSizing: "border-box",
         position: isDrawer ? "fixed" : "sticky",
         top: 0,
         left: 0,
-        zIndex: isDrawer ? 40 : "auto",
+        bottom: isDrawer ? 0 : "auto",
+        zIndex: isDrawer ? 80 : "auto",
         transform: isDrawer ? (isOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-        transition: isDrawer ? "transform 180ms ease" : "none",
+        transition: isDrawer ? "transform 220ms ease, box-shadow 220ms ease" : "none",
         overflowY: "auto",
         boxShadow: isDrawer ? "0 24px 60px rgba(2, 6, 23, 0.42)" : "none",
+        overscrollBehavior: isDrawer ? "contain" : "auto",
+        WebkitOverflowScrolling: isDrawer ? "touch" : "auto",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>

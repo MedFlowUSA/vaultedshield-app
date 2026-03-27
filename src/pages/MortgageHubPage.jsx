@@ -11,10 +11,10 @@ import {
   listMortgageLoanTypes,
 } from "../lib/domain/mortgage";
 import {
-  createMortgageAssetWithLoan,
+  createMortgageLoanWithDependencies,
   listMortgageLoans,
 } from "../lib/supabase/mortgageData";
-import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 
 const MORTGAGE_LOAN_TYPES = listMortgageLoanTypes();
 const MORTGAGE_LENDERS = listMortgageLenders();
@@ -38,13 +38,15 @@ function getStatusTone(status) {
 }
 
 export default function MortgageHubPage({ onNavigate }) {
-  const householdState = usePlatformHousehold();
+  const { householdState } = usePlatformShellData();
   const [mortgageLoans, setMortgageLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
+  const canCreateMortgage =
+    Boolean(householdState.context.currentAuthUserId) && !householdState.loading;
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -98,12 +100,17 @@ export default function MortgageHubPage({ onNavigate }) {
 
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
-    if (!householdState.context.householdId || !form.mortgage_loan_type_key) return;
+    if (!canCreateMortgage || !form.mortgage_loan_type_key) {
+      if (!householdState.context.currentAuthUserId) {
+        setCreateError("Please sign in before creating a mortgage loan.");
+      }
+      return;
+    }
 
     setCreating(true);
     setCreateError("");
-    const result = await createMortgageAssetWithLoan({
-      household_id: householdState.context.householdId,
+    const result = await createMortgageLoanWithDependencies({
+      household_id: householdState.context.householdId || null,
       mortgage_loan_type_key: form.mortgage_loan_type_key,
       loan_name: form.loan_name,
       property_address: form.property_address,
@@ -115,7 +122,14 @@ export default function MortgageHubPage({ onNavigate }) {
     });
 
     if (result.error) {
-      setCreateError(result.error.message || "Mortgage loan could not be created.");
+      if (import.meta.env.DEV) {
+        console.warn("[VaultedShield] mortgage creation failed in MortgageHubPage", {
+          error: result.error.message || null,
+          householdId: householdState.context.householdId || null,
+          authUserId: householdState.context.currentAuthUserId || null,
+        });
+      }
+      setCreateError(result.error.message || "We could not create this mortgage loan yet. Please try again.");
       setCreating(false);
       return;
     }
@@ -229,11 +243,21 @@ export default function MortgageHubPage({ onNavigate }) {
                 <option value="paid_off">paid_off</option>
                 <option value="closed">closed</option>
               </select>
-              <button type="submit" disabled={creating || !householdState.context.householdId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+              <button type="submit" disabled={creating || !canCreateMortgage} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: creating || !canCreateMortgage ? "not-allowed" : "pointer", fontWeight: 700, opacity: creating || !canCreateMortgage ? 0.7 : 1 }}>
                 {creating ? "Creating Mortgage Loan..." : "Create Mortgage Loan"}
               </button>
               {createError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{createError}</div> : null}
               {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
+              {!householdState.context.currentAuthUserId && !householdState.loading ? (
+                <div style={{ color: "#991b1b", fontSize: "14px" }}>
+                  Please sign in before creating a mortgage loan.
+                </div>
+              ) : null}
+              {householdState.context.currentAuthUserId && !canCreateMortgage ? (
+                <div style={{ color: "#991b1b", fontSize: "14px" }}>
+                  We could not initialize your household profile yet. Please try again.
+                </div>
+              ) : null}
             </form>
           </SectionCard>
 

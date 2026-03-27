@@ -81,6 +81,24 @@ function getClientOrError() {
 
 const HOUSEHOLD_CONTEXT_KEY = "vaultedshield-current-household-id";
 
+function buildEmptyListResult() {
+  return { data: [], error: null };
+}
+
+function warnMissingHouseholdScope(label) {
+  if (import.meta.env.DEV) {
+    console.warn(`[VaultedShield] prevented unscoped household query for ${label}.`);
+  }
+}
+
+function warnNullOwnerHousehold(label, household) {
+  if (!import.meta.env.DEV || !household?.id || household.owner_user_id) return;
+  console.warn(`[VaultedShield] ${label} loaded with owner_user_id = null.`, {
+    householdId: household.id,
+    householdName: household.household_name || null,
+  });
+}
+
 function readStoredHouseholdId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(HOUSEHOLD_CONTEXT_KEY);
@@ -223,17 +241,22 @@ export async function listHouseholds(ownerUserId = null) {
   return listRecords("households", filters, { orderBy: "updated_at" });
 }
 
-async function listSharedHouseholds() {
-  return listRecords("households", [{ column: "owner_user_id", operator: "is", value: null }], {
-    orderBy: "updated_at",
-  });
-}
-
 export async function createHousehold(payload) {
+  if (!payload?.owner_user_id) {
+    if (import.meta.env.DEV) {
+      console.warn("[VaultedShield] blocked household creation without owner_user_id.", {
+        householdName: payload?.household_name || null,
+      });
+    }
+    return {
+      data: null,
+      error: new Error("Authenticated household ownership is required before a household can be created."),
+    };
+  }
   return insertRecord("households", {
     household_name: payload.household_name,
     household_status: payload.household_status || "active",
-    owner_user_id: payload.owner_user_id || null,
+    owner_user_id: payload.owner_user_id,
     notes: payload.notes || null,
     metadata: payload.metadata || {},
   });
@@ -285,105 +308,101 @@ async function findHouseholdForAuthUser(authUser) {
   };
 }
 
+export async function getOwnedHouseholdById(householdId, ownerUserId) {
+  const { supabase, error } = getClientOrError();
+  if (error) return { data: null, error };
+  if (!householdId || !ownerUserId) {
+    return { data: null, error: new Error("householdId and ownerUserId are required") };
+  }
+
+  const { data, error: queryError } = await supabase
+    .from("households")
+    .select("*")
+    .eq("id", householdId)
+    .eq("owner_user_id", ownerUserId)
+    .maybeSingle();
+
+  return {
+    data: data || null,
+    error: normalizePlatformQueryError("households", queryError),
+  };
+}
+
+export async function getCurrentUserOrThrow() {
+  const { supabase, error } = getClientOrError();
+  if (error) {
+    return { data: null, error };
+  }
+
+  const { data, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    return { data: null, error: authError };
+  }
+  if (!data?.user?.id) {
+    return {
+      data: null,
+      error: new Error("You need to be signed in before creating household-scoped records."),
+    };
+  }
+
+  return { data: data.user, error: null };
+}
+
+export async function getOrCreateCurrentHousehold() {
+  const authResult = await getCurrentUserOrThrow();
+  if (authResult.error || !authResult.data?.id) {
+    return {
+      data: null,
+      error:
+        authResult.error ||
+        new Error("You need to be signed in before VaultedShield can initialize your household profile."),
+    };
+  }
+
+  const householdResult = await getOrCreateDefaultHousehold(authResult.data);
+  if (householdResult.error || !householdResult.data?.id) {
+    return {
+      data: null,
+      error:
+        householdResult.error ||
+        new Error("VaultedShield could not initialize your household profile yet."),
+    };
+  }
+
+  return {
+    data: householdResult.data,
+    error: null,
+  };
+}
+
 export async function getOrCreateDefaultHousehold(authUser = null) {
   const storedHouseholdId = readStoredHouseholdId();
 
-  if (authUser?.id) {
-    const authHouseholdResult = await findHouseholdForAuthUser(authUser);
-    if (authHouseholdResult.error) {
-      return {
-        data: null,
-        error: authHouseholdResult.error,
-        context: {
-          householdId: null,
-          source: "auth_lookup_failed",
-          bootstrapped: false,
-          ownerUserId: authUser.id,
-          ownershipMode: "authenticated_owned",
-          guestFallbackActive: false,
-        },
-      };
-    }
-
-    if (authHouseholdResult.data?.id) {
-      if (!authHouseholdResult.data.owner_user_id) {
-        await updateHousehold(authHouseholdResult.data.id, {
-          household_name: authHouseholdResult.data.household_name,
-          household_status: authHouseholdResult.data.household_status,
-          owner_user_id: authUser.id,
-          notes: authHouseholdResult.data.notes,
-          metadata: {
-            ...(authHouseholdResult.data.metadata || {}),
-            auth_user_id: authUser.id,
-            auth_email: authUser.email || null,
-          },
-        });
-      }
-      writeStoredHouseholdId(authHouseholdResult.data.id);
-      return {
-        data: {
-          ...authHouseholdResult.data,
-          owner_user_id: authHouseholdResult.data.owner_user_id || authUser.id,
-        },
-        error: null,
-        context: {
-          householdId: authHouseholdResult.data.id,
-          source: "loaded_auth_household",
-          bootstrapped: false,
-          ownerUserId: authUser.id,
-          ownershipMode: "authenticated_owned",
-          guestFallbackActive: false,
-        },
-      };
-    }
-
-    const createResult = await createHousehold({
-      household_name: authUser?.user_metadata?.household_name || "VaultedShield Household",
-      household_status: "active",
-      owner_user_id: authUser.id,
-      notes: "Authenticated household workspace for the current VaultedShield user.",
-      metadata: {
-        bootstrap: true,
-        auth_user_id: authUser.id,
-        auth_email: authUser.email || null,
-      },
-    });
-
-    if (createResult.error || !createResult.data?.id) {
-      return {
-        data: null,
-        error: createResult.error || new Error("Authenticated household bootstrap failed"),
-        context: {
-          householdId: null,
-          source: "bootstrap_failed",
-          bootstrapped: false,
-          ownerUserId: authUser.id,
-          ownershipMode: "authenticated_owned",
-          guestFallbackActive: false,
-        },
-      };
-    }
-
-    await createHouseholdMember({
-      household_id: createResult.data.id,
-      full_name: authUser?.user_metadata?.full_name || authUser?.email || "Primary Household Member",
-      role_type: "self",
-      relationship_label: "Primary",
-      email: authUser?.email || null,
-      is_primary: true,
-      is_emergency_contact: false,
-      metadata: { bootstrap: true, auth_user_id: authUser.id },
-    });
-
-    writeStoredHouseholdId(createResult.data.id);
-
+  if (!authUser?.id) {
+    writeStoredHouseholdId(null);
     return {
-      data: createResult.data,
-      error: null,
+      data: null,
+      error: new Error("An authenticated Supabase user is required before household ownership can be resolved."),
       context: {
-        householdId: createResult.data.id,
-        source: "bootstrapped_auth_household",
-        bootstrapped: true,
+        householdId: null,
+        source: "auth_required",
+        bootstrapped: false,
+        ownerUserId: null,
+        ownershipMode: "unauthenticated",
+        guestFallbackActive: false,
+      },
+    };
+  }
+
+  const authHouseholdResult = await findHouseholdForAuthUser(authUser);
+  if (authHouseholdResult.error) {
+    return {
+      data: null,
+      error: authHouseholdResult.error,
+      context: {
+        householdId: null,
+        source: "auth_lookup_failed",
+        bootstrapped: false,
         ownerUserId: authUser.id,
         ownershipMode: "authenticated_owned",
         guestFallbackActive: false,
@@ -391,95 +410,88 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
     };
   }
 
-  if (storedHouseholdId) {
-    const households = await listSharedHouseholds();
-    const matchingHousehold = households.data.find((row) => row.id === storedHouseholdId);
-    if (matchingHousehold) {
-      return {
-        data: matchingHousehold,
-        error: null,
-        context: {
-          householdId: matchingHousehold.id,
-          source: "loaded_existing",
-          bootstrapped: false,
-          ownerUserId: null,
-          ownershipMode: "guest_shared",
-          guestFallbackActive: true,
-        },
-      };
+  if (authHouseholdResult.data?.id) {
+    warnNullOwnerHousehold("household row", authHouseholdResult.data);
+    if (!authHouseholdResult.data.owner_user_id && import.meta.env.DEV) {
+      console.warn("[VaultedShield] reclaiming household ownership for authenticated user.", {
+        householdId: authHouseholdResult.data.id,
+        authUserId: authUser.id,
+      });
     }
-  }
-
-  const householdsResult = await listSharedHouseholds();
-  if (householdsResult.error) {
+    if (!authHouseholdResult.data.owner_user_id) {
+      await updateHousehold(authHouseholdResult.data.id, {
+        household_name: authHouseholdResult.data.household_name,
+        household_status: authHouseholdResult.data.household_status,
+        owner_user_id: authUser.id,
+        notes: authHouseholdResult.data.notes,
+        metadata: {
+          ...(authHouseholdResult.data.metadata || {}),
+          auth_user_id: authUser.id,
+          auth_email: authUser.email || null,
+        },
+      });
+    }
+    writeStoredHouseholdId(authHouseholdResult.data.id);
     return {
-      data: null,
-      error: householdsResult.error,
-      context: {
-        householdId: null,
-        source: isMissingSchemaCacheTableError(householdsResult.error, "households")
-          ? "missing_foundation_schema"
-          : "supabase_unavailable",
-        bootstrapped: false,
-        ownerUserId: null,
-        ownershipMode: "guest_shared",
-        guestFallbackActive: true,
+      data: {
+        ...authHouseholdResult.data,
+        owner_user_id: authHouseholdResult.data.owner_user_id || authUser.id,
       },
-    };
-  }
-
-  if (householdsResult.data.length > 0) {
-    const household = householdsResult.data[0];
-    writeStoredHouseholdId(household.id);
-    return {
-      data: household,
       error: null,
       context: {
-        householdId: household.id,
-        source: "loaded_existing",
+        householdId: authHouseholdResult.data.id,
+        source: "loaded_auth_household",
         bootstrapped: false,
-        ownerUserId: null,
-        ownershipMode: "guest_shared",
-        guestFallbackActive: true,
+        ownerUserId: authUser.id,
+        ownershipMode: "authenticated_owned",
+        guestFallbackActive: false,
       },
     };
+  }
+
+  if (storedHouseholdId && import.meta.env.DEV) {
+    console.warn("[VaultedShield] ignoring legacy stored household id because authenticated owned household bootstrap is now required.", {
+      storedHouseholdId,
+      authUserId: authUser.id,
+    });
   }
 
   const createResult = await createHousehold({
     household_name: authUser?.user_metadata?.household_name || "VaultedShield Household",
     household_status: "active",
-    owner_user_id: null,
-    notes: "Default bootstrap household for the platform shell.",
+    owner_user_id: authUser.id,
+    notes: "Authenticated household workspace for the current VaultedShield user.",
     metadata: {
       bootstrap: true,
-      auth_user_id: authUser?.id || null,
-      auth_email: authUser?.email || null,
+      auth_user_id: authUser.id,
+      auth_email: authUser.email || null,
     },
   });
 
   if (createResult.error || !createResult.data?.id) {
     return {
       data: null,
-      error: createResult.error || new Error("Default household bootstrap failed"),
+      error: createResult.error || new Error("Authenticated household bootstrap failed"),
       context: {
         householdId: null,
         source: "bootstrap_failed",
         bootstrapped: false,
-        ownerUserId: null,
-        ownershipMode: "guest_shared",
-        guestFallbackActive: true,
+        ownerUserId: authUser.id,
+        ownershipMode: "authenticated_owned",
+        guestFallbackActive: false,
       },
     };
   }
 
   await createHouseholdMember({
     household_id: createResult.data.id,
-    full_name: "Primary Household Member",
+    full_name: authUser?.user_metadata?.full_name || authUser?.email || "Primary Household Member",
     role_type: "self",
     relationship_label: "Primary",
+    email: authUser?.email || null,
     is_primary: true,
     is_emergency_contact: false,
-    metadata: { bootstrap: true },
+    metadata: { bootstrap: true, auth_user_id: authUser.id },
   });
 
   writeStoredHouseholdId(createResult.data.id);
@@ -489,16 +501,20 @@ export async function getOrCreateDefaultHousehold(authUser = null) {
     error: null,
     context: {
       householdId: createResult.data.id,
-      source: "bootstrapped_default",
+      source: "bootstrapped_auth_household",
       bootstrapped: true,
-      ownerUserId: null,
-      ownershipMode: "guest_shared",
-      guestFallbackActive: true,
+      ownerUserId: authUser.id,
+      ownershipMode: "authenticated_owned",
+      guestFallbackActive: false,
     },
   };
 }
 
 export async function listHouseholdMembers(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("household_members");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "household_members",
     [{ column: "household_id", value: householdId }],
@@ -522,9 +538,13 @@ export async function createHouseholdMember(payload) {
 }
 
 export async function listContacts(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("contacts");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "contacts",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "updated_at" }
   );
 }
@@ -544,9 +564,13 @@ export async function createContact(payload) {
 }
 
 export async function listAssets(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("assets");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "assets",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "updated_at" }
   );
 }
@@ -600,9 +624,13 @@ export async function getAssetDocuments(assetId) {
 }
 
 export async function listHouseholdDocuments(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("asset_documents");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "asset_documents",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     {
       select: "*, assets(asset_name, asset_category, asset_subcategory)",
       orderBy: "updated_at",
@@ -715,6 +743,21 @@ export async function uploadGenericAssetDocument({
 }
 
 export async function getHouseholdPlatformCounts(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("household platform counts");
+    return {
+      data: {
+        memberCount: 0,
+        contactCount: 0,
+        assetCount: 0,
+        documentCount: 0,
+        openAlertCount: 0,
+        openTaskCount: 0,
+        reportCount: 0,
+      },
+      error: null,
+    };
+  }
   const [members, contacts, assets, documents, alerts, tasks, reports] =
     await Promise.all([
       listHouseholdMembers(householdId),
@@ -751,6 +794,31 @@ export async function getHouseholdPlatformCounts(householdId) {
 }
 
 export async function getEmergencyModeBundle(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("emergency mode bundle");
+    return {
+      data: {
+        household: null,
+        householdMembers: [],
+        emergencyContacts: [],
+        keyProfessionalContacts: [],
+        assets: [],
+        keyDocuments: [],
+        openAlerts: [],
+        openTasks: [],
+        reports: [],
+        portals: [],
+        portalReadiness: {
+          portalCount: 0,
+          linkedPortalCount: 0,
+          emergencyRelevantCount: 0,
+          missingRecoveryCount: 0,
+          criticalAssetsWithoutLinkedPortals: [],
+        },
+      },
+      error: null,
+    };
+  }
   const [householdsResult, membersResult, contactsResult, assetsResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult] =
     await Promise.all([
       listRecords("households", [{ column: "id", value: householdId }], { orderBy: "updated_at" }),
@@ -777,6 +845,7 @@ export async function getEmergencyModeBundle(householdId) {
     null;
 
   const household = householdsResult.data?.[0] || null;
+  warnNullOwnerHousehold("household intelligence bundle household", household);
   const householdMembers = membersResult.data || [];
   const contacts = contactsResult.data || [];
   const assets = assetsResult.data || [];
@@ -846,9 +915,43 @@ export async function getEmergencyModeBundle(householdId) {
 }
 
 export async function getHouseholdIntelligenceBundle(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("household intelligence bundle");
+    return {
+      data: {
+        household: null,
+        householdMembers: [],
+        emergencyContacts: [],
+        keyProfessionalContacts: [],
+        assets: [],
+        keyDocuments: [],
+        openAlerts: [],
+        openTasks: [],
+        reports: [],
+        portals: [],
+        portalReadiness: {
+          portalCount: 0,
+          linkedPortalCount: 0,
+          emergencyRelevantCount: 0,
+          missingRecoveryCount: 0,
+          criticalAssetsWithoutLinkedPortals: [],
+        },
+        properties: [],
+        mortgageLoans: [],
+        homeownersPolicies: [],
+        propertyMortgageLinks: [],
+        propertyHomeownersLinks: [],
+        propertyStackAnalytics: [],
+        propertyStackSummary: {
+          propertyCount: 0,
+        },
+      },
+      error: null,
+    };
+  }
   const [householdsResult, membersResult, contactsResult, assetsResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult, propertiesResult, mortgageLoansResult, homeownersPoliciesResult, propertyStackAnalyticsResult] =
     await Promise.all([
-      listRecords("households", householdId ? [{ column: "id", value: householdId }] : [], {
+      listRecords("households", [{ column: "id", value: householdId }], {
         orderBy: "updated_at",
       }),
       listHouseholdMembers(householdId),
@@ -859,10 +962,10 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       listAssetTasks(householdId),
       listReports(householdId),
       getPortalHubBundle(householdId),
-      listRecords("properties", householdId ? [{ column: "household_id", value: householdId }] : []),
-      listRecords("mortgage_loans", householdId ? [{ column: "household_id", value: householdId }] : []),
-      listRecords("homeowners_policies", householdId ? [{ column: "household_id", value: householdId }] : []),
-      listRecords("property_stack_analytics", householdId ? [{ column: "household_id", value: householdId }] : [], {
+      listRecords("properties", [{ column: "household_id", value: householdId }]),
+      listRecords("mortgage_loans", [{ column: "household_id", value: householdId }]),
+      listRecords("homeowners_policies", [{ column: "household_id", value: householdId }]),
+      listRecords("property_stack_analytics", [{ column: "household_id", value: householdId }], {
         orderBy: "updated_at",
       }),
     ]);
@@ -1092,9 +1195,13 @@ export async function createAssetSnapshot(payload) {
 }
 
 export async function listAssetAlerts(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("asset_alerts");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "asset_alerts",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "created_at" }
   );
 }
@@ -1121,9 +1228,13 @@ export async function createAssetAlert(payload) {
 }
 
 export async function listAssetTasks(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("asset_tasks");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "asset_tasks",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "due_date", ascending: true }
   );
 }
@@ -1151,9 +1262,13 @@ export async function createAssetTask(payload) {
 }
 
 export async function listReports(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("reports");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "reports",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "created_at" }
   );
 }
@@ -1172,9 +1287,13 @@ export async function createReport(payload) {
 }
 
 export async function listPortalProfiles(householdId) {
+  if (!householdId) {
+    warnMissingHouseholdScope("portal_profiles");
+    return buildEmptyListResult();
+  }
   return listRecords(
     "portal_profiles",
-    householdId ? [{ column: "household_id", value: householdId }] : [],
+    [{ column: "household_id", value: householdId }],
     { orderBy: "updated_at" }
   );
 }

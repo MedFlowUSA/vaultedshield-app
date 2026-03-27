@@ -280,6 +280,19 @@ export default function PlatformApp() {
     setSidebarOpen(false);
   }, [resolvedPathname, useCompactShell]);
 
+  useEffect(() => {
+    if (!useCompactShell || !sidebarOpen || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [sidebarOpen, useCompactShell]);
+
   if (!accessPortal.authReady) {
     return (
       <div
@@ -340,7 +353,8 @@ export default function PlatformApp() {
               border: "none",
               background: "rgba(15, 23, 42, 0.42)",
               cursor: "pointer",
-              zIndex: 30,
+              zIndex: 70,
+              padding: 0,
             }}
           />
         ) : null}

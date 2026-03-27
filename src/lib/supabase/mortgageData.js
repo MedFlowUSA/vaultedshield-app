@@ -14,7 +14,14 @@ import {
   updatePropertyMortgageLink,
 } from "./propertyStackLinks";
 import { getSupabaseClient } from "./client";
-import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
+import {
+  createAsset,
+  getAssetById,
+  getCurrentUserOrThrow,
+  getOrCreateCurrentHousehold,
+  getOwnedHouseholdById,
+  uploadGenericAssetDocument,
+} from "./platformData";
 import {
   appendHouseholdScope,
   buildScopedAccessError,
@@ -24,6 +31,27 @@ function getClientOrError() {
   const supabase = getSupabaseClient();
   if (!supabase) return { supabase: null, error: new Error("Supabase not configured") };
   return { supabase, error: null };
+}
+
+function warnMortgageCreation(message, context = {}) {
+  if (import.meta.env.DEV) {
+    console.warn(`[VaultedShield] ${message}`, context);
+  }
+}
+
+function mapMortgageCreationError(error, fallbackMessage) {
+  const message = String(error?.message || error?.details || "").toLowerCase();
+  if (!message) return fallbackMessage;
+  if (message.includes("owner_user_id") && message.includes("null value")) {
+    return "We could not initialize your household profile yet. Please try again.";
+  }
+  if (message.includes("row-level security")) {
+    return "We could not save this mortgage inside your current household yet. Please try again.";
+  }
+  if (message.includes("signed in") || message.includes("authenticated")) {
+    return "Please sign in again before creating a mortgage loan.";
+  }
+  return fallbackMessage;
 }
 
 async function insertRecord(table, payload) {
@@ -138,6 +166,9 @@ export async function getMortgageLoanById(mortgageLoanId, scopeOverride = null) 
 }
 
 export async function listMortgageLoans(householdId) {
+  if (!householdId) {
+    return { data: [], error: null };
+  }
   return listRecords(
     "mortgage_loans",
     householdId ? [{ column: "household_id", value: householdId }] : [],
@@ -388,38 +419,124 @@ export async function getMortgageLoanBundle(mortgageLoanId, scopeOverride = null
 }
 
 export async function createMortgageAssetWithLoan(payload) {
-  if (!payload?.household_id || !payload?.mortgage_loan_type_key) {
+  return createMortgageLoanWithDependencies(payload);
+}
+
+export async function createMortgageLoanWithDependencies(payload) {
+  const authResult = await getCurrentUserOrThrow();
+  if (authResult.error || !authResult.data?.id) {
+    warnMortgageCreation("mortgage creation blocked because no authenticated user was available", {
+      householdId: payload?.household_id || null,
+    });
     return {
       data: null,
-      error: new Error("household_id and mortgage_loan_type_key are required"),
+      error: new Error("Please sign in again before creating a mortgage loan."),
     };
   }
 
-  const assetResult = await createAsset(buildMortgageAssetPayload(payload));
+  if (!payload?.mortgage_loan_type_key) {
+    return {
+      data: null,
+      error: new Error("A mortgage loan type is required before a mortgage loan can be created."),
+    };
+  }
+
+  let resolvedHouseholdId = payload?.household_id || null;
+  if (resolvedHouseholdId) {
+    const ownedHouseholdResult = await getOwnedHouseholdById(resolvedHouseholdId, authResult.data.id);
+    if (ownedHouseholdResult.error) {
+      return {
+        data: null,
+        error: new Error(
+          mapMortgageCreationError(
+            ownedHouseholdResult.error,
+            "We could not verify your household profile yet. Please try again."
+          )
+        ),
+      };
+    }
+    if (!ownedHouseholdResult.data?.id) {
+      warnMortgageCreation("mortgage creation attempted with a household outside the current user scope", {
+        householdId: resolvedHouseholdId,
+        authUserId: authResult.data.id,
+      });
+      resolvedHouseholdId = null;
+    }
+  }
+
+  if (!resolvedHouseholdId) {
+    const householdResult = await getOrCreateCurrentHousehold();
+    if (householdResult.error || !householdResult.data?.id) {
+      warnMortgageCreation("mortgage creation failed while initializing the current household", {
+        authUserId: authResult.data.id,
+        error: householdResult.error?.message || null,
+      });
+      return {
+        data: null,
+        error: new Error(
+          mapMortgageCreationError(
+            householdResult.error,
+            "We could not initialize your household profile yet. Please try again."
+          )
+        ),
+      };
+    }
+    resolvedHouseholdId = householdResult.data.id;
+  }
+
+  const resolvedPayload = {
+    ...payload,
+    household_id: resolvedHouseholdId,
+  };
+
+  const assetResult = await createAsset(buildMortgageAssetPayload(resolvedPayload));
   if (assetResult.error || !assetResult.data?.id) {
-    return { data: null, error: assetResult.error || new Error("Asset creation failed") };
+    warnMortgageCreation("mortgage asset creation failed", {
+      householdId: resolvedHouseholdId,
+      authUserId: authResult.data.id,
+      error: assetResult.error?.message || null,
+    });
+    return {
+      data: null,
+      error: new Error(
+        mapMortgageCreationError(assetResult.error, "We could not create the mortgage asset record yet. Please try again.")
+      ),
+    };
   }
 
   const loanResult = await createMortgageLoan({
-    ...payload,
+    ...resolvedPayload,
     asset_id: assetResult.data.id,
   });
 
   if (loanResult.error || !loanResult.data?.id) {
     await deleteAssetById(assetResult.data.id);
+    warnMortgageCreation("mortgage loan creation failed after asset creation", {
+      householdId: resolvedHouseholdId,
+      assetId: assetResult.data.id,
+      authUserId: authResult.data.id,
+      error: loanResult.error?.message || null,
+    });
     return {
       data: null,
-      error: loanResult.error || new Error("Mortgage loan creation failed"),
+      error: new Error(
+        mapMortgageCreationError(loanResult.error, "We could not create the mortgage loan yet. Please try again.")
+      ),
     };
   }
 
   return {
     data: {
+      householdId: resolvedHouseholdId,
       asset: assetResult.data,
       mortgageLoan: loanResult.data,
     },
     error: null,
   };
+}
+
+export async function ensureCurrentUserHousehold() {
+  return getOrCreateCurrentHousehold();
 }
 
 export async function getMortgageLoanForAsset(assetId, scopeOverride = null) {
