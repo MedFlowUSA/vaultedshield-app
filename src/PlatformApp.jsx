@@ -287,9 +287,16 @@ export default function PlatformApp() {
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [sidebarOpen, useCompactShell]);
 
@@ -320,9 +327,9 @@ export default function PlatformApp() {
 
   if (resolvedIsAuthRoute || (!accessPortal.isAuthenticated && isPublicRoute)) {
       return (
-        <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-          {renderRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
-        </div>
+      <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
+        {renderRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
+      </div>
       );
   }
 
@@ -341,7 +348,7 @@ export default function PlatformApp() {
 
   return (
     <PlatformShellDataProvider accessSession={accessPortal.session} authReady={accessPortal.authReady}>
-      <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative" }}>
+      <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative", overflowX: "clip" }}>
         {useCompactShell && sidebarOpen ? (
           <button
             type="button"
@@ -355,6 +362,9 @@ export default function PlatformApp() {
               cursor: "pointer",
               zIndex: 70,
               padding: 0,
+              opacity: 1,
+              transition: "opacity 220ms ease",
+              touchAction: "none",
             }}
           />
         ) : null}
@@ -399,7 +409,18 @@ export default function PlatformApp() {
               onToggleSidebar={() => setSidebarOpen((current) => !current)}
               isCompact={isMobile}
             />
-            <div style={{ padding: isMobile ? "16px 12px 22px" : isTablet ? "18px 16px 24px" : "28px" }}>
+            <div
+              style={{
+                padding: isMobile
+                  ? "16px 16px max(24px, calc(env(safe-area-inset-bottom, 0px) + 12px))"
+                  : isTablet
+                    ? "18px 16px 24px"
+                    : "28px",
+                width: "100%",
+                maxWidth: "100%",
+                overflowX: "clip",
+              }}
+            >
               <RouteErrorBoundary resetKey={resolvedPathname}>
                 {renderRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
               </RouteErrorBoundary>

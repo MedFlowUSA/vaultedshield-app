@@ -6,6 +6,8 @@ export default function EmptyState({ title, description }) {
         borderRadius: "14px",
         border: "1px dashed #cbd5e1",
         background: "#f8fafc",
+        minWidth: 0,
+        overflowWrap: "anywhere",
       }}
     >
       <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "clamp(1rem, 2.8vw, 1.15rem)" }}>{title}</div>

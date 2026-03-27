@@ -1,8 +1,8 @@
 export default function PageHeader({ eyebrow, title, description, actions = null }) {
   return (
-    <div style={{ marginBottom: "24px" }}>
+    <div style={{ marginBottom: "24px", minWidth: 0 }}>
       {eyebrow ? (
-        <div style={{ fontSize: "12px", letterSpacing: "1px", color: "#64748b", textTransform: "uppercase" }}>
+        <div style={{ fontSize: "12px", letterSpacing: "1px", color: "#64748b", textTransform: "uppercase", lineHeight: "1.4" }}>
           {eyebrow}
         </div>
       ) : null}
@@ -16,15 +16,15 @@ export default function PageHeader({ eyebrow, title, description, actions = null
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <h1 style={{ margin: 0, color: "#0f172a", fontSize: "clamp(1.75rem, 3.4vw, 2.75rem)", lineHeight: 1.08 }}>{title}</h1>
+        <div style={{ minWidth: 0, flex: "1 1 280px" }}>
+          <h1 style={{ margin: 0, color: "#0f172a", fontSize: "clamp(1.65rem, 4vw, 2.75rem)", lineHeight: 1.12, wordBreak: "break-word" }}>{title}</h1>
           {description ? (
-            <p style={{ marginTop: "8px", marginBottom: 0, color: "#64748b", lineHeight: "1.6", maxWidth: "72ch" }}>
+            <p style={{ marginTop: "8px", marginBottom: 0, color: "#64748b", lineHeight: "1.6", maxWidth: "72ch", wordBreak: "break-word" }}>
               {description}
             </p>
           ) : null}
         </div>
-        {actions}
+        {actions ? <div style={{ width: "100%", maxWidth: "100%", flex: "1 1 220px" }}>{actions}</div> : null}
       </div>
     </div>
   );

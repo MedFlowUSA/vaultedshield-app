@@ -3,8 +3,9 @@ export default function SummaryPanel({ items = [] }) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
         gap: "14px",
+        minWidth: 0,
       }}
     >
       {items.map((item) => (
@@ -16,6 +17,7 @@ export default function SummaryPanel({ items = [] }) {
             borderRadius: "14px",
             border: "1px solid #e2e8f0",
             minWidth: 0,
+            overflowWrap: "anywhere",
           }}
         >
           <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>

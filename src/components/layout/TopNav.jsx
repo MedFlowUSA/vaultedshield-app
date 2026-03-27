@@ -18,12 +18,13 @@ export default function TopNav({
   const actionButtonStyle = {
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    borderRadius: "10px",
-    padding: "10px 14px",
+    borderRadius: "12px",
+    padding: "12px 14px",
     cursor: "pointer",
     fontWeight: 600,
     width: isCompact ? "100%" : "auto",
     justifyContent: "center",
+    minHeight: "44px",
   };
 
   return (
@@ -34,16 +35,19 @@ export default function TopNav({
         alignItems: isCompact ? "stretch" : "center",
         gap: "16px",
         flexWrap: "wrap",
-        padding: isCompact ? "16px 18px" : "22px 28px",
+        padding: isCompact
+          ? "max(16px, calc(env(safe-area-inset-top, 0px) + 4px)) 16px 16px"
+          : "22px 28px",
         borderBottom: "1px solid #e2e8f0",
         background: "rgba(255,255,255,0.92)",
         backdropFilter: "blur(10px)",
         position: "sticky",
         top: 0,
-        zIndex: 10,
+        zIndex: 20,
+        overflowX: "clip",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: "1 1 320px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isCompact ? "12px" : "14px", minWidth: 0, flex: "1 1 320px" }}>
         {showSidebarToggle ? (
           <button
             type="button"
@@ -53,10 +57,12 @@ export default function TopNav({
               border: "1px solid #cbd5e1",
               background: "#ffffff",
               borderRadius: "12px",
-              padding: "10px 12px",
+              padding: "12px 12px",
               cursor: "pointer",
               fontWeight: 700,
               flex: "0 0 auto",
+              minHeight: "44px",
+              minWidth: "44px",
             }}
           >
             Menu
@@ -72,10 +78,10 @@ export default function TopNav({
           }}
         />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: isCompact ? "18px" : "22px", fontWeight: 700, color: "#0f172a", lineHeight: 1.15 }}>
+          <div style={{ fontSize: isCompact ? "17px" : "22px", fontWeight: 700, color: "#0f172a", lineHeight: 1.15, wordBreak: "break-word" }}>
             {title}
           </div>
-          <div style={{ marginTop: "4px", color: "#64748b", fontSize: isCompact ? "13px" : "14px" }}>{subtitle}</div>
+          <div style={{ marginTop: "4px", color: "#64748b", fontSize: isCompact ? "12px" : "14px", lineHeight: "1.5" }}>{subtitle}</div>
         </div>
       </div>
 
@@ -93,8 +99,8 @@ export default function TopNav({
           style={{
             display: "grid",
             gap: "2px",
-            padding: "8px 12px",
-            borderRadius: "10px",
+            padding: "10px 12px",
+            borderRadius: "12px",
             background: "#eff6ff",
             color: "#1d4ed8",
             minWidth: isCompact ? "100%" : "auto",
@@ -126,11 +132,12 @@ export default function TopNav({
             border: "none",
             background: "#0f172a",
             color: "#ffffff",
-            borderRadius: "10px",
-            padding: "10px 14px",
+            borderRadius: "12px",
+            padding: "12px 14px",
             cursor: "pointer",
             fontWeight: 700,
             width: isCompact ? "100%" : "auto",
+            minHeight: "44px",
           }}
         >
           Open Life Policy Portal

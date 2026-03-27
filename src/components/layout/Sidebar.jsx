@@ -35,10 +35,13 @@ export default function Sidebar({
         transform: isDrawer ? (isOpen ? "translateX(0)" : "translateX(-100%)") : "none",
         transition: isDrawer ? "transform 220ms ease, box-shadow 220ms ease" : "none",
         overflowY: "auto",
+        overflowX: "hidden",
         boxShadow: isDrawer ? "0 24px 60px rgba(2, 6, 23, 0.42)" : "none",
         overscrollBehavior: isDrawer ? "contain" : "auto",
         WebkitOverflowScrolling: isDrawer ? "touch" : "auto",
+        willChange: isDrawer ? "transform" : "auto",
       }}
+      aria-hidden={isDrawer ? !isOpen : undefined}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
@@ -70,10 +73,11 @@ export default function Sidebar({
               background: "rgba(255,255,255,0.04)",
               color: "#ffffff",
               borderRadius: "12px",
-              padding: "8px 12px",
+              padding: "10px 12px",
               fontWeight: 700,
               cursor: "pointer",
               flex: "0 0 auto",
+              minHeight: "44px",
             }}
           >
             Close
@@ -109,6 +113,7 @@ export default function Sidebar({
             background: "rgba(255,255,255,0.04)",
             color: "#ffffff",
             fontWeight: 700,
+            minHeight: "44px",
           }}
         >
           View Plans
@@ -138,13 +143,14 @@ export default function Sidebar({
                       textAlign: "left",
                       border: "none",
                       cursor: "pointer",
-                      borderRadius: "12px",
-                      padding: "12px 14px",
-                      background: active ? "#1d4ed8" : "rgba(255,255,255,0.04)",
-                      color: "#ffffff",
-                      fontWeight: active ? 700 : 500,
-                    }}
-                  >
+                       borderRadius: "12px",
+                       padding: "12px 14px",
+                       background: active ? "#1d4ed8" : "rgba(255,255,255,0.04)",
+                       color: "#ffffff",
+                       fontWeight: active ? 700 : 500,
+                       minHeight: "44px",
+                     }}
+                   >
                     {item.label}
                   </button>
                 );
