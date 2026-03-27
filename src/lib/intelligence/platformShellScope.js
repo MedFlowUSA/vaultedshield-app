@@ -3,6 +3,7 @@ export function resolvePlatformDataScope(accessSession = null, householdState = 
   const ownershipMode = householdState?.context?.ownershipMode || "loading";
   const guestFallbackActive = Boolean(householdState?.context?.guestFallbackActive);
   const authUserId = accessSession?.isAuthenticated ? accessSession?.userId || null : null;
+  const isAuthenticated = Boolean(authUserId);
   const isAuthenticatedScopeReady = !authUserId || (
     householdId &&
     ownershipMode === "authenticated_owned" &&
@@ -14,11 +15,11 @@ export function resolvePlatformDataScope(accessSession = null, householdState = 
     householdId,
     ownershipMode,
     guestFallbackActive,
-    canLoadShellData: Boolean(householdId) && isAuthenticatedScopeReady && !householdState?.loading,
+    canLoadShellData: isAuthenticated && Boolean(householdId) && isAuthenticatedScopeReady && !householdState?.loading,
     scopeSource: authUserId
       ? isAuthenticatedScopeReady && !householdState?.loading
         ? "authenticated_owned"
         : "awaiting_owned_household"
-      : "guest_shared",
+      : "auth_required",
   };
 }

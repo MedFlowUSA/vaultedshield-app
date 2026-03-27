@@ -195,6 +195,24 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
     refreshInsurancePortfolio();
   }, [refreshInsurancePortfolio]);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const scopedProperties = bundleState.data?.properties || [];
+    if (!householdId || scopedProperties.length === 0) return;
+
+    const mismatched = scopedProperties.filter(
+      (property) => property?.household_id && property.household_id !== householdId
+    );
+
+    if (mismatched.length > 0) {
+      console.warn("[VaultedShield] property rows were returned outside the active household scope.", {
+        activeHouseholdId: householdId,
+        propertyIds: mismatched.map((property) => property.id),
+        propertyHouseholdIds: mismatched.map((property) => property.household_id),
+      });
+    }
+  }, [bundleState.data?.properties, householdId]);
+
   const fallbackRows = useMemo(
     () => buildFallbackPolicyRows(insuranceState.savedPolicies),
     [insuranceState.savedPolicies]

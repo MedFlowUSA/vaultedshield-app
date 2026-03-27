@@ -92,19 +92,19 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
 
   useEffect(() => {
     let active = true;
-    const nextOwnershipMode = authUser?.id ? "authenticated_owned" : "guest_shared";
+    const nextOwnershipMode = authUser?.id ? "authenticated_owned" : "unauthenticated";
 
     setState({
       loading: true,
       household: null,
       context: {
         householdId: null,
-        source: isAuthResolved ? "loading" : "awaiting_auth",
-        bootstrapped: false,
-        currentAuthUserId: authUser?.id || null,
-        ownershipMode: nextOwnershipMode,
-        guestFallbackActive: !authUser?.id,
-      },
+          source: isAuthResolved ? "loading" : "awaiting_auth",
+          bootstrapped: false,
+          currentAuthUserId: authUser?.id || null,
+          ownershipMode: nextOwnershipMode,
+          guestFallbackActive: false,
+        },
       error: "",
     });
 
@@ -122,7 +122,7 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
         console.info("[VaultedShield] household ownership context", {
           currentAuthUserId: resolvedAuthUser?.id || null,
           householdId: result.context?.householdId || null,
-          ownershipMode: result.context?.ownershipMode || (resolvedAuthUser?.id ? "authenticated_owned" : "guest_shared"),
+          ownershipMode: result.context?.ownershipMode || (resolvedAuthUser?.id ? "authenticated_owned" : "unauthenticated"),
           guestFallbackActive: Boolean(result.context?.guestFallbackActive),
         });
       }
@@ -135,8 +135,8 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
           source: "unavailable",
           bootstrapped: false,
           currentAuthUserId: resolvedAuthUser?.id || null,
-          ownershipMode: resolvedAuthUser?.id ? "authenticated_owned" : "guest_shared",
-          guestFallbackActive: !resolvedAuthUser?.id,
+          ownershipMode: resolvedAuthUser?.id ? "authenticated_owned" : "unauthenticated",
+          guestFallbackActive: false,
           ...(result.context || {}),
           currentAuthUserId: resolvedAuthUser?.id || null,
         },

@@ -400,7 +400,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   }
 
   useEffect(() => {
-    if (!propertyId) return;
+    if (!propertyId || householdState.loading || !platformScope.householdId) return;
     let active = true;
     async function loadBundle() {
       setLoading(true);
@@ -412,7 +412,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [propertyId, scopeKey]);
+  }, [householdState.loading, platformScope.householdId, propertyId, scopeKey]);
 
   useEffect(() => {
     setBundle(null);
@@ -428,6 +428,23 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setValuationError("");
     setValuationSuccess("");
   }, [scopeKey]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (!platformScope.householdId && !householdState.loading) {
+      console.warn("[VaultedShield] property detail scope unresolved; property bundle load is blocked until household scope is ready.", {
+        propertyId,
+        authUserId: platformScope.authUserId,
+        ownershipMode: platformScope.ownershipMode,
+      });
+    }
+  }, [
+    householdState.loading,
+    platformScope.authUserId,
+    platformScope.householdId,
+    platformScope.ownershipMode,
+    propertyId,
+  ]);
 
   useEffect(() => {
     setFactsDraft(buildPropertyFactsDraft(bundle?.property || null));
