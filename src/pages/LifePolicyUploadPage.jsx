@@ -75,6 +75,78 @@ function buildAverageConfidence(items) {
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeExtractionDocument(extraction, fallbackFileName = "document") {
+  const pages = ensureArray(extraction?.pages).filter((page) => typeof page === "string");
+  const text = typeof extraction?.text === "string" ? extraction.text : pages.join("\n\n");
+
+  return {
+    text,
+    pages,
+    sourceType: extraction?.sourceType || "unknown",
+    ocrConfidence: extraction?.ocrConfidence ?? null,
+    extractionWarnings: ensureArray(extraction?.extractionWarnings).filter(Boolean),
+    extractionMethod: extraction?.extractionMethod || "unknown",
+    pageCount: extraction?.pageCount || pages.length,
+    pageOcr: ensureArray(extraction?.pageOcr),
+    fileName: extraction?.fileName || fallbackFileName,
+  };
+}
+
+function buildAnnualStatementAnalysisInput(statementFiles, statementPages) {
+  const uploadedFiles = ensureArray(statementFiles).filter(Boolean);
+  const scannedPages = ensureArray(statementPages).filter((page) => page?.file);
+  const input = [];
+
+  // Normalize uploaded PDFs and scanned statement pages into one analysis packet
+  // so the parser never has to care which capture path the user chose.
+  uploadedFiles.forEach((file, index) => {
+    input.push({
+      id: `upload-${file.name}-${file.lastModified}-${index}`,
+      kind: "uploaded_pdf",
+      branch: "upload",
+      label: file.name,
+      file,
+      documentCount: 1,
+      pageCount: null,
+    });
+  });
+
+  if (scannedPages.length > 0) {
+    input.push({
+      id: `scan-session-${scannedPages.length}`,
+      kind: "scan_session",
+      branch: "scan",
+      label: `Scanned annual statement packet (${scannedPages.length} page${scannedPages.length === 1 ? "" : "s"})`,
+      pages: scannedPages,
+      documentCount: 1,
+      pageCount: scannedPages.length,
+    });
+  }
+
+  return input;
+}
+
+function ensureLifePolicyAnalyzeDependencies() {
+  const requiredHelpers = [
+    ["extractDocumentText", extractDocumentText],
+    ["parseIllustrationDocument", parseIllustrationDocument],
+    ["parseStatementDocument", parseStatementDocument],
+    ["sortStatementsChronologically", sortStatementsChronologically],
+    ["computeDerivedAnalytics", computeDerivedAnalytics],
+  ];
+  const missing = requiredHelpers.find(([, helper]) => typeof helper !== "function");
+
+  if (missing) {
+    throw new Error(
+      `VaultedShield could not initialize the life-policy analyzer completely. Missing helper: ${missing[0]}.`
+    );
+  }
+}
+
 async function extractScanSessionDocument(pages, label, options = {}) {
   if (!pages.length) {
     throw new Error("At least one scan page is required.");
@@ -181,6 +253,7 @@ function ScanReview({
   title,
   description,
   pages,
+  emptyMessage,
   selectedPageId,
   onSelectPage,
   onAddPage,
@@ -221,7 +294,7 @@ function ScanReview({
             background: "#ffffff",
           }}
         >
-          No scanned pages yet. Capture the first page to start a scan session.
+          {emptyMessage || "No scanned pages yet. Capture the first page to start a scan session."}
         </div>
       ) : (
         <div style={{ display: "grid", gap: "14px" }}>
@@ -434,6 +507,14 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
   const illustrationScan = useScanSession();
   const statementScan = useScanSession();
+  const normalizedStatementInput = useMemo(
+    () => buildAnnualStatementAnalysisInput(statementFiles, statementScan.pages),
+    [statementFiles, statementScan.pages]
+  );
+  const uploadedStatementFiles = useMemo(() => ensureArray(statementFiles).filter(Boolean), [statementFiles]);
+  const statementScanPages = useMemo(() => ensureArray(statementScan.pages).filter((page) => page?.file), [statementScan.pages]);
+  const hasBaselineInput = Boolean(illustrationFile) || illustrationScan.hasPages;
+  const hasStatementPacketGap = uploadedStatementFiles.length > 0 && normalizedStatementInput.length === 0;
 
   useEffect(() => {
     setIllustrationFile(null);
@@ -469,6 +550,21 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       setSelectedStatementPageId(statementScan.pages[0]?.id || null);
     }
   }, [statementScan.pages, selectedStatementPageId]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.groupCollapsed("[VaultedShield] life policy annual statement input");
+    console.table({
+      selectedFiles: uploadedStatementFiles.length,
+      scanSessionPages: statementScanPages.length,
+      normalizedInputCount: normalizedStatementInput.length,
+      branches: normalizedStatementInput.map((item) => item.branch).join(", ") || "none",
+    });
+    console.log("selectedFiles", uploadedStatementFiles.map((file) => file.name));
+    console.log("scanSessionState", statementScanPages.map((page) => ({ id: page.id, fileName: page.file?.name || null })));
+    console.log("normalizedAnalysisInput", normalizedStatementInput);
+    console.groupEnd();
+  }, [normalizedStatementInput, statementScanPages, uploadedStatementFiles]);
 
   const summaryItems = useMemo(
     () => [
@@ -590,12 +686,19 @@ export default function LifePolicyUploadPage({ onNavigate }) {
   }
 
   async function handleAnalyzeAndSave() {
-    if (!illustrationFile && !illustrationScan.hasPages) {
+    // Guard baseline requirements before we build any statement packet or start parsing.
+    if (!hasBaselineInput) {
       setError("Please upload the initial illustration or policy PDF first.");
       return;
     }
 
+    if (hasStatementPacketGap) {
+      setError("We found statement files, but could not prepare them for analysis. Please retry or re-upload the PDF.");
+      return;
+    }
+
     try {
+      ensureLifePolicyAnalyzeDependencies();
       setLoading(true);
       setLoadingMessage("Preparing document extraction...");
       setError("");
@@ -606,7 +709,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       let illustrationPersistenceFile = illustrationFile;
 
       if (illustrationFile) {
-        illustrationExtraction = await extractDocumentText(illustrationFile, {
+        illustrationExtraction = normalizeExtractionDocument(await extractDocumentText(illustrationFile, {
           onProgress: (progressMessage) => {
             setExtractionStatus({
               phase:
@@ -618,10 +721,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               detail: "",
             });
           },
-        });
+        }), illustrationFile.name);
       } else {
         illustrationPersistenceFile = null;
-        illustrationExtraction = await extractScanSessionDocument(illustrationScan.pages, "Initial Policy", {
+        illustrationExtraction = normalizeExtractionDocument(await extractScanSessionDocument(illustrationScan.pages, "Initial Policy", {
           patchPage: illustrationScan.patchPage,
           onStage: (phase, progress) => {
             setExtractionStatus({
@@ -632,10 +735,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
             });
           },
           onProgress: setExtractionStatus,
-        });
+        }), "initial-policy-scan.jpg");
       }
 
-      if (!illustrationExtraction.text.trim()) {
+      if (!illustrationExtraction.text.trim() || !illustrationExtraction.pages.length) {
         throw new Error(
           "We could not reliably read this scan. Retake the photo in better lighting, flatter angle, and closer crop."
         );
@@ -657,34 +760,75 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
       const statementResults = [];
       const statementPersistenceFiles = [];
+      const statementDiagnostics = [];
 
-      for (const file of statementFiles) {
-        setLoadingMessage(`Extracting ${file.name}...`);
-        const extraction = await extractDocumentText(file, {
-          onProgress: (progressMessage) => {
-            setExtractionStatus({
-              phase:
-                file.type?.startsWith("image/")
-                  ? "Reading text from image..."
-                  : "Reading PDF text...",
-              progress: Math.round((progressMessage?.progress || 0) * 100),
-              currentFile: file.name,
-              detail: "",
-            });
-          },
-        });
+      if (import.meta.env.DEV) {
+        console.groupCollapsed("[VaultedShield] life policy analysis branch selection");
+        console.log("baselineBranch", illustrationFile ? "upload" : "scan");
+        console.log("statementBranches", normalizedStatementInput.map((item) => item.branch));
+        console.log("statementDocumentCount", normalizedStatementInput.length);
+        console.groupEnd();
+      }
 
-        if (!extraction.text.trim()) {
+      for (const input of normalizedStatementInput) {
+        // Branch by normalized packet source, but always converge back into the
+        // same extraction + parse shape before statement analysis continues.
+        let extraction;
+        let fileName = input.label;
+        let persistenceFile = null;
+
+        if (input.branch === "upload" && input.file) {
+          setLoadingMessage(`Extracting ${input.file.name}...`);
+          extraction = normalizeExtractionDocument(await extractDocumentText(input.file, {
+            onProgress: (progressMessage) => {
+              setExtractionStatus({
+                phase:
+                  input.file.type?.startsWith("image/")
+                    ? "Reading text from image..."
+                    : "Reading PDF text...",
+                progress: Math.round((progressMessage?.progress || 0) * 100),
+                currentFile: input.file.name,
+                detail: "",
+              });
+            },
+          }), input.file.name);
+          fileName = input.file.name;
+          persistenceFile = input.file;
+        } else if (input.branch === "scan" && input.pages?.length) {
+          extraction = normalizeExtractionDocument(await extractScanSessionDocument(input.pages, "Annual Statement", {
+            patchPage: statementScan.patchPage,
+            onStage: (phase, progress) => {
+              setExtractionStatus({
+                phase,
+                progress,
+                currentFile: "Annual statement scan session",
+                detail: `${input.pages.length} page${input.pages.length === 1 ? "" : "s"}`,
+              });
+            },
+            onProgress: setExtractionStatus,
+          }), buildSessionFileName("Annual Statement", input.pages.length));
+          fileName = extraction.fileName;
+        } else {
+          throw new Error("No annual statement pages are ready for analysis.");
+        }
+
+        if (!extraction.text.trim() || !extraction.pages.length) {
           throw new Error(
-            `We could not reliably read ${file.name}. Retake the photo in better lighting, flatter angle, and closer crop.`
+            input.branch === "scan"
+              ? "We could not reliably read the scanned annual statement pages. Retake the photo in better lighting, flatter angle, and closer crop."
+              : `We found statement files, but could not prepare them for analysis. Please retry or re-upload the PDF.`
           );
         }
 
-        setLoadingMessage(`Parsing ${file.name}...`);
+        setLoadingMessage(`Parsing ${fileName}...`);
         const statement = parseStatementDocument({
           pages: extraction.pages,
-          fileName: file.name,
+          fileName,
         });
+        if (!statement || typeof statement !== "object") {
+          throw new Error(`VaultedShield could not parse ${fileName} into a statement result.`);
+        }
+
         statement.extractionMeta = {
           source_type: extraction.sourceType,
           ocr_confidence: extraction.ocrConfidence,
@@ -694,45 +838,17 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           page_ocr: extraction.pageOcr || [],
         };
         statementResults.push(statement);
-        statementPersistenceFiles.push(file);
+        statementPersistenceFiles.push(persistenceFile);
+        statementDiagnostics.push({
+          fileName: statement.fileName,
+          sourceType: statement.extractionMeta?.source_type || "pdf",
+          ocrConfidence: statement.extractionMeta?.ocr_confidence ?? null,
+          extractionWarnings: statement.extractionMeta?.extraction_warnings || [],
+          pageCount: statement.extractionMeta?.page_count || statement.pages?.length || 0,
+          pageOcr: statement.extractionMeta?.page_ocr || [],
+        });
       }
 
-      if (statementScan.hasPages) {
-        const scannedStatementExtraction = await extractScanSessionDocument(statementScan.pages, "Annual Statement", {
-          patchPage: statementScan.patchPage,
-          onStage: (phase, progress) => {
-            setExtractionStatus({
-              phase,
-              progress,
-              currentFile: "Annual statement scan session",
-              detail: `${statementScan.pages.length} page${statementScan.pages.length === 1 ? "" : "s"}`,
-            });
-          },
-          onProgress: setExtractionStatus,
-        });
-
-        if (!scannedStatementExtraction.text.trim()) {
-          throw new Error(
-            "We could not reliably read the scanned annual statement pages. Retake the photo in better lighting, flatter angle, and closer crop."
-          );
-        }
-
-        setLoadingMessage("Parsing scanned statement packet...");
-        const scannedStatement = parseStatementDocument({
-          pages: scannedStatementExtraction.pages,
-          fileName: scannedStatementExtraction.fileName,
-        });
-        scannedStatement.extractionMeta = {
-          source_type: scannedStatementExtraction.sourceType,
-          ocr_confidence: scannedStatementExtraction.ocrConfidence,
-          extraction_method: scannedStatementExtraction.extractionMethod,
-          extraction_warnings: scannedStatementExtraction.extractionWarnings,
-          page_count: scannedStatementExtraction.pageCount,
-          page_ocr: scannedStatementExtraction.pageOcr || [],
-        };
-        statementResults.push(scannedStatement);
-        statementPersistenceFiles.push(null);
-      }
       setDocumentDiagnostics({
         illustration: {
           fileName: illustrationFile?.name || illustrationExtraction.fileName || "Initial policy scan session",
@@ -742,17 +858,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           pageCount: illustrationExtraction.pageCount || illustrationExtraction.pages.length,
           pageOcr: illustrationExtraction.pageOcr || [],
         },
-        statements: statementResults.map((statement) => ({
-          fileName: statement.fileName,
-          sourceType: statement.extractionMeta?.source_type || "pdf",
-          ocrConfidence: statement.extractionMeta?.ocr_confidence ?? null,
-          extractionWarnings: statement.extractionMeta?.extraction_warnings || [],
-          pageCount: statement.extractionMeta?.page_count || statement.pages?.length || 0,
-          pageOcr: statement.extractionMeta?.page_ocr || [],
-        })),
+        statements: statementDiagnostics,
       });
 
-      const sortedStatements = sortStatementsChronologically(statementResults);
+      const sortedStatements = sortStatementsChronologically(ensureArray(statementResults));
       setLoadingMessage("Computing policy analytics...");
       const analytics = computeDerivedAnalytics(baseline, sortedStatements);
       const vaultAiSummary = buildVaultAiSummary(baseline, sortedStatements, analytics);
@@ -825,7 +934,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
   }
 
   function handleStatementFilesChange(event) {
-    setStatementFiles(Array.from(event.target.files || []));
+    setStatementFiles(ensureArray(Array.from(event.target.files || [])));
   }
 
   function handleClearSession(target) {
@@ -977,9 +1086,9 @@ export default function LifePolicyUploadPage({ onNavigate }) {
                 </button>
               ) : null}
             </div>
-            {statementFiles.length > 0 ? (
+            {uploadedStatementFiles.length > 0 ? (
               <div style={{ display: "grid", gap: "8px" }}>
-                {statementFiles.map((file) => (
+                {uploadedStatementFiles.map((file) => (
                   <div key={`${file.name}-${file.size}-${file.lastModified}`} style={{ display: "grid", gap: "4px" }}>
                     <div style={{ color: "#0f172a", fontWeight: 600, wordBreak: "break-word" }}>
                       {file.name}
@@ -991,14 +1100,47 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               <div style={{ color: "#64748b" }}>
                 {statementScan.hasPages
                   ? `${statementScan.pages.length} scanned statement page${statementScan.pages.length === 1 ? "" : "s"} ready.`
-                  : "No annual statements selected yet."}
+                  : "No annual statements selected yet. Upload PDF statements or scan pages to prepare a statement packet."}
               </div>
             )}
 
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                border: "1px solid #dbe4ee",
+                background: normalizedStatementInput.length > 0 ? "#f8fafc" : "#ffffff",
+                display: "grid",
+                gap: "6px",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Annual Statement Analysis Packet</div>
+              <div style={{ color: "#475569", lineHeight: "1.6" }}>
+                {normalizedStatementInput.length > 0
+                  ? `${normalizedStatementInput.length} annual statement input${normalizedStatementInput.length === 1 ? "" : "s"} ready for analysis.`
+                  : "No annual statement pages are ready for analysis yet."}
+              </div>
+              {normalizedStatementInput.length > 0 ? (
+                <div style={{ color: "#64748b", fontSize: "14px" }}>
+                  {normalizedStatementInput.map((item) => item.label).join(" | ")}
+                </div>
+              ) : null}
+              {uploadedStatementFiles.length > 0 ? (
+                <div style={{ color: "#64748b", fontSize: "14px" }}>
+                  Uploaded PDF statements are ready for analysis. Camera scanning is optional for pages you cannot upload cleanly.
+                </div>
+              ) : null}
+            </div>
+
             <ScanReview
               title="Annual Statement Scan Session"
-              description="Build one scanned statement packet, reorder pages, and proceed even if quality is fair."
+              description="Build one scanned statement packet, reorder pages, and proceed even if quality is fair. Uploaded PDFs feed the same analysis packet above, so camera scanning is optional."
               pages={statementScan.pages}
+              emptyMessage={
+                uploadedStatementFiles.length > 0
+                  ? "No scanned pages yet. Uploaded PDF statements are still ready for analysis."
+                  : undefined
+              }
               selectedPageId={selectedStatementPageId}
               onSelectPage={setSelectedStatementPageId}
               onAddPage={() => handleCameraCapture("statement")}
@@ -1018,8 +1160,13 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         subtitle="Run the current carrier-aware life-policy parser and save the result into the vaulted policy workflow."
       >
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-          <button type="button" onClick={handleAnalyzeAndSave} disabled={loading} style={actionStyle(true)}>
-            {loading ? "Analyzing Policy..." : "Analyze Scan"}
+          <button
+            type="button"
+            onClick={handleAnalyzeAndSave}
+            disabled={loading || !hasBaselineInput || hasStatementPacketGap}
+            style={actionStyle(true)}
+          >
+            {loading ? "Analyzing Policy..." : "Analyze Statement Packet"}
           </button>
           {saveStatus?.succeeded && saveStatus.policyId ? (
             <button
@@ -1047,6 +1194,17 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         ) : null}
 
         {error ? <div style={{ marginTop: "14px", color: "#991b1b" }}>{error}</div> : null}
+
+        {!hasBaselineInput ? (
+          <div style={{ marginTop: "14px", color: "#475569" }}>
+            Upload the initial illustration or policy document before analysis can run.
+          </div>
+        ) : null}
+        {hasStatementPacketGap ? (
+          <div style={{ marginTop: "14px", color: "#9a3412" }}>
+            We found uploaded files, but they were not converted into an analysis packet.
+          </div>
+        ) : null}
 
         {(documentDiagnostics.illustration || documentDiagnostics.statements.length > 0) ? (
           <div
