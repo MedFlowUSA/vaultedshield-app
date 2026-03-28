@@ -134,15 +134,23 @@ function formatAnalyzeFailure(error) {
       : "Life policy analysis hit a mobile compatibility issue. Please retry after refresh.";
   }
 
-  if (extractionKind === "file_read_failure") {
+  if (extractionKind === "invalid_file") {
+    return rawMessage || "Invalid or missing PDF file.";
+  }
+
+  if (extractionKind === "oversized_mobile_pdf") {
+    return rawMessage || "This PDF is too large for reliable mobile processing. Try a smaller export or rescan.";
+  }
+
+  if (extractionKind === "file_read_failed" || extractionKind === "file_read_failure") {
     return "We could not read the selected PDF on this device. Try re-exporting the PDF or rescanning it if this file came from a portal.";
   }
 
-  if (extractionKind === "pdf_open_failure") {
+  if (extractionKind === "pdf_open_failed" || extractionKind === "pdf_open_failure") {
     return "We could not open the baseline PDF on this device. Try re-exporting the PDF or rescanning it if this file was created from a portal.";
   }
 
-  if (extractionKind === "page_extraction_failure") {
+  if (extractionKind === "page_extraction_failed" || extractionKind === "page_extraction_failure") {
     return rawMessage || "The baseline illustration could not be read from one or more pages in the selected PDF.";
   }
 

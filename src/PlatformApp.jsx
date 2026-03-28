@@ -31,6 +31,7 @@ import PropertyHubPage from "./pages/PropertyHubPage";
 import PropertyDetailPage from "./pages/PropertyDetailPage";
 import RetirementHubPage from "./pages/RetirementHubPage";
 import RetirementAccountDetailPage from "./pages/RetirementAccountDetailPage";
+import RetirementUploadPage from "./pages/RetirementUploadPage";
 import WarrantyHubPage from "./pages/WarrantyHubPage";
 import WarrantyDetailPage from "./pages/WarrantyDetailPage";
 import EstateHubPage from "./pages/EstateHubPage";
@@ -220,6 +221,8 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <PropertyHubPage onNavigate={navigate} />;
     case "/retirement":
       return <RetirementHubPage onNavigate={navigate} />;
+    case "/retirement/upload":
+      return <RetirementUploadPage onNavigate={navigate} />;
     case "/warranties":
       return <WarrantyHubPage onNavigate={navigate} />;
     case "/estate":

@@ -27,6 +27,7 @@ export const ROUTES = {
   propertyHub: { path: "/property", title: "Property", section: "Assets", minimumTier: "essential" },
   propertyDetail: { path: "/property/detail", title: "Property Detail", section: "Assets", minimumTier: "essential" },
   retirementHub: { path: "/retirement", title: "Retirement", section: "Assets", minimumTier: "professional" },
+  retirementUpload: { path: "/retirement/upload", title: "Retirement Upload", section: "Assets", minimumTier: "professional" },
   retirementDetail: { path: "/retirement/detail", title: "Retirement Detail", section: "Assets", minimumTier: "professional" },
   warrantyHub: { path: "/warranties", title: "Warranties", section: "Assets", minimumTier: "professional" },
   warrantyDetail: { path: "/warranties/detail", title: "Warranty Detail", section: "Assets", minimumTier: "professional" },

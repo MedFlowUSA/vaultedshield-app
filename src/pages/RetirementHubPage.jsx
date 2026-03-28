@@ -11,6 +11,8 @@ import {
   listRetirementProviders,
   listRetirementTypes,
 } from "../lib/domain/retirement";
+import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
+import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import {
   createRetirementAssetWithAccount,
   listRetirementAccounts,
@@ -33,6 +35,18 @@ function getStatusTone(status) {
   return "info";
 }
 
+function getReadinessTone(status) {
+  if (status === "On Track") return { background: "#dcfce7", color: "#166534" };
+  if (status === "Moderately Behind") return { background: "#fef3c7", color: "#92400e" };
+  if (status === "Behind") return { background: "#ffedd5", color: "#c2410c" };
+  return { background: "#fee2e2", color: "#991b1b" };
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Not recorded";
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
 const RETIREMENT_TYPES = listRetirementTypes();
 const RETIREMENT_PROVIDERS = listRetirementProviders();
 
@@ -48,13 +62,14 @@ const DEFAULT_FORM = {
 };
 
 export default function RetirementHubPage({ onNavigate }) {
-  const { householdState } = usePlatformShellData();
+  const { householdState, debug } = usePlatformShellData();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
+  const [goalSnapshot, setGoalSnapshot] = useState(null);
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -79,6 +94,15 @@ export default function RetirementHubPage({ onNavigate }) {
       active = false;
     };
   }, [householdState.loading, householdState.context.householdId]);
+
+  useEffect(() => {
+    setGoalSnapshot(
+      loadRetirementGoalSnapshot({
+        userId: debug.authUserId || null,
+        householdId: debug.householdId || null,
+      })
+    );
+  }, [debug.authUserId, debug.householdId]);
 
   const summaryItems = useMemo(() => {
     const majorCategoryCounts = accounts.reduce(
@@ -145,6 +169,16 @@ export default function RetirementHubPage({ onNavigate }) {
     );
   }, [accounts]);
 
+  const readinessSnapshot = useMemo(() => {
+    if (!goalSnapshot?.readiness && !goalSnapshot?.goalForm) return null;
+    if (goalSnapshot?.readiness) return goalSnapshot.readiness;
+    return scoreRetirementGoal({
+      ...goalSnapshot.goalForm,
+      currentAssets: goalSnapshot?.plannerSnapshot?.currentAssets || 0,
+      annualContribution: goalSnapshot?.plannerSnapshot?.annualContribution || 0,
+    });
+  }, [goalSnapshot]);
+
   async function refreshAccounts() {
     if (!householdState.context.householdId) return;
     const result = await listRetirementAccounts(householdState.context.householdId);
@@ -189,19 +223,34 @@ export default function RetirementHubPage({ onNavigate }) {
         title="Retirement Hub"
         description="Live retirement registry for employer plans, IRAs, pensions, and future continuity intelligence."
         actions={
-          <button
-            onClick={() => refreshAccounts()}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Refresh Retirement Data
-          </button>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => onNavigate?.("/retirement/upload")}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Retirement Upload Preview
+            </button>
+            <button
+              onClick={() => refreshAccounts()}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Refresh Retirement Data
+            </button>
+          </div>
         }
       />
 
@@ -297,6 +346,73 @@ export default function RetirementHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
+          <SectionCard title="Retirement Goal Snapshot" subtitle="Your saved retirement goal and readiness estimate travel with this household.">
+            {readinessSnapshot ? (
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <div
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      background: getReadinessTone(readinessSnapshot.readinessStatus).background,
+                      color: getReadinessTone(readinessSnapshot.readinessStatus).color,
+                      fontWeight: 700,
+                      fontSize: "12px",
+                    }}
+                  >
+                    {readinessSnapshot.readinessStatus}
+                  </div>
+                  <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>
+                    {readinessSnapshot.readinessScore}/100
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", color: "#475569" }}>
+                  <div><strong>Projected Balance:</strong> {formatCurrency(readinessSnapshot.projectedRetirementBalance)}</div>
+                  <div><strong>Income Gap:</strong> {formatCurrency(readinessSnapshot.estimatedIncomeGapMonthly)}/month</div>
+                  <div><strong>Non-Portfolio Income:</strong> {formatCurrency(readinessSnapshot.estimatedNonPortfolioIncomeMonthly)}/month</div>
+                  <div><strong>Saved Assets Basis:</strong> {formatCurrency(goalSnapshot?.plannerSnapshot?.currentAssets ?? readinessSnapshot.inputs?.currentAssets)}</div>
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{readinessSnapshot.explanation}</div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {(readinessSnapshot.assumptionLines || []).map((item) => (
+                    <div
+                      key={item}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        background: "#f8fafc",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                        color: "#64748b",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/retirement/upload")}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Update Retirement Goal
+                </button>
+              </div>
+            ) : (
+              <EmptyState
+                title="No retirement goal saved yet"
+                description="Open the retirement upload planner to set a target retirement age, income goal, and first readiness estimate for this household."
+              />
+            )}
+          </SectionCard>
+
           <SectionCard title="Create Retirement Account" subtitle="Minimal live create flow that writes both the generic asset row and the linked retirement account row.">
             <form onSubmit={handleCreateAccount} style={{ display: "grid", gap: "12px" }}>
               <select
