@@ -17,8 +17,8 @@ function median(values = []) {
 }
 
 function normalizeConfidenceLabel(score) {
-  if (score >= 0.75) return "strong";
-  if (score >= 0.5) return "moderate";
+  if (score >= 0.82) return "strong";
+  if (score >= 0.62) return "moderate";
   return "weak";
 }
 
@@ -102,12 +102,33 @@ function getSubjectCompleteness(subject = {}) {
   return totalWeight > 0 ? capturedWeight / totalWeight : 0;
 }
 
+function getCompFitTier(similarityScore, recencyMonths, distanceMiles) {
+  if (
+    Number.isFinite(similarityScore) &&
+    similarityScore >= 0.82 &&
+    (recencyMonths === null || recencyMonths <= 9) &&
+    (distanceMiles === null || distanceMiles <= 0.9)
+  ) {
+    return "strong";
+  }
+  if (
+    Number.isFinite(similarityScore) &&
+    similarityScore >= 0.68 &&
+    (recencyMonths === null || recencyMonths <= 18) &&
+    (distanceMiles === null || distanceMiles <= 1.75)
+  ) {
+    return "usable";
+  }
+  return "weak";
+}
+
 function buildCompAnalysis(subject = {}, comps = []) {
   const subjectSquareFeet = toNumber(subject.square_feet);
   const subjectBeds = toNumber(subject.beds);
   const subjectBaths = toNumber(subject.baths);
   const subjectYearBuilt = toNumber(subject.year_built);
   const subjectPropertyType = subject.property_type || subject.property_type_key || null;
+  const isVacantLand = subjectPropertyType === "vacant_land";
 
   return comps
     .map((comp) => {
@@ -127,29 +148,42 @@ function buildCompAnalysis(subject = {}, comps = []) {
       const bathGap = subjectBaths !== null && compBaths !== null ? Math.abs(subjectBaths - compBaths) : null;
       const yearGap =
         subjectYearBuilt !== null && compYearBuilt !== null ? Math.abs(subjectYearBuilt - compYearBuilt) : null;
+      const propertyTypeMismatch =
+        Boolean(subjectPropertyType && comp.property_type) && comp.property_type !== subjectPropertyType;
 
-      const distanceWeight = distance === null ? 0.72 : clamp(1 - distance / 4, 0.2, 1);
+      const distanceWeight = distance === null ? 0.62 : clamp(1 - distance / 2.6, 0.05, 1);
       const recencyWeight =
-        monthsOld === null ? 0.7 : monthsOld <= 6 ? 1 : monthsOld <= 12 ? 0.9 : monthsOld <= 24 ? 0.78 : 0.6;
-      const sqftWeight = squareFootRatio === null ? 0.72 : clamp(1 - squareFootRatio * 1.2, 0.35, 1);
-      const bedWeight = bedGap === null ? 0.82 : clamp(1 - bedGap * 0.18, 0.45, 1);
-      const bathWeight = bathGap === null ? 0.82 : clamp(1 - bathGap * 0.16, 0.45, 1);
-      const yearWeight = yearGap === null ? 0.8 : clamp(1 - yearGap / 80, 0.45, 1);
+        monthsOld === null ? 0.6 : monthsOld <= 6 ? 1 : monthsOld <= 12 ? 0.86 : monthsOld <= 18 ? 0.7 : monthsOld <= 24 ? 0.5 : 0.24;
+      const sqftWeight = squareFootRatio === null ? 0.6 : clamp(1 - squareFootRatio * 1.8, 0.08, 1);
+      const bedWeight = bedGap === null ? 0.72 : clamp(1 - bedGap * 0.28, 0.18, 1);
+      const bathWeight = bathGap === null ? 0.72 : clamp(1 - bathGap * 0.24, 0.18, 1);
+      const yearWeight = yearGap === null ? 0.72 : clamp(1 - yearGap / 65, 0.2, 1);
       const propertyTypeWeight =
-        !subjectPropertyType || !comp.property_type || comp.property_type === subjectPropertyType ? 1 : 0.74;
+        !subjectPropertyType || !comp.property_type || comp.property_type === subjectPropertyType ? 1 : 0.12;
       const similarityScore = Number(
         clamp(
           distanceWeight * 0.24 +
-            recencyWeight * 0.16 +
+            recencyWeight * 0.18 +
             sqftWeight * 0.24 +
-            bedWeight * 0.12 +
+            bedWeight * 0.1 +
             bathWeight * 0.1 +
             yearWeight * 0.08 +
             propertyTypeWeight * 0.06,
-          0.2,
+          0.05,
           1
         ).toFixed(2)
       );
+
+      const exclusionReasons = [];
+      if (propertyTypeMismatch) exclusionReasons.push("property_type_mismatch");
+      if (distance !== null && distance > (isVacantLand ? 4 : 2.25)) exclusionReasons.push("distance_too_far");
+      if (monthsOld !== null && monthsOld > (isVacantLand ? 42 : 30)) exclusionReasons.push("sale_too_old");
+      if (squareFootRatio !== null && squareFootRatio > (isVacantLand ? 0.9 : 0.42)) exclusionReasons.push("size_mismatch");
+      if (!isVacantLand && bedGap !== null && bedGap > 2) exclusionReasons.push("bedroom_mismatch");
+      if (!isVacantLand && bathGap !== null && bathGap > 2) exclusionReasons.push("bathroom_mismatch");
+      if (similarityScore < 0.56) exclusionReasons.push("similarity_below_threshold");
+      const eligibleForBlend = exclusionReasons.length === 0;
+      const fitTier = getCompFitTier(similarityScore, monthsOld, distance);
 
       const sqftAdjustment =
         subjectSquareFeet !== null && compSquareFeet !== null && compPricePerSqft !== null
@@ -168,21 +202,24 @@ function buildCompAnalysis(subject = {}, comps = []) {
             ? compPricePerSqft * subjectSquareFeet + bedAdjustment + bathAdjustment + yearAdjustment
             : null;
 
-      return {
-        ...comp,
-        sale_price: compSalePrice,
-        price_per_sqft: compPricePerSqft,
-        months_old: monthsOld,
-        similarity_score: similarityScore,
-        adjusted_estimate: adjustedEstimate !== null ? roundMoney(adjustedEstimate) : null,
-        adjustment_summary: {
-          sqft_adjustment: roundMoney(sqftAdjustment),
+        return {
+          ...comp,
+          sale_price: compSalePrice,
+          price_per_sqft: compPricePerSqft,
+          months_old: monthsOld,
+          similarity_score: similarityScore,
+          fit_tier: fitTier,
+          eligible_for_blend: eligibleForBlend,
+          exclusion_reasons: exclusionReasons,
+          adjusted_estimate: adjustedEstimate !== null ? roundMoney(adjustedEstimate) : null,
+          adjustment_summary: {
+            sqft_adjustment: roundMoney(sqftAdjustment),
           bed_adjustment: roundMoney(bedAdjustment),
           bath_adjustment: roundMoney(bathAdjustment),
           year_adjustment: roundMoney(yearAdjustment),
-        },
-      };
-    })
+          },
+        };
+      })
     .filter((comp) => Number.isFinite(comp.adjusted_estimate));
 }
 
@@ -207,7 +244,8 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
   const sources = Array.isArray(providerResult.sources) ? providerResult.sources : [];
   const comps = Array.isArray(providerResult.comps) ? providerResult.comps : [];
   const subjectCompleteness = getSubjectCompleteness(subject);
-  const analyzedComps = buildCompAnalysis(subject, comps);
+  const analyzedCompPool = buildCompAnalysis(subject, comps);
+  const analyzedComps = analyzedCompPool.filter((comp) => comp.eligible_for_blend);
   const recentPurchaseAnchor = buildRecentPurchaseAnchor(subject);
 
   const sourceSignals = sources
@@ -229,10 +267,22 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
   const compSignals = analyzedComps.map((comp) => ({
     source_name: comp.source_name || "Comparable sale",
     estimate: sanitizePositiveEstimate(comp.adjusted_estimate),
-    confidence: clamp(comp.similarity_score * 0.92, 0.25, 0.94),
+    confidence: clamp(
+      comp.similarity_score *
+        (comp.fit_tier === "strong" ? 0.76 : comp.fit_tier === "usable" ? 0.6 : 0.42) *
+        (comp.months_old === null ? 0.92 : comp.months_old <= 12 ? 1 : comp.months_old <= 18 ? 0.88 : 0.72) *
+        (comp.distance_miles === null ? 0.94 : comp.distance_miles <= 1 ? 1 : comp.distance_miles <= 1.75 ? 0.86 : 0.68),
+      0.12,
+      0.78
+    ),
     notes: [
       `Comp at ${comp.distance_miles ?? "?"} miles with similarity ${Math.round(comp.similarity_score * 100)}%.`,
       comp.months_old !== null ? `Sale is ${comp.months_old} month${comp.months_old === 1 ? "" : "s"} old.` : "Sale recency is limited.",
+      comp.fit_tier === "strong"
+        ? "This comp reads as a stronger subject match."
+        : comp.fit_tier === "usable"
+          ? "This comp is usable, but not especially tight."
+          : "This comp is weak and should not carry much weight.",
     ],
   })).filter((signal) => signal.estimate !== null);
 
@@ -277,36 +327,54 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
   const averageCompRecencyMonths = average(
     analyzedComps.map((comp) => comp.months_old).filter((value) => Number.isFinite(value))
   );
+  const strongCompCount = analyzedComps.filter((comp) => comp.fit_tier === "strong").length;
+  const usableCompCount = analyzedComps.filter((comp) => comp.fit_tier === "usable").length;
+  const discardedCompCount = analyzedCompPool.length - analyzedComps.length;
+  const farCompCount = analyzedComps.filter((comp) => Number.isFinite(comp.distance_miles) && comp.distance_miles > 1.25).length;
+  const staleCompCount = analyzedComps.filter((comp) => Number.isFinite(comp.months_old) && comp.months_old > 12).length;
 
-  const providerSupport = Math.min(0.2, sourceSignals.length * 0.045);
-  const compSupport = Math.min(0.24, analyzedComps.length * 0.04);
+  const providerSupport = Math.min(0.12, sourceSignals.length * 0.03);
+  const compSupport =
+    Math.min(0.18, strongCompCount * 0.055 + usableCompCount * 0.03 + Math.max(analyzedComps.length - strongCompCount - usableCompCount, 0) * 0.01);
   const officialSignals = sourceSignals.filter((signal) => signal.official_source);
   const officialSupport = officialSignals.length > 0 ? Math.min(0.08, officialSignals.length * 0.035) : 0;
   const officialAligned =
     midpointEstimate !== null && officialSignals.length > 0
       ? officialSignals.every((signal) => Math.abs(signal.estimate - midpointEstimate) / midpointEstimate <= 0.12)
       : false;
-  const officialAlignmentBonus = officialAligned ? 0.04 : officialSignals.length > 0 ? 0.015 : 0;
-  const compFitBonus = clamp((medianCompSimilarity ?? 0.45) * 0.18, 0.04, 0.18);
+  const officialAlignmentBonus = officialAligned ? 0.03 : officialSignals.length > 0 ? 0.01 : 0;
+  const compFitBonus = clamp((medianCompSimilarity ?? 0.4) * 0.12, 0.01, 0.11);
   const recencyBonus =
     averageCompRecencyMonths === null
-      ? 0.03
+      ? 0.02
       : averageCompRecencyMonths <= 6
-        ? 0.09
+        ? 0.06
         : averageCompRecencyMonths <= 12
-          ? 0.06
+          ? 0.04
           : averageCompRecencyMonths <= 24
-            ? 0.03
+            ? 0.01
             : 0;
-  const disagreementPenalty = divergenceRatio * 0.75;
-  const sparseCompPenalty = analyzedComps.length === 0 ? 0.16 : analyzedComps.length < 3 ? 0.08 : 0;
+  const disagreementPenalty = divergenceRatio * 0.92;
+  const sparseCompPenalty =
+    analyzedComps.length === 0
+      ? 0.2
+      : strongCompCount === 0
+        ? 0.14
+        : analyzedComps.length < 3
+          ? 0.11
+          : 0;
+  const weakCompPenalty =
+    discardedCompCount * 0.018 +
+    Math.max(0, farCompCount - 1) * 0.025 +
+    staleCompCount * 0.02 +
+    ((medianCompSimilarity ?? 0.6) < 0.72 ? 0.06 : 0);
   const unusualPropertyPenalty =
     ["vacant_land", "multifamily_property"].includes(subject.property_type || subject.property_type_key) ? 0.08 : 0;
 
   const confidenceScore = midpointEstimate
     ? clamp(
-        0.24 +
-          subjectCompleteness * 0.24 +
+        0.1 +
+          subjectCompleteness * 0.2 +
           providerSupport +
           officialSupport +
           officialAlignmentBonus +
@@ -315,21 +383,24 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
           recencyBonus -
           disagreementPenalty -
           sparseCompPenalty -
+          weakCompPenalty -
           unusualPropertyPenalty,
-        0.2,
-        0.94
+        0.14,
+        0.9
       )
-    : 0.2;
+    : 0.14;
   const confidenceLabel = normalizeConfidenceLabel(confidenceScore);
 
   const rangeRatio = clamp(
-    0.07 +
-      divergenceRatio * 0.8 +
-      (subjectCompleteness < 0.7 ? 0.04 : 0) +
-      (medianCompSimilarity !== null && medianCompSimilarity < 0.65 ? 0.03 : 0) -
-      Math.min(0.04, analyzedComps.length * 0.008),
-    0.06,
-    0.2
+    0.09 +
+      divergenceRatio * 0.95 +
+      (subjectCompleteness < 0.7 ? 0.05 : 0.02) +
+      (medianCompSimilarity !== null && medianCompSimilarity < 0.72 ? 0.05 : 0) +
+      (strongCompCount === 0 ? 0.04 : 0) +
+      Math.min(0.05, discardedCompCount * 0.008) -
+      Math.min(0.03, strongCompCount * 0.01),
+    0.08,
+    0.24
   );
   const lowEstimate = midpointEstimate ? sanitizePositiveEstimate(midpointEstimate * (1 - rangeRatio)) : null;
   const highEstimate = midpointEstimate ? sanitizePositiveEstimate(midpointEstimate * (1 + rangeRatio)) : null;
@@ -351,9 +422,12 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
   const reviewFlags = [];
   if (subjectCompleteness < 0.7) reviewFlags.push("subject_facts_incomplete");
   if (analyzedComps.length < 3) reviewFlags.push("limited_comp_support");
-  if ((medianCompSimilarity ?? 0) < 0.65) reviewFlags.push("comp_similarity_mixed");
+  if ((medianCompSimilarity ?? 0) < 0.72) reviewFlags.push("comp_similarity_mixed");
   if (divergenceRatio > 0.12) reviewFlags.push("source_divergence_elevated");
-  if (averageCompRecencyMonths !== null && averageCompRecencyMonths > 18) reviewFlags.push("stale_comp_recency");
+  if (averageCompRecencyMonths !== null && averageCompRecencyMonths > 12) reviewFlags.push("stale_comp_recency");
+  if (strongCompCount === 0) reviewFlags.push("no_strong_core_comps");
+  if (discardedCompCount > 0) reviewFlags.push("weak_comps_excluded");
+  if (farCompCount > 1) reviewFlags.push("distance_support_mixed");
   if (officialSignals.length === 0) reviewFlags.push("official_market_support_unavailable");
   if (officialSignals.length > 0 && !officialAligned) reviewFlags.push("official_market_signals_mixed");
   if (midpointEstimate === null || lowEstimate === null || highEstimate === null) {
@@ -361,13 +435,15 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
   }
 
   const adjustmentNotes = [
-    `${sourceSignals.length} provider source${sourceSignals.length === 1 ? "" : "s"} and ${analyzedComps.length} weighted comp${analyzedComps.length === 1 ? "" : "s"} contributed to the blended estimate.`,
+    `${sourceSignals.length} provider source${sourceSignals.length === 1 ? "" : "s"} and ${analyzedComps.length} eligible comp${analyzedComps.length === 1 ? "" : "s"} contributed to the blended estimate${discardedCompCount > 0 ? ` after excluding ${discardedCompCount} weaker comp${discardedCompCount === 1 ? "" : "s"}` : ""}.`,
     subjectCompleteness < 0.75
       ? "Subject property facts are still incomplete, which keeps the value range wider."
       : "Subject property facts are sufficiently complete for a tighter virtual value review.",
-    medianCompSimilarity !== null && medianCompSimilarity >= 0.75
-      ? "Comparable sales align closely with the subject on size, recency, and property fit."
-      : "Comparable sales are usable, but subject-to-comp similarity is mixed.",
+    strongCompCount >= 2
+      ? "The core comparable sales align closely with the subject on size, recency, distance, and property fit."
+      : strongCompCount === 1
+        ? "Only one stronger core comparable sale is visible, so the estimate still needs a wider review range."
+        : "The comp set is thin or mixed, so the estimate should be treated as a broader virtual range rather than a tight value call.",
     divergenceRatio > 0.12
       ? "Source divergence is elevated, so the valuation range stays wider."
       : "Provider and comparable-sale signals are reasonably aligned for this pass.",
@@ -402,6 +478,9 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
       comp_fit_score: medianCompSimilarity !== null ? Number(medianCompSimilarity.toFixed(2)) : null,
       average_comp_recency_months:
         averageCompRecencyMonths !== null ? Number(averageCompRecencyMonths.toFixed(1)) : null,
+      strong_comp_count: strongCompCount,
+      usable_comp_count: usableCompCount,
+      discarded_comp_count: discardedCompCount,
       provider_source_count: sourceSignals.length,
       official_source_count: officialSignals.length,
       official_market_support: officialSignals.length > 0 ? (officialAligned ? "aligned" : "mixed") : "unavailable",
@@ -415,6 +494,9 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
         sale_price: comp.sale_price ?? null,
         sale_date: comp.sale_date || null,
         similarity_score: comp.similarity_score,
+        fit_tier: comp.fit_tier,
+        eligible_for_blend: comp.eligible_for_blend,
+        exclusion_reasons: comp.exclusion_reasons,
         adjusted_estimate: comp.adjusted_estimate,
         adjustment_summary: comp.adjustment_summary,
       })),
@@ -711,11 +793,11 @@ export function answerPropertyQuestion({
       break;
     case "comp_quality":
       answerText =
-        (metadata.comp_fit_score ?? 0) >= 0.75
-          ? "The comps are reading as strong because the best visible sales are close in fit, reasonably recent, and aligned with the local market profile."
-          : (metadata.comp_fit_score ?? 0) >= 0.6
-            ? "The comps are usable, but they are mixed enough that the valuation still needs a wider review range."
-            : "The comps are currently thin or mixed, which is one of the main reasons the valuation range stays broader.";
+        (metadata.comp_fit_score ?? 0) >= 0.8
+          ? "The comps are reading as stronger support because the best visible sales are close in fit, recent enough, and aligned with the local market profile."
+          : (metadata.comp_fit_score ?? 0) >= 0.68
+            ? "The comps are usable, but they are mixed enough that the valuation should still be treated as a broader review range."
+            : "The comps are currently thin or mixed, so the valuation should be read as a broad estimate rather than a tight value call.";
       evidencePoints = [
         `Overall comp fit score is ${compFitText}.`,
         `Average comp recency is ${compRecencyText}.`,
@@ -862,7 +944,7 @@ export function buildPropertyReviewReport({
         id: "comp_market_review",
         title: "Comp and Market Review",
         kind: "bullets",
-        summary: "The valuation now uses a broader local comp pool, local market price-per-foot context, and official market support when available.",
+        summary: "The valuation uses only the comps that survive fit, recency, and distance screens, then blends those with market context and other lighter support signals.",
         items: [
           { label: "Best Comp Fit", value: bestComp?.similarity_score !== null && bestComp?.similarity_score !== undefined ? `${Math.round(Number(bestComp.similarity_score) * 100)}%` : "\u2014" },
           { label: "Best Comp Distance", value: bestComp?.distance_miles !== null && bestComp?.distance_miles !== undefined ? `${bestComp.distance_miles} mi` : "\u2014" },

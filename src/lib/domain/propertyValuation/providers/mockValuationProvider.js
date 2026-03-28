@@ -317,7 +317,7 @@ async function buildOfficialHpiMarketSources(subject = {}, subjectEstimate = nul
         signals.push({
           source_name: "FHFA state market trend",
           estimate,
-          confidence: metroSignal ? 0.67 : 0.62,
+          confidence: metroSignal ? 0.54 : 0.5,
           notes: [
             `Official FHFA state HPI read for ${stateSignal.name}.`,
             `1-year change ${stateSignal.sa_1y}% and 5-year change ${stateSignal.sa_5y}%.`,
@@ -340,7 +340,7 @@ async function buildOfficialHpiMarketSources(subject = {}, subjectEstimate = nul
         signals.push({
           source_name: "FHFA metro market trend",
           estimate,
-          confidence: 0.72,
+          confidence: 0.58,
           notes: [
             `Official FHFA metro HPI read for ${metroSignal.name}.`,
             `1-year change ${metroSignal.nsa_1y}% and 5-year change ${metroSignal.nsa_5y}%.`,
@@ -472,10 +472,10 @@ function buildMarketRealityFloorSource(subject = {}, marketProfile = {}, officia
     estimate: floorEstimate,
     confidence:
       anchoredPurchaseEstimate !== null && subjectPpsfFloor !== null
-        ? 0.79
+        ? 0.58
         : anchoredPurchaseEstimate !== null
-          ? 0.74
-          : 0.68,
+          ? 0.52
+          : 0.46,
     notes: [
       "Prevents the blended estimate from drifting materially below purchase-growth and local price-per-foot support.",
       anchoredPurchaseEstimate !== null
@@ -673,13 +673,22 @@ function buildCandidateComp(subject = {}, subjectEstimate, marketProfile = {}, s
 
 function selectBestComps(candidateComps = []) {
   return [...candidateComps]
+    .filter((comp) => {
+      const similarity = comp.raw_payload?.similarity_score ?? 0;
+      const monthsAgo = comp.raw_payload?.months_ago ?? null;
+      const distance = comp.distance_miles ?? null;
+      if (similarity < 0.58) return false;
+      if (distance !== null && distance > 2.25) return false;
+      if (monthsAgo !== null && monthsAgo > 30) return false;
+      return true;
+    })
     .sort((left, right) => {
       const leftScore = left.raw_payload?.similarity_score ?? 0;
       const rightScore = right.raw_payload?.similarity_score ?? 0;
       if (rightScore !== leftScore) return rightScore - leftScore;
       return (left.distance_miles ?? 99) - (right.distance_miles ?? 99);
     })
-    .slice(0, 8);
+    .slice(0, 6);
 }
 
 export async function runMockValuationProvider(subject = {}) {
@@ -725,7 +734,7 @@ export async function runMockValuationProvider(subject = {}) {
     {
       source_name: "Local heuristic AVM",
       estimate: clampPositiveCurrency(subjectModel.estimate),
-      confidence: 0.81,
+      confidence: 0.56,
       notes: [
         "Built from subject property facts, regional pricing profile, and deterministic market context.",
       ],
@@ -733,7 +742,7 @@ export async function runMockValuationProvider(subject = {}) {
     {
       source_name: "Weighted comp market blend",
       estimate: compWeightedEstimate ?? compMedianEstimate,
-      confidence: comps.length >= 6 ? 0.83 : comps.length >= 4 ? 0.75 : 0.64,
+      confidence: comps.length >= 5 ? 0.66 : comps.length >= 3 ? 0.56 : 0.44,
       notes: [
         `${comps.length} best-fit comparable sale${comps.length === 1 ? "" : "s"} selected from a larger local comp pool.`,
         "Comp pricing reflects local price-per-foot context, sale recency, and subject-fit adjustments.",
@@ -742,7 +751,7 @@ export async function runMockValuationProvider(subject = {}) {
     {
       source_name: "County-style assessment anchor",
       estimate: countyAnchorEstimate,
-      confidence: 0.62,
+      confidence: 0.4,
       notes: ["Anchored to assessment-style value behavior with a conservative discount to market pricing."],
     },
     ...(marketRealityFloorSource ? [marketRealityFloorSource] : []),
@@ -751,7 +760,7 @@ export async function runMockValuationProvider(subject = {}) {
           {
             source_name: "Recent purchase anchor",
             estimate: clampPositiveCurrency(recentPurchaseEstimate),
-            confidence: 0.58,
+            confidence: 0.38,
             notes: ["Anchored to the recorded purchase price with a light market appreciation adjustment."],
           },
         ]
@@ -778,7 +787,7 @@ export async function runMockValuationProvider(subject = {}) {
     sources,
     comps,
     metadata: {
-      provider_version: "local_heuristic_v3_with_fhfa",
+      provider_version: "local_heuristic_v4_strict_truthfulness",
       comp_pool_size: candidateComps.length,
       selected_comp_count: comps.length,
       subject_context: subjectModel.context,

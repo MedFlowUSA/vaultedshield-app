@@ -250,6 +250,62 @@ function getContinuityTone(status) {
   return "info";
 }
 
+function getValuationTone(status) {
+  if (status === "strong") return "good";
+  if (status === "moderate") return "warning";
+  if (status === "weak") return "alert";
+  return "info";
+}
+
+function formatReviewFlag(flag) {
+  const labels = {
+    subject_facts_incomplete: "Subject facts are still incomplete",
+    limited_comp_support: "Too few comparable sales qualified for stronger support",
+    comp_similarity_mixed: "The remaining comps are mixed in subject fit",
+    source_divergence_elevated: "Source estimates disagree enough to widen the range",
+    stale_comp_recency: "Comparable sales are getting stale",
+    no_strong_core_comps: "No strong core comps are currently visible",
+    weak_comps_excluded: "Weaker comps were excluded from the blended estimate",
+    distance_support_mixed: "Distance support is mixed across the remaining comps",
+    official_market_support_unavailable: "Official market support is unavailable",
+    official_market_signals_mixed: "Official market signals only partially align",
+    invalid_value_signals_removed: "Invalid value signals were removed before blending",
+  };
+
+  return labels[flag] || String(flag || "").replace(/_/g, " ");
+}
+
+function getCompTierFromDisplay(comp = {}) {
+  const similarity = Number(comp.raw_payload?.similarity_score);
+  const distance = Number(comp.distance_miles);
+  const monthsOld =
+    comp.sale_date && !Number.isNaN(new Date(comp.sale_date).getTime())
+      ? Math.max(
+          0,
+          (new Date().getUTCFullYear() - new Date(comp.sale_date).getUTCFullYear()) * 12 +
+            (new Date().getUTCMonth() - new Date(comp.sale_date).getUTCMonth())
+        )
+      : null;
+
+  if (
+    Number.isFinite(similarity) &&
+    similarity >= 0.82 &&
+    (!Number.isFinite(distance) || distance <= 0.9) &&
+    (monthsOld === null || monthsOld <= 9)
+  ) {
+    return "strong";
+  }
+  if (
+    Number.isFinite(similarity) &&
+    similarity >= 0.68 &&
+    (!Number.isFinite(distance) || distance <= 1.75) &&
+    (monthsOld === null || monthsOld <= 18)
+  ) {
+    return "usable";
+  }
+  return "weak";
+}
+
 function formatScore(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "Not scored";
   return `${Math.round(Number(value) * 100)}%`;
@@ -500,6 +556,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const valuationMarketProfile = valuationMetadata.market_profile || {};
   const analyzedCompRows = valuationMetadata.analyzed_comps || [];
   const bestComp = analyzedCompRows[0] || null;
+  const strongCompCount = valuationMetadata.strong_comp_count ?? 0;
+  const usableCompCount = valuationMetadata.usable_comp_count ?? 0;
+  const discardedCompCount = valuationMetadata.discarded_comp_count ?? 0;
+  const eligibleCompCount = latestPropertyValuation?.comps_count || 0;
+  const valuationIsBroad =
+    (latestPropertyValuation?.confidence_label || "weak") === "weak" ||
+    (valuationMetadata.valuation_range_ratio ?? 0) >= 0.16 ||
+    strongCompCount === 0;
+  const formattedReviewFlags = (valuationMetadata.review_flags || []).map(formatReviewFlag);
   const topThreeCompAverage = useMemo(() => {
     const topComps = analyzedCompRows
       .slice(0, 3)
@@ -1478,9 +1543,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               {latestPropertyValuation ? (
                 <div style={{ display: "grid", gap: "14px" }}>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <StatusBadge label={latestPropertyValuation.confidence_label || "weak"} tone={getContinuityTone(latestPropertyValuation.confidence_label)} />
+                    <StatusBadge label={latestPropertyValuation.confidence_label || "weak"} tone={getValuationTone(latestPropertyValuation.confidence_label)} />
                     <StatusBadge label={latestPropertyValuation.valuation_status || "draft"} tone="info" />
-                    <StatusBadge label={`${latestPropertyValuation.comps_count || 0} comps`} tone="info" />
+                    <StatusBadge label={`${eligibleCompCount || 0} eligible comps`} tone={strongCompCount >= 2 ? "good" : strongCompCount === 1 ? "warning" : "alert"} />
+                    {discardedCompCount > 0 ? (
+                      <StatusBadge label={`${discardedCompCount} excluded`} tone="warning" />
+                    ) : null}
                     <StatusBadge label={`Official market ${officialMarketSupportLabel.toLowerCase()}`} tone={officialMarketSupportLabel === "Aligned" ? "good" : officialMarketSupportLabel === "Mixed" ? "warning" : "info"} />
                     {hasInvalidSavedValuation ? (
                       <StatusBadge label="Valuation invalid" tone="alert" />
@@ -1501,6 +1569,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <div><strong>Price / Sq Ft Estimate:</strong> {latestPropertyValuation.price_per_sqft_estimate ? formatCurrency(latestPropertyValuation.price_per_sqft_estimate) : "Not available"}</div>
                     <div><strong>Valuation Date:</strong> {formatDate(latestPropertyValuation.valuation_date)}</div>
                     <div><strong>Matched Market Context:</strong> {officialMarketContext || "Local market context only"}</div>
+                    <div><strong>Estimate Shape:</strong> {valuationIsBroad ? "Broad review range" : "Tighter review range"}</div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: fiveMetricLayout, gap: "12px" }}>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -1508,31 +1577,33 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                       <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{formatScore(valuationMetadata.subject_completeness)}</div>
                     </div>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Comp Fit</div>
-                      <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{formatScore(valuationMetadata.comp_fit_score)}</div>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Strong Core Comps</div>
+                      <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{strongCompCount}</div>
                     </div>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Comp Recency</div>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Usable Comps</div>
                       <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>
-                        {valuationMetadata.average_comp_recency_months !== null && valuationMetadata.average_comp_recency_months !== undefined
-                          ? `${valuationMetadata.average_comp_recency_months} mo`
-                          : "Not available"}
+                        {usableCompCount}
                       </div>
                     </div>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Range Width</div>
-                      <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{formatScore(valuationMetadata.valuation_range_ratio)}</div>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Excluded Comps</div>
+                      <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>{discardedCompCount}</div>
                     </div>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Official Market</div>
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Range Width</div>
                       <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>
-                        {officialMarketSignalCount > 0 ? `${officialMarketSignalCount} signal${officialMarketSignalCount === 1 ? "" : "s"}` : "None"}
+                        {formatScore(valuationMetadata.valuation_range_ratio)}
                       </div>
                     </div>
                   </div>
                   <AIInsightPanel
                     title="Blended value analysis"
-                    summary="This virtual valuation now weights local provider support, comparable-sale fit, and official market context into a more explainable value review. It is not a formal appraisal."
+                    summary={
+                      valuationIsBroad
+                        ? "This is a broader virtual valuation range, not a tight price call. Weak or mixed comps are being discounted more aggressively so the estimate stays honest."
+                        : "This virtual valuation has a tighter support stack than usual, but it is still an explainable review range rather than a formal appraisal."
+                    }
                     bullets={
                       latestPropertyValuation.adjustment_notes?.length
                         ? latestPropertyValuation.adjustment_notes
@@ -1544,9 +1615,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>Comp Support Read</div>
                       <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
                         <div><strong>Best Comp Fit:</strong> {bestComp ? formatScore(bestComp.similarity_score) : "Not available"}</div>
+                        <div><strong>Comp Fit Score:</strong> {formatScore(valuationMetadata.comp_fit_score)}</div>
                         <div><strong>Top 3 Comp Avg:</strong> {topThreeCompAverage !== null ? formatCurrency(topThreeCompAverage) : "Not available"}</div>
                         <div><strong>Best Comp Distance:</strong> {bestComp?.distance_miles !== null && bestComp?.distance_miles !== undefined ? `${bestComp.distance_miles} mi` : "Not available"}</div>
                         <div><strong>Best Comp Date:</strong> {bestComp?.sale_date ? formatDate(bestComp.sale_date) : "Not available"}</div>
+                        <div><strong>Average Comp Recency:</strong> {valuationMetadata.average_comp_recency_months !== null && valuationMetadata.average_comp_recency_months !== undefined ? `${valuationMetadata.average_comp_recency_months} mo` : "Not available"}</div>
                       </div>
                     </div>
                     <div style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -1580,8 +1653,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   </div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>
                     <strong>Review Flags:</strong>{" "}
-                    {valuationMetadata.review_flags?.length
-                      ? valuationMetadata.review_flags.join(", ")
+                    {formattedReviewFlags.length
+                      ? formattedReviewFlags.join(", ")
                       : "None currently visible"}
                   </div>
                   <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.6", padding: "12px 14px", borderRadius: "12px", background: "#fff7ed", border: "1px solid #fed7aa" }}>
@@ -1701,21 +1774,29 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 <div style={{ display: "grid", gap: "12px" }}>
                   <AIInsightPanel
                     title="Comp quality review"
-                    summary="Comparable sales are now selected from a broader local market pool and weighted for subject fit, sale recency, and market-context alignment."
+                    summary={
+                      valuationIsBroad
+                        ? "Comparable sales are available, but the engine is treating this comp set conservatively because fit, recency, or distance support is mixed."
+                        : "Comparable sales are reading as relatively well aligned for this virtual review, with tighter fit on distance, recency, and subject profile."
+                    }
                     bullets={[
                       bestComp
                         ? `Best visible comp fit is ${formatScore(bestComp.similarity_score)} at ${bestComp.distance_miles ?? "?"} miles.`
                         : "Best comp fit is not available yet.",
+                      `Eligible comps: ${eligibleCompCount || 0}. Excluded weaker comps: ${discardedCompCount}.`,
                       valuationMetadata.average_comp_recency_months !== null && valuationMetadata.average_comp_recency_months !== undefined
-                        ? `Average comp recency is ${valuationMetadata.average_comp_recency_months} months.`
+                        ? `Average comp recency is ${valuationMetadata.average_comp_recency_months} months and the overall fit score is ${formatScore(valuationMetadata.comp_fit_score)}.`
                         : "Average comp recency is not available yet.",
-                      valuationMetadata.comp_fit_score !== null && valuationMetadata.comp_fit_score !== undefined
-                        ? `Overall comp fit score is ${formatScore(valuationMetadata.comp_fit_score)}.`
-                        : "Overall comp fit score is not available yet.",
                     ]}
                   />
                   {propertyComps.map((comp) => (
                     <div key={comp.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                        <StatusBadge label={getCompTierFromDisplay(comp)} tone={getValuationTone(getCompTierFromDisplay(comp) === "usable" ? "moderate" : getCompTierFromDisplay(comp))} />
+                        {comp.distance_miles !== null && comp.distance_miles !== undefined && comp.distance_miles > 1.25 ? (
+                          <StatusBadge label="farther comp" tone="warning" />
+                        ) : null}
+                      </div>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                         <div style={wrapTextStyle}>
                           <div style={{ fontWeight: 700, color: "#0f172a" }}>{comp.comp_address || "Comparable sale"}</div>
