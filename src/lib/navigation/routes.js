@@ -29,6 +29,7 @@ export const ROUTES = {
   retirementHub: { path: "/retirement", title: "Retirement", section: "Assets", minimumTier: "professional" },
   retirementUpload: { path: "/retirement/upload", title: "Retirement Upload", section: "Assets", minimumTier: "professional" },
   retirementDetail: { path: "/retirement/detail", title: "Retirement Detail", section: "Assets", minimumTier: "professional" },
+  collegePlanning: { path: "/college-planning", title: "College Planning", section: "Assets", minimumTier: "professional" },
   warrantyHub: { path: "/warranties", title: "Warranties", section: "Assets", minimumTier: "professional" },
   warrantyDetail: { path: "/warranties/detail", title: "Warranty Detail", section: "Assets", minimumTier: "professional" },
   estateHub: { path: "/estate", title: "Estate", section: "Assets", minimumTier: "professional" },
