@@ -291,7 +291,8 @@ export async function runPropertyVirtualValuation(propertyId, scopeOverride = nu
     disclaimer_text: blendedValuation.disclaimer_text,
     metadata: {
       ...(blendedValuation.metadata || {}),
-      provider_key: provider.provider_key,
+      ...(providerResult.metadata || {}),
+      provider_key: providerResult.metadata?.provider_key_override || provider.provider_key,
       subject,
     },
   });

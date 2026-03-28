@@ -542,6 +542,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       : valuationMetadata.official_market_support === "mixed"
         ? "Mixed"
         : "Unavailable";
+  const compDataOrigin = valuationMetadata.comp_data_origin || "simulated";
+  const compDataOriginLabel =
+    compDataOrigin === "official_api"
+      ? "Official API comps"
+      : compDataOrigin === "simulated_fallback"
+        ? "Simulated fallback"
+        : "Simulated comps";
+  const compDataOriginTone =
+    compDataOrigin === "official_api" ? "good" : compDataOrigin === "simulated_fallback" ? "warning" : "info";
+  const providerMode = valuationMetadata.provider_mode || "mock_only";
+  const providerFallbackReason = valuationMetadata.fallback_reason || "";
   const officialMarketContext = [
     valuationMetadata.official_market_signals?.market_city,
     valuationMetadata.official_market_signals?.market_state,
@@ -1549,6 +1560,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     {discardedCompCount > 0 ? (
                       <StatusBadge label={`${discardedCompCount} excluded`} tone="warning" />
                     ) : null}
+                    <StatusBadge label={compDataOriginLabel} tone={compDataOriginTone} />
                     <StatusBadge label={`Official market ${officialMarketSupportLabel.toLowerCase()}`} tone={officialMarketSupportLabel === "Aligned" ? "good" : officialMarketSupportLabel === "Mixed" ? "warning" : "info"} />
                     {hasInvalidSavedValuation ? (
                       <StatusBadge label="Valuation invalid" tone="alert" />
@@ -1557,6 +1569,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   {hasInvalidSavedValuation ? (
                     <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff1f2", border: "1px solid #fecdd3", color: "#9f1239", lineHeight: "1.7", fontWeight: 600 }}>
                       The latest saved valuation contains invalid value output and should be refreshed before using it in review.
+                    </div>
+                  ) : null}
+                  {providerMode === "simulated_fallback" ? (
+                    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", lineHeight: "1.7", fontWeight: 600 }}>
+                      Official comp data was requested, but this run fell back to simulated comps.
+                      {providerFallbackReason ? ` Reason: ${providerFallbackReason}.` : ""}
+                    </div>
+                  ) : null}
+                  {providerMode === "mock_only" ? (
+                    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", lineHeight: "1.7", fontWeight: 600 }}>
+                      This run is still using simulated comps. Configure a real property comp API endpoint to replace heuristic comparable sales.
                     </div>
                   ) : null}
                   <div style={{ display: "grid", gridTemplateColumns: tripleMetricLayout, gap: "12px" }}>
@@ -1780,6 +1803,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         : "Comparable sales are reading as relatively well aligned for this virtual review, with tighter fit on distance, recency, and subject profile."
                     }
                     bullets={[
+                      `Comp source mode: ${compDataOriginLabel}.`,
                       bestComp
                         ? `Best visible comp fit is ${formatScore(bestComp.similarity_score)} at ${bestComp.distance_miles ?? "?"} miles.`
                         : "Best comp fit is not available yet.",
@@ -1980,7 +2004,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           {import.meta.env.DEV ? (
             <SectionCard title="Property Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
-                property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}
+                property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationCompOrigin={compDataOrigin} | valuationProviderMode={providerMode} | valuationProviderKey={latestPropertyValuation?.metadata?.provider_key || "none"} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}
               </div>
             </SectionCard>
           ) : null}
