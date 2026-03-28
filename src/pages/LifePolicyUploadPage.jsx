@@ -126,11 +126,24 @@ function formatAnalyzeFailure(error) {
   const stageLabel = error?.analysisStage || "";
   const rawMessage = String(error?.message || "").trim();
   const normalizedMessage = rawMessage.toLowerCase();
+  const extractionKind = error?.extractionKind || error?.cause?.extractionKind || "";
 
   if (normalizedMessage.includes("undefined is not a function")) {
     return stageLabel
       ? `Life policy analysis hit a mobile compatibility issue during ${stageLabel}. Please retry after refresh.`
       : "Life policy analysis hit a mobile compatibility issue. Please retry after refresh.";
+  }
+
+  if (extractionKind === "file_read_failure") {
+    return "We could not read the selected PDF on this device. Try re-exporting the PDF or rescanning it if this file came from a portal.";
+  }
+
+  if (extractionKind === "pdf_open_failure") {
+    return "We could not open the baseline PDF on this device. Try re-exporting the PDF or rescanning it if this file was created from a portal.";
+  }
+
+  if (extractionKind === "page_extraction_failure") {
+    return rawMessage || "The baseline illustration could not be read from one or more pages in the selected PDF.";
   }
 
   if (rawMessage) {
