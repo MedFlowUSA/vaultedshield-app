@@ -6,6 +6,7 @@ export const ROUTES = {
   termsOfService: { path: "/terms-of-service", title: "Terms of Service", section: "Legal", minimumTier: "free" },
   dashboard: { path: "/dashboard", title: "Dashboard", section: "Core", minimumTier: "free" },
   guidance: { path: "/guidance", title: "Guidance Center", section: "Core", minimumTier: "free" },
+  householdGoals: { path: "/household-goals", title: "Household Goals", section: "Core", minimumTier: "professional" },
   vault: { path: "/vault", title: "Vault", section: "Core", minimumTier: "free" },
   uploadCenter: { path: "/upload-center", title: "Upload Center", section: "Core", minimumTier: "free" },
   assetsHome: { path: "/assets", title: "Assets", section: "Assets", minimumTier: "free" },
@@ -44,9 +45,10 @@ export const APP_NAVIGATION = [
   {
     label: "Core",
     items: [
-      { routeKey: "dashboard", label: "Dashboard" },
-      { routeKey: "guidance", label: "Guidance" },
-      { routeKey: "vault", label: "Vault" },
+        { routeKey: "dashboard", label: "Dashboard" },
+        { routeKey: "guidance", label: "Guidance" },
+        { routeKey: "householdGoals", label: "Goals" },
+        { routeKey: "vault", label: "Vault" },
       { routeKey: "uploadCenter", label: "Upload Center" },
     ],
   },

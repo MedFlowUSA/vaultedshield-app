@@ -9,6 +9,7 @@ import AuthSignupPage from "./pages/AuthSignupPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
 import DashboardPage from "./pages/DashboardPage";
 import GuidanceCenterPage from "./pages/GuidanceCenterPage";
+import HouseholdGoalsDashboardPage from "./pages/HouseholdGoalsDashboardPage";
 import VaultPage from "./pages/VaultPage";
 import UploadCenterPage from "./pages/UploadCenterPage";
 import AssetsHomePage from "./pages/AssetsHomePage";
@@ -196,6 +197,8 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <DashboardPage onNavigate={navigate} />;
     case "/guidance":
       return <GuidanceCenterPage onNavigate={navigate} />;
+    case "/household-goals":
+      return <HouseholdGoalsDashboardPage onNavigate={navigate} />;
     case "/vault":
       return <VaultPage />;
     case "/upload-center":
