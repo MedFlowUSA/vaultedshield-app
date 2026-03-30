@@ -10,8 +10,10 @@ import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScor
 import { loadCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
 import { summarizeCollegeHousehold } from "../lib/domain/college/collegeIntelligence";
+import { summarizeMortgageHousehold } from "../lib/domain/mortgage";
 import { evaluateInsuranceGaps } from "../lib/domain/insurance/insuranceGapEngine";
 import { getPropertyBundle, listProperties } from "../lib/supabase/propertyData";
+import { listMortgageLoans } from "../lib/supabase/mortgageData";
 import { getHouseholdInsuranceSummary, listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
 import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listAutoPolicies } from "../lib/supabase/autoData";
@@ -53,6 +55,12 @@ function getInsuranceStatusTone(status) {
   return { background: "#e2e8f0", color: "#334155" };
 }
 
+function getMortgageStatusTone(status) {
+  if (status === "Better Supported") return { background: "#dcfce7", color: "#166534" };
+  if (status === "Review Soon") return { background: "#fef3c7", color: "#92400e" };
+  return { background: "#fee2e2", color: "#991b1b" };
+}
+
 function formatInsuranceStatus(status) {
   if (status === "gap") return "Gap";
   if (!status) return "Unknown";
@@ -67,7 +75,7 @@ function getPropertyStatus(propertyBundle = {}) {
   return "limited";
 }
 
-function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, propertyBundles, insuranceGaps }) {
+function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, propertyBundles, insuranceGaps, mortgageSummary }) {
   const items = [];
   const severityWeight = { high: 0, medium: 1, low: 2 };
 
@@ -106,6 +114,24 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
         severity: "low",
       });
     });
+
+  if ((mortgageSummary?.needsReviewCount || 0) > 0) {
+    items.push({
+      id: "mortgage-readiness",
+      title: "Mortgage records need stronger review support",
+      detail: `${mortgageSummary.needsReviewCount} loan${mortgageSummary.needsReviewCount === 1 ? "" : "s"} still need stronger statement, payment, or property-link visibility.`,
+      actionPath: "/mortgage",
+      severity: "medium",
+    });
+  } else if ((mortgageSummary?.reviewSoonCount || 0) > 0) {
+    items.push({
+      id: "mortgage-review-soon",
+      title: "Mortgage review should stay on the radar",
+      detail: `${mortgageSummary.reviewSoonCount} loan${mortgageSummary.reviewSoonCount === 1 ? "" : "s"} merit refinance, payoff, or maturity review soon.`,
+      actionPath: "/mortgage",
+      severity: "low",
+    });
+  }
 
   const insuranceItems = [
     {
@@ -155,6 +181,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   const [propertyBundles, setPropertyBundles] = useState([]);
   const [propertyLoading, setPropertyLoading] = useState(true);
   const [propertyError, setPropertyError] = useState("");
+  const [mortgageLoans, setMortgageLoans] = useState([]);
+  const [mortgageLoading, setMortgageLoading] = useState(true);
+  const [mortgageError, setMortgageError] = useState("");
   const [insuranceLoading, setInsuranceLoading] = useState(true);
   const [insuranceError, setInsuranceError] = useState("");
   const [lifePolicies, setLifePolicies] = useState([]);
@@ -207,6 +236,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   const collegeHouseholdRead = useMemo(
     () => summarizeCollegeHousehold(collegePlans),
     [collegePlans]
+  );
+
+  const mortgageSummary = useMemo(
+    () => summarizeMortgageHousehold(mortgageLoans),
+    [mortgageLoans]
   );
 
   useEffect(() => {
@@ -269,6 +303,32 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
     householdState.context.ownershipMode,
     householdState.loading,
   ]);
+
+  useEffect(() => {
+    if (householdState.loading) return;
+    if (!householdState.context.householdId) {
+      setMortgageLoans([]);
+      setMortgageError("");
+      setMortgageLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function loadMortgageSignals() {
+      setMortgageLoading(true);
+      const result = await listMortgageLoans(householdState.context.householdId);
+      if (!active) return;
+      setMortgageLoans(result.data || []);
+      setMortgageError(result.error?.message || "");
+      setMortgageLoading(false);
+    }
+
+    loadMortgageSignals();
+    return () => {
+      active = false;
+    };
+  }, [householdState.context.householdId, householdState.loading]);
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -362,8 +422,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         collegePlans,
         propertyBundles,
         insuranceGaps,
+        mortgageSummary,
       }),
-    [collegePlans, insuranceGaps, propertyBundles, retirementReadiness]
+    [collegePlans, insuranceGaps, mortgageSummary, propertyBundles, retirementReadiness]
   );
 
   const summaryItems = useMemo(
@@ -384,6 +445,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         helper: `${propertySummary.visibleEquityCount}/${propertySummary.propertyCount} properties with visible equity`,
       },
       {
+        label: "Mortgage",
+        value: mortgageSummary.totalLoans ? formatScore((mortgageSummary.averageConfidence || 0) * 100) : "No loans yet",
+        helper: mortgageSummary.headline,
+      },
+      {
         label: "Protection",
         value: insuranceSummary ? formatScore((insuranceSummary.confidence || 0) * 100) : insuranceGaps.summary.protectionFlags.length,
         helper: insuranceSummary?.headline ||
@@ -397,7 +463,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         helper: priorityItems.length ? "Household goals to review" : "No urgent planning flags yet",
       },
     ],
-    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, insuranceSummary, priorityItems.length, propertySummary, retirementReadiness]
+    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, insuranceSummary, mortgageSummary, priorityItems.length, propertySummary, retirementReadiness]
   );
 
   const householdNarrative = useMemo(() => {
@@ -425,6 +491,12 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       lines.push("No property records are currently linked into the household goals view.");
     }
 
+    if (mortgageSummary.totalLoans > 0) {
+      lines.push(mortgageSummary.headline);
+    } else {
+      lines.push("No household mortgage loans are currently visible in the dashboard.");
+    }
+
     if (insuranceSummary?.headline) {
       lines.push(insuranceSummary.headline);
     } else if (insuranceGaps.summary.protectionFlags.length === 0) {
@@ -439,9 +511,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       }
     }
     return lines.join(" ");
-  }, [activeCollegePlan, insuranceGaps, insuranceSummary, propertySummary, retirementReadiness]);
+  }, [activeCollegePlan, insuranceGaps, insuranceSummary, mortgageSummary, propertySummary, retirementReadiness]);
 
-  const cardGrid = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
+  const cardGrid = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
@@ -501,6 +573,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
           propertySummary.propertyCount > 0
             ? `Visible property equity midpoint: ${propertySummary.totalEquityMidpoint !== null ? formatCurrency(propertySummary.totalEquityMidpoint) : "Limited"}.`
             : "Property equity is not in view yet.",
+          mortgageSummary.totalLoans > 0
+            ? `Mortgage read: ${mortgageSummary.headline}`
+            : "No household mortgage loans are visible yet.",
           insuranceGaps.summary.protectionFlags.length > 0
             ? `Protection review flags: ${insuranceGaps.summary.protectionFlags.join(", ")}.`
             : "No obvious insurance protection gaps were detected from the current household data.",
@@ -769,6 +844,53 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
             </div>
           )}
         </SectionCard>
+
+        <SectionCard title="Mortgage Readiness" subtitle="Debt review, payoff visibility, and refinance readiness across household mortgage loans.">
+          {mortgageLoading ? (
+            <div style={{ color: "#64748b" }}>Loading mortgage readiness...</div>
+          ) : mortgageError ? (
+            <EmptyState title="Mortgage readiness is limited" description={mortgageError} />
+          ) : mortgageSummary.totalLoans === 0 ? (
+            <EmptyState title="No mortgage loans linked yet" description="Add or link a mortgage to bring debt-readiness signals into the household dashboard." />
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "999px",
+                    background: getMortgageStatusTone(
+                      mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"
+                    ).background,
+                    color: getMortgageStatusTone(
+                      mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"
+                    ).color,
+                    fontWeight: 800,
+                    fontSize: "13px",
+                  }}
+                >
+                  {mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"}
+                </div>
+                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>
+                  {formatScore((mortgageSummary.averageConfidence || 0) * 100)}
+                </div>
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                <div><strong>Loans in View:</strong> {mortgageSummary.totalLoans}</div>
+                <div><strong>Needs Review:</strong> {mortgageSummary.needsReviewCount}</div>
+                <div><strong>Review Soon:</strong> {mortgageSummary.reviewSoonCount}</div>
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{mortgageSummary.headline}</div>
+              {Array.isArray(mortgageSummary.notes) && mortgageSummary.notes.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                  {mortgageSummary.notes.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
+        </SectionCard>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap: "18px" }}>
@@ -821,6 +943,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
             summary="This first household dashboard now ties together retirement, college planning, property equity, and a simple protection check. Later versions can deepen policy adequacy and household continuity planning."
             bullets={[
               "Future insurance layers can move from policy presence checks into adequacy, liability limit, and beneficiary review.",
+              "Mortgage layers can deepen from debt-read visibility into payment trend, escrow pressure, and amortization planning.",
               "Later versions can add a single household readiness narrative that blends goals, protection, and asset continuity.",
               "Persistence is already in place for retirement and college, so this dashboard can grow into an ongoing family planning surface.",
             ]}
