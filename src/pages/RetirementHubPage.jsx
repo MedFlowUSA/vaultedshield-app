@@ -11,6 +11,7 @@ import {
   listRetirementProviders,
   listRetirementTypes,
 } from "../lib/domain/retirement";
+import { summarizeRetirementHousehold } from "../lib/domain/retirement/retirementIntelligence";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import {
@@ -178,6 +179,15 @@ export default function RetirementHubPage({ onNavigate }) {
       annualContribution: goalSnapshot?.plannerSnapshot?.annualContribution || 0,
     });
   }, [goalSnapshot]);
+
+  const retirementHouseholdRead = useMemo(
+    () =>
+      summarizeRetirementHousehold({
+        accounts,
+        readinessSnapshot,
+      }),
+    [accounts, readinessSnapshot]
+  );
 
   async function refreshAccounts() {
     if (!householdState.context.householdId) return;
@@ -504,15 +514,23 @@ export default function RetirementHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 accounts.length > 0
-                  ? "Retirement records are now live in the platform shell and ready for document intake, snapshots, starter analytics, and position-level enrichment."
+                  ? retirementHouseholdRead.headline
                   : "The retirement module is live-ready but still waiting for its first account record."
               }
-              bullets={[
-                "Retirement account creation now writes both the generic asset row and the deep retirement row.",
-                `Pension-style accounts detected: ${starterInsightCounts.pensionStyle}`,
-                `Starter rollover review candidates: ${starterInsightCounts.rolloverCandidates}`,
-                "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",
-              ]}
+              bullets={
+                accounts.length > 0
+                  ? [
+                      ...retirementHouseholdRead.notes,
+                      `Starter rollover review candidates: ${starterInsightCounts.rolloverCandidates}`,
+                      "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",
+                    ]
+                  : [
+                      "Retirement account creation now writes both the generic asset row and the deep retirement row.",
+                      `Pension-style accounts detected: ${starterInsightCounts.pensionStyle}`,
+                      `Starter rollover review candidates: ${starterInsightCounts.rolloverCandidates}`,
+                      "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",
+                    ]
+              }
             />
           </SectionCard>
         </div>

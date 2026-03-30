@@ -6,6 +6,7 @@ import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { extractRetirementSummary } from "../lib/domain/retirement/retirementExtraction";
+import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadRetirementGoalSnapshot, saveRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import { extractPdfTextSafe } from "../utils/pdf/safePdfExtraction";
@@ -200,6 +201,7 @@ export default function RetirementUploadPage({ onNavigate }) {
       try {
         const extraction = await extractPdfTextSafe(file);
         const summary = extractRetirementSummary(extraction.text);
+        const retirementRead = analyzeRetirementReadiness({ summary, extraction });
         nextResults.push({
           id: `${file.name}-${file.lastModified}-${file.size}`,
           fileName: file.name,
@@ -208,6 +210,7 @@ export default function RetirementUploadPage({ onNavigate }) {
           statusLabel: summary.status === "complete" ? "Data extracted successfully" : "Limited data detected",
           extraction,
           summary,
+          retirementRead,
           errorMessage: "",
         });
       } catch (fileError) {
@@ -552,18 +555,32 @@ export default function RetirementUploadPage({ onNavigate }) {
                 {result.status === "error" ? (
                   <div style={{ color: "#991b1b", lineHeight: "1.7" }}>{result.errorMessage}</div>
                 ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                      gap: "10px 14px",
-                      color: "#475569",
-                    }}
-                  >
-                    <div><strong>Account Value:</strong> {formatCurrency(result.summary.accountValue)}</div>
-                    <div><strong>Contributions:</strong> {formatCurrency(result.summary.contributions)}</div>
-                    <div><strong>Account Type:</strong> {result.summary.accountType || "Not detected"}</div>
-                    <div><strong>Statement Date:</strong> {result.summary.statementDate || "Not detected"}</div>
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: "10px 14px",
+                        color: "#475569",
+                      }}
+                    >
+                      <div><strong>Account Value:</strong> {formatCurrency(result.summary.accountValue)}</div>
+                      <div><strong>Contributions:</strong> {formatCurrency(result.summary.contributions)}</div>
+                      <div><strong>Account Type:</strong> {result.summary.accountType || "Not detected"}</div>
+                      <div><strong>Statement Date:</strong> {result.summary.statementDate || "Not detected"}</div>
+                      <div><strong>Read Status:</strong> {result.retirementRead?.readinessStatus || "Needs Review"}</div>
+                      <div><strong>Read Confidence:</strong> {Math.round((result.retirementRead?.confidence || 0) * 100)}%</div>
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      {result.retirementRead?.headline || "Retirement read summary is not available yet."}
+                    </div>
+                    {result.retirementRead?.notes?.length > 0 ? (
+                      <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#64748b" }}>
+                        {result.retirementRead.notes.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 )}
 
