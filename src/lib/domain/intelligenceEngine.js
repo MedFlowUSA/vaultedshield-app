@@ -180,6 +180,61 @@ function summarizeTrendChange(oldest, newest, label, { increase, decrease, flat,
     : { status: "decrease", delta, note: decrease || `${label} decreased over the visible statement period.` };
 }
 
+function parseStatementDateValue(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getChronologyDiagnostics(rows = []) {
+  const datedRows = rows
+    .map((row) => ({
+      raw: row?.statement_date || null,
+      parsed: parseStatementDateValue(row?.statement_date),
+    }))
+    .filter((entry) => entry.raw);
+
+  const validDates = datedRows.filter((entry) => entry.parsed);
+  const duplicateDateCount =
+    validDates.length - new Set(validDates.map((entry) => entry.parsed.toISOString().slice(0, 10))).size;
+
+  let widestGapDays = null;
+  let irregularGapCount = 0;
+  for (let index = 1; index < validDates.length; index += 1) {
+    const current = validDates[index].parsed;
+    const prior = validDates[index - 1].parsed;
+    const gapDays = Math.round((current.getTime() - prior.getTime()) / 86400000);
+    if (widestGapDays === null || gapDays > widestGapDays) widestGapDays = gapDays;
+    if (gapDays > 430) irregularGapCount += 1;
+  }
+
+  const chronologyStatus =
+    validDates.length < 2
+      ? "limited"
+      : duplicateDateCount > 0 || irregularGapCount > 0
+        ? "mixed"
+        : "aligned";
+
+  const notes = [];
+  if (validDates.length < 2) {
+    notes.push("Chronology support is limited because fewer than two dated statements are visible.");
+  } else if (duplicateDateCount > 0) {
+    notes.push("At least one duplicate statement date appears in the visible history.");
+  } else if (irregularGapCount > 0) {
+    notes.push("Visible statement spacing is irregular, so annual continuity may be incomplete.");
+  } else {
+    notes.push("Visible statement dates form a reasonably clean annual chronology.");
+  }
+
+  return {
+    chronology_status: chronologyStatus,
+    duplicate_date_count: duplicateDateCount,
+    widest_gap_days: widestGapDays,
+    irregular_gap_count: irregularGapCount,
+    notes,
+  };
+}
+
 export function buildPolicyTrendSummary(statementRows = []) {
   const rows = [...(Array.isArray(statementRows) ? statementRows : [])].sort((left, right) => {
     const leftDate = left?.statement_date || "";
@@ -198,6 +253,7 @@ export function buildPolicyTrendSummary(statementRows = []) {
   const periodsCount = timelineRows.length;
   const qualitySet = new Set(timelineRows.map((statement) => statement.detail_quality));
   const omittedTrendFields = [];
+  const chronology = getChronologyDiagnostics(timelineRows);
 
   const cashValueTrend = summarizeTrendChange(
     getStatementValue(oldest, "cash_value"),
@@ -277,6 +333,8 @@ export function buildPolicyTrendSummary(statementRows = []) {
   if (loanBalanceTrend.status === "flat" && getStatementValue(newest, "loan_balance") === 0) {
     reviewFlags.push("loan_balance_remained_zero");
   }
+  if (chronology.duplicate_date_count > 0) reviewFlags.push("duplicate_statement_dates");
+  if (chronology.irregular_gap_count > 0) reviewFlags.push("irregular_statement_gaps");
 
   const factualBullets = [
     cashValueTrend.note,
@@ -293,6 +351,7 @@ export function buildPolicyTrendSummary(statementRows = []) {
           : periodsCount > 0
             ? "Statement support remains limited across the visible history."
             : "",
+    chronology.notes[0] || "",
   ].filter(Boolean);
 
   const conciseChangeNotes = [...new Set(factualBullets)].slice(0, 5);
@@ -307,6 +366,8 @@ export function buildPolicyTrendSummary(statementRows = []) {
   const continuityTrend =
     periodsCount < 2
       ? "limited"
+      : chronology.chronology_status === "mixed"
+        ? "mixed"
       : qualitySet.has("Limited detail")
         ? "mixed"
         : qualitySet.has("Partial detail")
@@ -323,6 +384,7 @@ export function buildPolicyTrendSummary(statementRows = []) {
     total_coi_trend: totalCoiTrend,
     visible_charge_trend: visibleChargeTrend,
     continuity_trend: continuityTrend,
+    chronology,
     review_flags: [...new Set(reviewFlags)],
     concise_change_notes: conciseChangeNotes,
     summary,
@@ -344,6 +406,7 @@ export function buildPolicyTrendSummary(statementRows = []) {
         total_coi_trend: totalCoiTrend,
         visible_charge_trend: visibleChargeTrend,
         continuity_trend: continuityTrend,
+        chronology,
       },
       omitted_trend_fields: omittedTrendFields,
     },

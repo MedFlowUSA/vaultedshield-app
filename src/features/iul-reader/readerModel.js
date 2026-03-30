@@ -201,6 +201,23 @@ function buildEvidenceAudit(results, sections, warnings) {
     parsedDates.length > 1 &&
     parsedDates.length === sortedDates.length &&
     parsedDates.every((date, index) => date.getTime() === sortedDates[index].getTime());
+  const duplicateStatementDates =
+    parsedDates.length - new Set(parsedDates.map((date) => date.toISOString().slice(0, 10))).size;
+  const widestGapDays = parsedDates.length > 1
+    ? parsedDates.slice(1).reduce((widest, date, index) => {
+        const prior = parsedDates[index];
+        const gap = Math.round((date.getTime() - prior.getTime()) / 86400000);
+        return widest === null || gap > widest ? gap : widest;
+      }, null)
+    : null;
+  const irregularGapCount =
+    parsedDates.length > 1
+      ? parsedDates.slice(1).filter((date, index) => {
+          const prior = parsedDates[index];
+          const gap = Math.round((date.getTime() - prior.getTime()) / 86400000);
+          return gap > 430;
+        }).length
+      : 0;
 
   const identityWarnings = warnings.filter((warning) =>
     /policy numbers do not match|carrier identity differs/i.test(warning)
@@ -251,7 +268,11 @@ function buildEvidenceAudit(results, sections, warnings) {
 
   if (parsedDates.length >= 2) {
     notes.push(
-      chronologyAligned
+      duplicateStatementDates > 0
+        ? "Duplicate statement dates are visible, so chronology may need cleanup before trusting trend detail."
+        : irregularGapCount > 0
+          ? "Statement spacing looks irregular, so annual continuity may be incomplete."
+          : chronologyAligned
         ? "Statement chronology looks internally consistent across the visible packet."
         : "Statement chronology may be out of order or incompletely dated, which weakens trend trust."
     );
@@ -281,9 +302,19 @@ function buildEvidenceAudit(results, sections, warnings) {
     statementCount: statementResults.length,
     chronologyStatus: parsedDates.length >= 2 ? (chronologyAligned ? "aligned" : "mixed") : "limited",
     chronologyLabel:
-      parsedDates.length >= 2 ? (chronologyAligned ? "Chronology aligned" : "Chronology mixed") : "Chronology limited",
+      parsedDates.length >= 2
+        ? duplicateStatementDates > 0
+          ? "Chronology duplicated"
+          : irregularGapCount > 0
+            ? "Chronology irregular"
+            : chronologyAligned
+              ? "Chronology aligned"
+              : "Chronology mixed"
+        : "Chronology limited",
     identityStatus: identityWarnings.length > 0 ? "review" : "clear",
     identityLabel: identityWarnings.length > 0 ? "Identity mismatches" : "Identity aligned",
+    duplicateStatementDates,
+    widestGapDays,
     headline,
     notes: notes.slice(0, 6),
   };
