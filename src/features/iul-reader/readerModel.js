@@ -98,6 +98,72 @@ function buildUniformTable(title, description, rows) {
   };
 }
 
+function buildResolvedBaselineSnapshot(results, baselineSummary = {}) {
+  const policyIdentity = results.normalizedPolicy?.policy_identity || {};
+  const deathBenefit = results.normalizedPolicy?.death_benefit || {};
+  const funding = results.normalizedPolicy?.funding || {};
+
+  return {
+    carrier: firstNonEmpty(policyIdentity.carrier_name, baselineSummary.carrier),
+    productName: firstNonEmpty(policyIdentity.product_name, baselineSummary.productName),
+    policyType: firstNonEmpty(policyIdentity.policy_type, baselineSummary.policyType),
+    policyNumber: firstNonEmpty(policyIdentity.policy_number, baselineSummary.policyNumber),
+    issueDate: firstNonEmpty(policyIdentity.issue_date, baselineSummary.issueDate),
+    deathBenefit: firstNonEmpty(
+      deathBenefit.current_death_benefit?.display_value,
+      deathBenefit.death_benefit?.display_value,
+      deathBenefit.initial_face_amount?.display_value,
+      baselineSummary.deathBenefit
+    ),
+    plannedPremium: firstNonEmpty(
+      funding.planned_premium?.display_value,
+      funding.guideline_premium_limit?.display_value,
+      funding.annual_target_premium?.display_value,
+      baselineSummary.periodicPremium
+    ),
+  };
+}
+
+function buildResolvedLiveSnapshot(results, latestSummary = {}) {
+  const normalizedPolicy = results.normalizedPolicy || {};
+  const values = normalizedPolicy.values || {};
+  const loans = normalizedPolicy.loans || {};
+  const strategy = normalizedPolicy.strategy || {};
+  const funding = normalizedPolicy.funding || {};
+  const chargeSummary = results.normalizedAnalytics?.charge_summary || {};
+  const comparison = results.normalizedAnalytics?.comparison_summary || {};
+  const performanceSummary = results.normalizedAnalytics?.performance_summary || {};
+
+  return {
+    statementDate: firstNonEmpty(
+      performanceSummary.latest_statement_date,
+      comparison.latest_statement_date,
+      latestSummary.statementDate
+    ),
+    accumulationValue: firstNonEmpty(values.accumulation_value?.display_value, latestSummary.accumulationValue),
+    cashValue: firstNonEmpty(values.cash_value?.display_value, latestSummary.cashValue),
+    cashSurrenderValue: firstNonEmpty(values.cash_surrender_value?.display_value, latestSummary.cashSurrenderValue),
+    loanBalance: firstNonEmpty(loans.loan_balance?.display_value, latestSummary.loanBalance),
+    costOfInsurance: firstNonEmpty(
+      latestSummary.costOfInsurance,
+      formatCurrencyValue(chargeSummary.total_coi)
+    ),
+    expenseCharge: firstNonEmpty(
+      latestSummary.expenseCharge,
+      formatCurrencyValue(chargeSummary.total_visible_policy_charges)
+    ),
+    indexStrategy: firstNonEmpty(strategy.current_index_strategy, latestSummary.indexStrategy),
+    allocationPercent: firstNonEmpty(strategy.allocation_percent?.display_value, latestSummary.allocationPercent),
+    capRate: firstNonEmpty(strategy.cap_rate?.display_value, latestSummary.capRate),
+    participationRate: firstNonEmpty(strategy.participation_rate?.display_value),
+    spread: firstNonEmpty(strategy.spread?.display_value),
+    plannedPremium: firstNonEmpty(
+      funding.planned_premium?.display_value,
+      funding.guideline_premium_limit?.display_value
+    ),
+  };
+}
+
 function toDate(value) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -640,24 +706,26 @@ export function buildIulReaderModel(results) {
   const latestStatement = statementResults.at(-1) || null;
   const latestSummary = latestStatement?.summary || {};
   const latestMeta = latestSummary.__meta || {};
+  const resolvedBaseline = buildResolvedBaselineSnapshot(results, baselineSummary);
+  const resolvedLive = buildResolvedLiveSnapshot(results, latestSummary);
 
   const sections = [
     {
       title: "Policy Identity",
       description: "Core policy facts pulled from the baseline illustration.",
       fields: [
-        buildReaderField("Carrier", baselineSummary.carrier, baselineMeta.carrier, { source: "baseline illustration" }),
-        buildReaderField("Product", baselineSummary.productName, baselineMeta.productName, { source: "baseline illustration" }),
-        buildReaderField("Policy Type", baselineSummary.policyType, baselineMeta.policyType, { source: "baseline illustration" }),
-        buildReaderField("Policy Number", maskPolicyNumber(baselineSummary.policyNumber), baselineMeta.policyNumber, {
+        buildReaderField("Carrier", resolvedBaseline.carrier, baselineMeta.carrier, { source: "baseline illustration or normalized identity" }),
+        buildReaderField("Product", resolvedBaseline.productName, baselineMeta.productName, { source: "baseline illustration or normalized identity" }),
+        buildReaderField("Policy Type", resolvedBaseline.policyType, baselineMeta.policyType, { source: "baseline illustration or normalized identity" }),
+        buildReaderField("Policy Number", maskPolicyNumber(resolvedBaseline.policyNumber), baselineMeta.policyNumber, {
           source: "baseline illustration",
         }),
-        buildReaderField("Issue Date", baselineSummary.issueDate, baselineMeta.issueDate, { source: "baseline illustration" }),
-        buildReaderField("Death Benefit", baselineSummary.deathBenefit, baselineMeta.deathBenefit, {
-          source: "baseline illustration",
+        buildReaderField("Issue Date", resolvedBaseline.issueDate, baselineMeta.issueDate, { source: "baseline illustration or normalized identity" }),
+        buildReaderField("Death Benefit", resolvedBaseline.deathBenefit, baselineMeta.deathBenefit, {
+          source: "baseline illustration or normalized policy",
         }),
-        buildReaderField("Planned Premium", baselineSummary.periodicPremium, baselineMeta.periodicPremium, {
-          source: "baseline illustration",
+        buildReaderField("Planned Premium", resolvedBaseline.plannedPremium, baselineMeta.periodicPremium, {
+          source: "baseline illustration or normalized funding",
         }),
       ],
     },
@@ -665,20 +733,20 @@ export function buildIulReaderModel(results) {
       title: "Current Policy Position",
       description: "Latest statement values used for the live reading.",
       fields: [
-        buildReaderField("Latest Statement Date", latestSummary.statementDate, latestMeta.statementDate, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Latest Statement Date", resolvedLive.statementDate, latestMeta.statementDate, {
+          source: latestStatement?.fileName || "latest statement or normalized analytics",
         }),
-        buildReaderField("Accumulation Value", latestSummary.accumulationValue, latestMeta.accumulationValue, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Accumulation Value", resolvedLive.accumulationValue, latestMeta.accumulationValue, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
-        buildReaderField("Cash Value", latestSummary.cashValue, latestMeta.cashValue, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Cash Value", resolvedLive.cashValue, latestMeta.cashValue, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
-        buildReaderField("Cash Surrender Value", latestSummary.cashSurrenderValue, latestMeta.cashSurrenderValue, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Cash Surrender Value", resolvedLive.cashSurrenderValue, latestMeta.cashSurrenderValue, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
-        buildReaderField("Loan Balance", latestSummary.loanBalance, latestMeta.loanBalance, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Loan Balance", resolvedLive.loanBalance, latestMeta.loanBalance, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
       ],
     },
@@ -686,20 +754,20 @@ export function buildIulReaderModel(results) {
       title: "Charges And Strategy",
       description: "Terms that usually require statement activity pages or allocation detail.",
       fields: [
-        buildReaderField("Cost of Insurance", latestSummary.costOfInsurance, latestMeta.costOfInsurance, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Cost of Insurance", resolvedLive.costOfInsurance, latestMeta.costOfInsurance, {
+          source: latestStatement?.fileName || "latest statement or normalized analytics",
         }),
-        buildReaderField("Expense Charges", latestSummary.expenseCharge, latestMeta.expenseCharge, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Expense Charges", resolvedLive.expenseCharge, latestMeta.expenseCharge, {
+          source: latestStatement?.fileName || "latest statement or normalized analytics",
         }),
-        buildReaderField("Index Strategy", latestSummary.indexStrategy, latestMeta.indexStrategy, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Index Strategy", resolvedLive.indexStrategy, latestMeta.indexStrategy, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
-        buildReaderField("Allocation Percent", latestSummary.allocationPercent, latestMeta.allocationPercent, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Allocation Percent", resolvedLive.allocationPercent, latestMeta.allocationPercent, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
-        buildReaderField("Cap Rate", latestSummary.capRate, latestMeta.capRate, {
-          source: latestStatement?.fileName || "latest statement",
+        buildReaderField("Cap Rate", resolvedLive.capRate, latestMeta.capRate, {
+          source: latestStatement?.fileName || "latest statement or normalized policy",
         }),
       ],
     },
@@ -712,22 +780,28 @@ export function buildIulReaderModel(results) {
 
   const warnings = [];
   if (
-    baselineSummary.policyNumber &&
-    latestSummary.policyNumber &&
+    resolvedBaseline.policyNumber &&
+    (latestSummary.policyNumber || resolvedBaseline.policyNumber) &&
     getConfidenceRank(baselineMeta.policyNumber) >= 2 &&
     getConfidenceRank(latestMeta.policyNumber) >= 2 &&
-    normalizeComparableValue(baselineSummary.policyNumber) !== normalizeComparableValue(latestSummary.policyNumber)
+    normalizeComparableValue(resolvedBaseline.policyNumber) !== normalizeComparableValue(latestSummary.policyNumber)
   ) {
     warnings.push("Baseline and latest statement policy numbers do not match. Review the uploaded packet before trusting the reading.");
   }
   if (
-    baselineSummary.carrier &&
+    resolvedBaseline.carrier &&
     latestSummary.carrier &&
     getConfidenceRank(baselineMeta.carrier) >= 2 &&
     getConfidenceRank(latestMeta.carrier) >= 2 &&
-    normalizeComparableValue(baselineSummary.carrier) !== normalizeComparableValue(latestSummary.carrier)
+    normalizeComparableValue(resolvedBaseline.carrier) !== normalizeComparableValue(latestSummary.carrier)
   ) {
     warnings.push("Carrier identity differs between the illustration and latest statement. This can indicate a misclassified page or mixed packet.");
+  }
+  if (!results.carrierProfile) {
+    warnings.push("Carrier-specific parser support was not matched, so more of this read depends on generic label recognition.");
+  }
+  if (!results.productProfile) {
+    warnings.push("Product-family recognition is still limited, so some strategy and product-specific interpretation remains generic.");
   }
   if (statementResults.length >= 2 && !results.analytics?.growth_trend?.value) {
     warnings.push("Multiple statements are loaded, but growth trend quality is still limited because one or more statement dates or values were not confirmed strongly enough.");
@@ -751,6 +825,12 @@ export function buildIulReaderModel(results) {
   }
   if (nextSteps.length === 0) {
     nextSteps.push("The current packet supports the main IUL reader. Additional statements would mostly improve trends rather than core identity.");
+  }
+  if (!results.carrierProfile) {
+    nextSteps.push("Upload a clearer carrier-branded policy summary or annual statement cover page to improve carrier-specific parsing.");
+  }
+  if (!results.productProfile) {
+    nextSteps.push("Upload the illustration page that shows the exact product line or plan name to improve product-family interpretation.");
   }
 
   const benchmarkView = buildReaderBenchmarks(results);
@@ -802,7 +882,7 @@ export function buildIulReaderModel(results) {
       }),
     ]),
     buildUniformTable("Charges And Crediting", "Where the policy is gaining support or feeling drag.", [
-      buildUniformRow("Visible COI", firstNonEmpty(latestSummary.costOfInsurance, formatCurrencyValue(chargeSummary.total_coi)), {
+      buildUniformRow("Visible COI", firstNonEmpty(resolvedLive.costOfInsurance, formatCurrencyValue(chargeSummary.total_coi)), {
         note: chargeSummary.coi_confidence ? `COI confidence: ${chargeSummary.coi_confidence}.` : "",
         status: chargeSummary.coi_confidence === "strong" ? "confirmed" : chargeSummary.coi_confidence ? "review" : "missing",
       }),
@@ -819,18 +899,47 @@ export function buildIulReaderModel(results) {
             ? "review"
             : "missing",
       }),
-      buildUniformRow("Index Strategy", firstNonEmpty(strategy.current_index_strategy, latestSummary.indexStrategy), {
+      buildUniformRow("Index Strategy", firstNonEmpty(strategy.current_index_strategy, resolvedLive.indexStrategy), {
         note: results.productProfile?.known_strategies?.length
           ? `Expected options often include ${results.productProfile.known_strategies.join(", ")}.`
           : "",
       }),
-      buildUniformRow("Allocation", firstNonEmpty(strategy.allocation_percent?.display_value, latestSummary.allocationPercent)),
+      buildUniformRow("Allocation", firstNonEmpty(strategy.allocation_percent?.display_value, resolvedLive.allocationPercent)),
       buildUniformRow("Cap / Participation / Spread", [
-        firstNonEmpty(strategy.cap_rate?.display_value, latestSummary.capRate),
-        firstNonEmpty(strategy.participation_rate?.display_value),
-        firstNonEmpty(strategy.spread?.display_value),
+        firstNonEmpty(strategy.cap_rate?.display_value, resolvedLive.capRate),
+        firstNonEmpty(strategy.participation_rate?.display_value, resolvedLive.participationRate),
+        firstNonEmpty(strategy.spread?.display_value, resolvedLive.spread),
       ].filter(Boolean).join(" / "), {
         status: strategy.cap_rate?.display_value || strategy.participation_rate?.display_value || strategy.spread?.display_value ? "confirmed" : "missing",
+      }),
+    ]),
+    buildUniformTable("Carrier And Product Support", "How much of this IUL read is using carrier-aware and product-aware pattern recognition.", [
+      buildUniformRow("Carrier Profile", results.carrierProfile?.display_name || results.carrierProfile?.name || "Limited", {
+        status: results.carrierProfile ? "confirmed" : "review",
+        note: results.carrierProfile
+          ? "Carrier-specific parsing patterns are active for this packet."
+          : "The packet is currently using generic parsing more than carrier-specific parsing.",
+      }),
+      buildUniformRow("Product Family", results.productProfile?.display_name || results.productProfile?.key || "Limited", {
+        status: results.productProfile ? "confirmed" : "review",
+        note: results.productProfile
+          ? "Product-family hints are helping strategy and behavior interpretation."
+          : "Product-family interpretation remains generic until a cleaner product name is visible.",
+      }),
+      buildUniformRow("Strategy Reference Hits", Array.isArray(results.strategyReferenceHits) ? String(results.strategyReferenceHits.length) : "0", {
+        status: Array.isArray(results.strategyReferenceHits) && results.strategyReferenceHits.length > 0 ? "confirmed" : "review",
+        note:
+          Array.isArray(results.strategyReferenceHits) && results.strategyReferenceHits.length > 0
+            ? "Carrier/product-specific strategy references were matched in the packet."
+            : "No strong carrier/product strategy references were matched yet.",
+      }),
+      buildUniformRow("Visible Product-Specific Terms", [
+        firstNonEmpty(resolvedLive.capRate),
+        firstNonEmpty(resolvedLive.participationRate),
+        firstNonEmpty(resolvedLive.spread),
+      ].filter(Boolean).join(" / "), {
+        status: resolvedLive.capRate || resolvedLive.participationRate || resolvedLive.spread ? "confirmed" : "missing",
+        note: "These terms often vary by carrier, so seeing them improves product-specific interpretation.",
       }),
     ]),
     buildUniformTable("Packet Support And Audit", "How dependable the current packet is for a real-world IUL review.", [
