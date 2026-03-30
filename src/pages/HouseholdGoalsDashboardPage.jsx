@@ -11,7 +11,7 @@ import { loadCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
 import { evaluateInsuranceGaps } from "../lib/domain/insurance/insuranceGapEngine";
 import { getPropertyBundle, listProperties } from "../lib/supabase/propertyData";
-import { listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
+import { getHouseholdInsuranceSummary, listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
 import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listAutoPolicies } from "../lib/supabase/autoData";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
@@ -159,6 +159,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   const [lifePolicies, setLifePolicies] = useState([]);
   const [homeownersPolicies, setHomeownersPolicies] = useState([]);
   const [autoPolicies, setAutoPolicies] = useState([]);
+  const [insuranceSummary, setInsuranceSummary] = useState(null);
 
   const storageScope = useMemo(
     () => ({
@@ -211,6 +212,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       setLifePolicies([]);
       setHomeownersPolicies([]);
       setAutoPolicies([]);
+      setInsuranceSummary(null);
       setInsuranceError("");
       setInsuranceLoading(false);
       return;
@@ -228,10 +230,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         source: "household_goals_dashboard",
       };
 
-      const [lifeResult, homeownersResult, autoResult] = await Promise.all([
+      const [lifeResult, homeownersResult, autoResult, summaryResult] = await Promise.all([
         listVaultedPolicies(scopeOverride),
         listHomeownersPolicies(householdId),
         listAutoPolicies(householdId),
+        getHouseholdInsuranceSummary(authUserId, householdId),
       ]);
 
       if (!active) return;
@@ -239,8 +242,10 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       setLifePolicies(lifeResult.data || []);
       setHomeownersPolicies(homeownersResult.data || []);
       setAutoPolicies(autoResult.data || []);
+      setInsuranceSummary(summaryResult.data || null);
       setInsuranceError(
         lifeResult.error?.message ||
+          summaryResult.error?.message ||
           homeownersResult.error?.message ||
           autoResult.error?.message ||
           ""
@@ -374,10 +379,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       },
       {
         label: "Protection",
-        value: insuranceGaps.summary.protectionFlags.length,
-        helper: insuranceGaps.summary.protectionFlags.length
-          ? `${insuranceGaps.summary.protectionFlags.length} coverage areas need review`
-          : "No obvious protection gaps detected",
+        value: insuranceSummary ? formatScore((insuranceSummary.confidence || 0) * 100) : insuranceGaps.summary.protectionFlags.length,
+        helper: insuranceSummary?.headline ||
+          (insuranceGaps.summary.protectionFlags.length
+            ? `${insuranceGaps.summary.protectionFlags.length} coverage areas need review`
+            : "No obvious protection gaps detected"),
       },
       {
         label: "Priority Queue",
@@ -385,7 +391,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         helper: priorityItems.length ? "Household goals to review" : "No urgent planning flags yet",
       },
     ],
-    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, priorityItems.length, propertySummary, retirementReadiness]
+    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, insuranceSummary, priorityItems.length, propertySummary, retirementReadiness]
   );
 
   const householdNarrative = useMemo(() => {
@@ -413,7 +419,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       lines.push("No property records are currently linked into the household goals view.");
     }
 
-    if (insuranceGaps.summary.protectionFlags.length === 0) {
+    if (insuranceSummary?.headline) {
+      lines.push(insuranceSummary.headline);
+    } else if (insuranceGaps.summary.protectionFlags.length === 0) {
       lines.push("No obvious insurance protection gaps were detected from the policies currently visible here.");
     } else {
       const protectionMessages = [];
@@ -425,7 +433,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       }
     }
     return lines.join(" ");
-  }, [activeCollegePlan, insuranceGaps, propertySummary, retirementReadiness]);
+  }, [activeCollegePlan, insuranceGaps, insuranceSummary, propertySummary, retirementReadiness]);
 
   const cardGrid = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
 
@@ -497,6 +505,61 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
           <EmptyState title="Insurance visibility is limited" description={insuranceError} />
         ) : (
           <div style={{ display: "grid", gap: "16px" }}>
+            {insuranceSummary ? (
+              <div
+                style={{
+                  padding: "16px 18px",
+                  borderRadius: "16px",
+                  background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                  border: "1px solid rgba(147, 197, 253, 0.28)",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>Household Protection Read</div>
+                  <div
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      background: getSeverityTone(insuranceSummary.status === "Needs Review" ? "high" : insuranceSummary.status === "Monitor" ? "medium" : "low").background,
+                      color: getSeverityTone(insuranceSummary.status === "Needs Review" ? "high" : insuranceSummary.status === "Monitor" ? "medium" : "low").color,
+                      fontWeight: 800,
+                      fontSize: "12px",
+                    }}
+                  >
+                    {insuranceSummary.status || "Monitor"}
+                  </div>
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{insuranceSummary.headline}</div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Policies</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.totalPolicies || 0}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Visible Coverage</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.totalCoverage ? formatCurrency(insuranceSummary.totalCoverage) : "Not recorded"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Confidence</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{formatScore((insuranceSummary.confidence || 0) * 100)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Gap Flags</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.metrics?.gapPolicies || 0}</div>
+                  </div>
+                </div>
+                {Array.isArray(insuranceSummary.notes) && insuranceSummary.notes.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                    {insuranceSummary.notes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
               {[
                 { label: "Life", gap: insuranceGaps.life },
@@ -549,7 +612,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               ))}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-              <div style={{ color: "#64748b", lineHeight: "1.7" }}>{insuranceGaps.note}</div>
+              <div style={{ color: "#64748b", lineHeight: "1.7" }}>
+                {insuranceSummary?.headline
+                  ? `${insuranceGaps.note} This remains a high-level review based on the policies currently visible in VaultedShield.`
+                  : insuranceGaps.note}
+              </div>
               <button
                 type="button"
                 onClick={() => onNavigate?.("/insurance")}
