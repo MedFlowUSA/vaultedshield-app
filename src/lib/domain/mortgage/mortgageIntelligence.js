@@ -17,6 +17,20 @@ function roundConfidence(value) {
   return Math.max(0, Math.min(1, Number(value || 0)));
 }
 
+function hasValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function getLatestSnapshot(snapshots = []) {
+  const safeSnapshots = safeArray(snapshots);
+  if (!safeSnapshots.length) return null;
+  return [...safeSnapshots].sort((left, right) => {
+    const leftDate = toDate(left?.snapshot_date || left?.created_at);
+    const rightDate = toDate(right?.snapshot_date || right?.created_at);
+    return (rightDate?.getTime() || 0) - (leftDate?.getTime() || 0);
+  })[0];
+}
+
 function pluralize(count, noun) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -25,9 +39,12 @@ export function buildMortgageReviewSignals({
   mortgageLoan = {},
   documents = [],
   propertyLinks = [],
+  snapshots = [],
 } = {}) {
   const safeDocuments = safeArray(documents);
   const safeLinks = safeArray(propertyLinks);
+  const latestSnapshot = getLatestSnapshot(snapshots);
+  const normalizedMortgage = latestSnapshot?.normalized_mortgage || {};
   const now = new Date();
 
   const originationDate = toDate(mortgageLoan?.origination_date);
@@ -46,10 +63,29 @@ export function buildMortgageReviewSignals({
   const hasClosingDisclosure = documentClasses.includes("closing_disclosure");
   const hasPayoffStatement = documentClasses.includes("payoff_statement");
   const hasEscrowAnalysis = documentClasses.includes("escrow_analysis");
+  const hasEscrowStatement =
+    documentClasses.includes("escrow_statement") ||
+    documentClasses.includes("tax_and_insurance_escrow_notice");
+  const hasAmortizationSchedule = documentClasses.includes("amortization_schedule");
   const hasRefinancePacket = documentClasses.includes("refinance_packet");
   const primaryPropertyLink = safeLinks.find((link) => link?.is_primary) || safeLinks[0] || null;
   const isActive = ["active", "current"].includes(mortgageLoan?.current_status);
   const isArm = mortgageLoan?.mortgage_loan_type_key === "adjustable_rate_mortgage";
+  const monthlyPaymentVisible = hasValue(normalizedMortgage?.payment_metrics?.monthly_payment);
+  const interestRateVisible = hasValue(normalizedMortgage?.rate_terms?.interest_rate);
+  const escrowVisible =
+    normalizedMortgage?.escrow_metrics?.escrow_present === true ||
+    hasValue(normalizedMortgage?.payment_metrics?.escrow_payment) ||
+    hasValue(normalizedMortgage?.escrow_metrics?.escrow_balance);
+  const payoffAmountVisible = hasValue(normalizedMortgage?.balance_metrics?.payoff_amount);
+  const principalBalanceVisible =
+    hasValue(normalizedMortgage?.balance_metrics?.current_principal_balance) ||
+    hasValue(normalizedMortgage?.balance_metrics?.unpaid_principal_balance);
+  const termVisible =
+    hasValue(normalizedMortgage?.rate_terms?.term_months) ||
+    originationDate !== null ||
+    maturityDate !== null;
+  const amortizationSupport = hasAmortizationSchedule || (principalBalanceVisible && monthlyPaymentVisible && termVisible);
 
   const flags = [];
   const notes = [];
@@ -61,6 +97,10 @@ export function buildMortgageReviewSignals({
   if (hasMonthlyStatement) confidence += 0.2;
   if (hasClosingDisclosure) confidence += 0.1;
   if (hasPayoffStatement) confidence += 0.1;
+  if (monthlyPaymentVisible) confidence += 0.12;
+  if (interestRateVisible) confidence += 0.1;
+  if (escrowVisible) confidence += 0.08;
+  if (principalBalanceVisible) confidence += 0.1;
   if (safeLinks.length > 0) confidence += 0.15;
 
   if (!safeLinks.length) {
@@ -91,7 +131,7 @@ export function buildMortgageReviewSignals({
   let payoffStatus = "limited";
   if (mortgageLoan?.current_status === "paid_off" || mortgageLoan?.current_status === "closed") {
     payoffStatus = "closed";
-  } else if (hasPayoffStatement) {
+  } else if (hasPayoffStatement || payoffAmountVisible) {
     payoffStatus = "ready";
     notes.push("A payoff statement is visible, which improves payoff-readiness visibility.");
   } else if (yearsToMaturity !== null && yearsToMaturity <= 1) {
@@ -103,7 +143,15 @@ export function buildMortgageReviewSignals({
   }
 
   let documentSupport = "limited";
-  const supportCount = [hasMonthlyStatement, hasClosingDisclosure, hasPayoffStatement, hasEscrowAnalysis].filter(Boolean).length;
+  const supportCount = [
+    hasMonthlyStatement,
+    hasClosingDisclosure,
+    hasPayoffStatement,
+    hasEscrowAnalysis || hasEscrowStatement,
+    monthlyPaymentVisible,
+    interestRateVisible,
+    principalBalanceVisible,
+  ].filter(Boolean).length;
   if (supportCount >= 3) {
     documentSupport = "strong";
   } else if (supportCount >= 1) {
@@ -113,6 +161,18 @@ export function buildMortgageReviewSignals({
   if (!hasMonthlyStatement) {
     flags.push("statement_missing");
     notes.push("No monthly statement is visible yet, so payment and escrow visibility remain limited.");
+  }
+  if (!monthlyPaymentVisible) {
+    flags.push("payment_visibility_limited");
+    notes.push("Monthly payment visibility is still limited in the current mortgage read.");
+  }
+  if (!interestRateVisible) {
+    flags.push("rate_visibility_limited");
+    notes.push("Interest rate is not yet clearly visible in the current mortgage read.");
+  }
+  if (!escrowVisible && mortgageLoan?.mortgage_loan_type_key !== "heloc") {
+    flags.push("escrow_visibility_limited");
+    notes.push("Escrow visibility is still limited, so tax and insurance payment support may be incomplete.");
   }
   if (!mortgageLoan?.lender_key) {
     flags.push("lender_unconfirmed");
@@ -126,17 +186,23 @@ export function buildMortgageReviewSignals({
   let readinessStatus = "Monitor";
   if (flags.includes("property_link_missing") || flags.includes("statement_missing")) {
     readinessStatus = "Needs Review";
-  } else if (refinanceStatus === "review" || payoffStatus === "review" || documentSupport === "moderate") {
+  } else if (
+    refinanceStatus === "review" ||
+    payoffStatus === "review" ||
+    documentSupport === "moderate" ||
+    flags.includes("payment_visibility_limited") ||
+    flags.includes("rate_visibility_limited")
+  ) {
     readinessStatus = "Review Soon";
   } else if (documentSupport === "strong" && safeLinks.length > 0) {
     readinessStatus = "Better Supported";
   }
 
   const headline =
-    readinessStatus === "Better Supported"
-      ? "This mortgage record has enough core structure to support a more reliable debt review."
-      : readinessStatus === "Review Soon"
-        ? "This mortgage record is usable, but a refinance, payoff, or document review should stay on the radar."
+      readinessStatus === "Better Supported"
+        ? "This mortgage record has enough core structure to support a more reliable debt review."
+        : readinessStatus === "Review Soon"
+        ? "This mortgage record is usable, but payment, rate, escrow, refinance, or payoff review should stay on the radar."
         : "This mortgage record still needs stronger debt-review support before it can be treated as fully reliable.";
 
   return {
@@ -151,9 +217,15 @@ export function buildMortgageReviewSignals({
       documentSupport,
       refinanceStatus,
       payoffStatus,
+      monthlyPaymentVisible,
+      interestRateVisible,
+      escrowVisible,
+      principalBalanceVisible,
+      amortizationSupport: amortizationSupport ? "supported" : "limited",
       propertyLinkCount: safeLinks.length,
       primaryLinkVisible: Boolean(primaryPropertyLink),
       documentCount: safeDocuments.length,
+      snapshotCount: safeArray(snapshots).length,
     },
   };
 }

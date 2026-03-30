@@ -177,8 +177,9 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
         mortgageLoan,
         documents: bundle?.mortgageDocuments || [],
         propertyLinks,
+        snapshots: bundle?.mortgageSnapshots || [],
       }),
-    [bundle?.mortgageDocuments, mortgageLoan, propertyLinks]
+    [bundle?.mortgageDocuments, bundle?.mortgageSnapshots, mortgageLoan, propertyLinks]
   );
 
   const summaryItems = useMemo(() => {
@@ -436,6 +437,22 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                     <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Years To Maturity</div>
                     <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.yearsToMaturity ?? "Limited visibility"}</div>
                   </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Payment Visibility</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.monthlyPaymentVisible ? "Visible" : "Limited"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Rate Visibility</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.interestRateVisible ? "Visible" : "Limited"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Escrow Visibility</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.escrowVisible ? "Visible" : "Limited"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Amortization Support</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.amortizationSupport || "limited"}</div>
+                  </div>
                 </div>
                 <div style={{ display: "grid", gap: "8px" }}>
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Notes</div>
@@ -458,6 +475,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 summary={mortgageReview.headline}
                 bullets={[
                   `Document support: ${mortgageReview.metrics?.documentSupport || "limited"}`,
+                  `Parsed snapshots: ${mortgageReview.metrics?.snapshotCount || 0}`,
                   `Property links visible: ${mortgageReview.metrics?.propertyLinkCount || 0}`,
                   `Refinance review: ${mortgageReview.metrics?.refinanceStatus || "limited"}`,
                   `Payoff readiness: ${mortgageReview.metrics?.payoffStatus || "limited"}`,
