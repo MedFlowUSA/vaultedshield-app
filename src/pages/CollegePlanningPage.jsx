@@ -3,6 +3,7 @@ import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { analyzeCollegePlanReadiness, summarizeCollegeHousehold } from "../lib/domain/college/collegeIntelligence";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
 import { loadCollegeGoalState, saveCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -90,6 +91,24 @@ export default function CollegePlanningPage({ onNavigate }) {
   );
 
   const score = useMemo(() => scoreCollegeGoal(plannerInputs), [plannerInputs]);
+  const collegeRead = useMemo(() => analyzeCollegePlanReadiness(score), [score]);
+  const householdCollegeRead = useMemo(
+    () =>
+      summarizeCollegeHousehold(
+        Object.values(plans).map((plan) =>
+          scoreCollegeGoal({
+            childLabel: plan.childLabel,
+            currentAge: Number(plan.currentAge),
+            collegeStartAge: Number(plan.collegeStartAge),
+            targetSavings: Number(plan.targetSavings),
+            currentSavings: Number(plan.currentSavings || 0),
+            monthlyContribution: Number(plan.monthlyContribution || 0),
+            annualGrowthRate: Number(plan.annualGrowthRate || 5),
+          })
+        )
+      ),
+    [plans]
+  );
 
   useEffect(() => {
     if (!hydrated) return;
@@ -146,8 +165,9 @@ export default function CollegePlanningPage({ onNavigate }) {
       { label: "Monthly Contribution", value: formatCurrency(score.inputs.monthlyContribution), helper: "Current savings pace" },
       { label: "Projected Savings", value: formatCurrency(score.projectedSavings), helper: `By age ${score.inputs.collegeStartAge}` },
       { label: "Readiness", value: `${score.readinessScore}/100`, helper: score.readinessStatus },
+      { label: "Plan Read", value: collegeRead.planStatus, helper: `${Math.round((collegeRead.confidence || 0) * 100)}% plan confidence` },
     ],
-    [planKeys.length, score]
+    [collegeRead.confidence, collegeRead.planStatus, planKeys.length, score]
   );
 
   const whatChangesThis = useMemo(() => {
@@ -262,6 +282,20 @@ export default function CollegePlanningPage({ onNavigate }) {
         <div style={{ display: "grid", gap: "18px" }}>
           <div
             style={{
+              padding: "16px 18px",
+              borderRadius: "16px",
+              background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(147, 197, 253, 0.28)",
+              color: "#0f172a",
+              lineHeight: "1.8",
+              fontWeight: 600,
+            }}
+          >
+            {collegeRead.headline}
+          </div>
+
+          <div
+            style={{
               display: "grid",
               gridTemplateColumns: isTablet ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
               gap: "12px",
@@ -310,6 +344,9 @@ export default function CollegePlanningPage({ onNavigate }) {
             <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{score.readinessScore}/100</div>
             <div style={{ color: "#64748b" }}>
               Projected by age {score.inputs.collegeStartAge}
+            </div>
+            <div style={{ color: "#64748b" }}>
+              Plan read: {collegeRead.planStatus} ({Math.round((collegeRead.confidence || 0) * 100)}% confidence)
             </div>
           </div>
 
@@ -379,6 +416,28 @@ export default function CollegePlanningPage({ onNavigate }) {
             </div>
           </div>
 
+          {collegeRead.notes.length > 0 ? (
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "16px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>Plan Read Notes</div>
+              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569" }}>
+                {collegeRead.notes.map((item) => (
+                  <li key={item} style={{ lineHeight: "1.7" }}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           {whatChangesThis.length > 0 ? (
             <div
               style={{
@@ -405,6 +464,26 @@ export default function CollegePlanningPage({ onNavigate }) {
 
       <SectionCard title="College Planning Notes" subtitle="Starter family-planning context for this v1 tracker.">
         <div style={{ display: "grid", gap: "14px" }}>
+          <div
+            style={{
+              padding: "16px 18px",
+              borderRadius: "16px",
+              background: "#f8fafc",
+              border: "1px solid rgba(148, 163, 184, 0.18)",
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            <div style={{ fontWeight: 700, color: "#0f172a" }}>Household College Read</div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>{householdCollegeRead.headline}</div>
+            {householdCollegeRead.notes.length > 0 ? (
+              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#64748b" }}>
+                {householdCollegeRead.notes.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
           <div style={{ color: "#475569", lineHeight: "1.7" }}>
             This planner is intentionally simple. It does not yet model tuition inflation, scholarships, grants, tax treatment, or multiple education phases. It is meant to help a household see whether the current savings pace feels close to the stated target.
           </div>

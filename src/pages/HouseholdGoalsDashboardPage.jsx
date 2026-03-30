@@ -9,6 +9,7 @@ import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementG
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
+import { summarizeCollegeHousehold } from "../lib/domain/college/collegeIntelligence";
 import { evaluateInsuranceGaps } from "../lib/domain/insurance/insuranceGapEngine";
 import { getPropertyBundle, listProperties } from "../lib/supabase/propertyData";
 import { getHouseholdInsuranceSummary, listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
@@ -203,6 +204,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       .sort((left, right) => right.readinessScore - left.readinessScore);
   }, [collegeState]);
 
+  const collegeHouseholdRead = useMemo(
+    () => summarizeCollegeHousehold(collegePlans),
+    [collegePlans]
+  );
+
   useEffect(() => {
     if (householdState.loading) return;
 
@@ -370,7 +376,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       {
         label: "College Plans",
         value: collegePlans.length,
-        helper: activeCollegePlan ? `${activeCollegePlan.childLabel} is active` : "No child plans yet",
+        helper: collegeHouseholdRead.headline || (activeCollegePlan ? `${activeCollegePlan.childLabel} is active` : "No child plans yet"),
       },
       {
         label: "Property Equity",
@@ -489,6 +495,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
           activeCollegePlan
             ? `${activeCollegePlan.childLabel} projected college savings: ${formatCurrency(activeCollegePlan.projectedSavings)}.`
             : "No active college plan is available yet.",
+          collegePlans.length > 0
+            ? `College planning status: ${collegeHouseholdRead.status}.`
+            : "College planning has not been set up yet.",
           propertySummary.propertyCount > 0
             ? `Visible property equity midpoint: ${propertySummary.totalEquityMidpoint !== null ? formatCurrency(propertySummary.totalEquityMidpoint) : "Limited"}.`
             : "Property equity is not in view yet.",
@@ -694,6 +703,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                 <div><strong>{activeCollegePlan.fundingDifference >= 0 ? "Projected Surplus" : "Funding Gap"}:</strong> {formatCurrency(Math.abs(activeCollegePlan.fundingDifference))}</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{activeCollegePlan.explanation}</div>
+              <div style={{ color: "#64748b", lineHeight: "1.7" }}>
+                Household college read: {collegeHouseholdRead.headline}
+              </div>
             </div>
           ) : (
             <EmptyState title="No college plans saved" description="Add a child plan to activate college readiness tracking for the household." />
