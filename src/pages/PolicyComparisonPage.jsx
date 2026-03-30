@@ -17,6 +17,7 @@ import {
 } from "../lib/domain/intelligenceEngine";
 import {
   analyzePolicyBasics,
+  buildProtectionComparisonNarrative,
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
 
@@ -608,6 +609,10 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
     null;
 
   const narrativeBullets = buildComparisonNarrative(basePolicy, comparisonPolicy);
+  const protectionNarrative = useMemo(
+    () => buildProtectionComparisonNarrative(basePolicy, comparisonPolicy),
+    [basePolicy, comparisonPolicy]
+  );
   const comparisonAnalysis = useMemo(
     () => (basePolicy && comparisonPolicy ? buildPolicyComparisonAnalysis(basePolicy, comparisonPolicy) : null),
     [basePolicy, comparisonPolicy]
@@ -885,9 +890,10 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                 It currently carries a {comparisonPolicy.interpretation.label.toLowerCase()} read versus{" "}
                 {basePolicy.interpretation.label.toLowerCase()} for {basePolicy.product || "the current policy"}.
               </div>
-                {narrativeBullets.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                  {narrativeBullets.map((bullet) => (
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{protectionNarrative.headline}</div>
+                {narrativeBullets.length > 0 || protectionNarrative.bullets.length > 0 ? (
+                 <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                  {[...narrativeBullets, ...protectionNarrative.bullets].slice(0, 6).map((bullet) => (
                     <li key={bullet}>{bullet}</li>
                   ))}
                 </ul>

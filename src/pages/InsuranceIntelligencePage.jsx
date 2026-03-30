@@ -339,8 +339,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const atRiskPolicies = rankedPolicies.filter((row) => row.ranking.status === "At Risk");
   const strongContinuityPolicies = rankedPolicies.filter((row) => row.ranking.status === "Strong");
   const gapPolicies = rankedPolicies.filter((row) => row.gapAnalysis?.coverageGap);
-  const confidentPolicies = rankedPolicies.filter((row) => (row.gapAnalysis?.confidence || 0) >= 0.75);
-
   const systemInsight = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return {
@@ -529,54 +527,38 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   ]);
 
   const protectionSummary = useMemo(() => {
-    const summary = householdInsuranceSummary || {
-      totalPolicies: rankedPolicies.length,
-      totalCoverage,
-      gapDetected: gapPolicies.length > 0,
-      confidence:
-        rankedPolicies.length === 0 ? 0 : rankedPolicies.reduce((sum, row) => sum + (row.gapAnalysis?.confidence || 0), 0) / rankedPolicies.length,
-    };
-
-    const lowConfidencePolicies = rankedPolicies.filter((row) => (row.gapAnalysis?.confidence || 0) < 0.5);
-    const missingDeathBenefitPolicies = rankedPolicies.filter((row) => !row.basicAnalysis?.hasDeathBenefit);
-    const missingCashValuePolicies = rankedPolicies.filter((row) => !row.basicAnalysis?.hasCashValue);
-
-    const bullets = [];
-    if (summary.totalPolicies === 0) {
-      bullets.push("No saved policies are currently visible, so protection coverage cannot be confirmed yet.");
-    }
-    if (gapPolicies.length > 0) {
-      bullets.push(`${pluralize(gapPolicies.length, "policy")} currently show a visible protection or coverage gap based on the saved read.`);
-    }
-    if (missingDeathBenefitPolicies.length > 0) {
-      bullets.push(`${pluralize(missingDeathBenefitPolicies.length, "policy")} still do not show a clear visible death benefit in the current extracted read.`);
-    }
-    if (missingCashValuePolicies.length > 0) {
-      bullets.push(`${pluralize(missingCashValuePolicies.length, "policy")} still lack clear cash-value visibility, which lowers confidence in long-term policy interpretation.`);
-    }
-    if (lowConfidencePolicies.length > 0) {
-      bullets.push(`${pluralize(lowConfidencePolicies.length, "policy")} still read with low confidence and should be refreshed with cleaner statements or better scans.`);
-    }
-    if (confidentPolicies.length > 0) {
-      bullets.push(`${pluralize(confidentPolicies.length, "policy")} currently have stronger protection-read confidence based on the available policy evidence.`);
+    if (householdInsuranceSummary) {
+      return {
+        totalPolicies: householdInsuranceSummary.totalPolicies || 0,
+        totalCoverage: householdInsuranceSummary.totalCoverage || 0,
+        confidence: householdInsuranceSummary.confidence || 0,
+        gapDetected: Boolean(householdInsuranceSummary.gapDetected),
+        narrative: householdInsuranceSummary.headline || "Household protection summary is still forming.",
+        bullets: householdInsuranceSummary.notes || [],
+        status: householdInsuranceSummary.status || "Monitor",
+        metrics: householdInsuranceSummary.metrics || {},
+      };
     }
 
-    const narrative =
-      summary.totalPolicies === 0
-        ? "No saved policies are visible yet, so VaultedShield cannot confirm household protection coverage."
-        : summary.gapDetected
-          ? `The household shows visible protection gaps across ${pluralize(gapPolicies.length, "policy")}, and the current insurance read should be reviewed before treating coverage as complete.`
-          : "No obvious household-level protection gap is visible from the currently saved policies, but coverage confidence still depends on document depth and statement quality.";
+    const fallbackConfidence =
+      rankedPolicies.length === 0 ? 0 : rankedPolicies.reduce((sum, row) => sum + (row.gapAnalysis?.confidence || 0), 0) / rankedPolicies.length;
 
     return {
-      totalPolicies: summary.totalPolicies || 0,
-      totalCoverage: summary.totalCoverage || 0,
-      confidence: summary.confidence || 0,
-      gapDetected: Boolean(summary.gapDetected),
-      narrative,
-      bullets: bullets.slice(0, 5),
+      totalPolicies: rankedPolicies.length,
+      totalCoverage,
+      confidence: fallbackConfidence,
+      gapDetected: gapPolicies.length > 0,
+      narrative:
+        rankedPolicies.length === 0
+          ? "No saved policies are visible yet, so VaultedShield cannot confirm household protection coverage."
+          : gapPolicies.length > 0
+            ? `The household shows visible protection gaps across ${pluralize(gapPolicies.length, "policy")}, and the current insurance read should be reviewed before treating coverage as complete.`
+            : "No obvious household-level protection gap is visible from the currently saved policies, but coverage confidence still depends on document depth and statement quality.",
+      bullets: rankedPolicies.length === 0 ? ["No saved policies are currently visible, so protection coverage cannot be confirmed yet."] : [],
+      status: gapPolicies.length > 0 ? "Needs Review" : "Monitor",
+      metrics: {},
     };
-  }, [confidentPolicies.length, gapPolicies.length, householdInsuranceSummary, rankedPolicies, totalCoverage]);
+  }, [gapPolicies.length, householdInsuranceSummary, rankedPolicies, totalCoverage]);
 
   const rankingHighlights = useMemo(() => {
     return rankedPolicies.map((policy) => {

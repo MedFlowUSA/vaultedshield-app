@@ -11,6 +11,23 @@ function confidenceFromSignals(signals = []) {
   return Math.max(0, Math.min(1, score));
 }
 
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function pluralize(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function currencyToDisplay(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return null;
+  return Number(value).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
 export function analyzePolicyBasics(parsedData = {}) {
   const normalizedPolicy = parsedData?.normalizedPolicy || parsedData?.policyRecord || {};
   const statements = Array.isArray(parsedData?.statements) ? parsedData.statements : [];
@@ -134,5 +151,142 @@ export function detectInsuranceGaps(policy, householdContext = {}) {
     coverageGap,
     confidence: basics.confidenceScore,
     notes,
+  };
+}
+
+export function summarizeInsuranceHousehold(policies = [], householdContext = {}) {
+  const safePolicies = safeArray(policies);
+  if (safePolicies.length === 0) {
+    return {
+      totalPolicies: 0,
+      totalCoverage: 0,
+      gapDetected: true,
+      confidence: 0.15,
+      status: "Needs Review",
+      headline: "No saved policies are visible yet, so household protection coverage cannot be confirmed.",
+      notes: ["Upload at least one life policy or annual statement to begin building a household protection read."],
+      metrics: {
+        gapPolicies: 0,
+        lowConfidencePolicies: 0,
+        confidentPolicies: 0,
+        missingDeathBenefitPolicies: 0,
+      },
+    };
+  }
+
+  const reads = safePolicies.map((policy) => {
+    const basics = analyzePolicyBasics({ comparisonSummary: policy });
+    const gap = detectInsuranceGaps(
+      {
+        comparisonSummary: policy,
+        basics,
+      },
+      { ...householdContext, totalPolicies: safePolicies.length }
+    );
+    return { policy, basics, gap };
+  });
+
+  const totalCoverage = safePolicies.reduce((sum, policy) => {
+    const value = currencyToNumber(policy?.death_benefit);
+    return sum + (value || 0);
+  }, 0);
+  const gapPolicies = reads.filter((item) => item.gap.coverageGap);
+  const lowConfidencePolicies = reads.filter((item) => (item.gap.confidence || 0) < 0.5);
+  const confidentPolicies = reads.filter((item) => (item.gap.confidence || 0) >= 0.75);
+  const missingDeathBenefitPolicies = reads.filter((item) => !item.basics.hasDeathBenefit);
+  const increasingCoiPolicies = reads.filter((item) => item.basics.coiTrend === "increasing");
+  const averageConfidence =
+    reads.reduce((sum, item) => sum + Number(item.gap.confidence || 0), 0) / Math.max(reads.length, 1);
+
+  const status =
+    gapPolicies.length > 0 || lowConfidencePolicies.length > Math.ceil(safePolicies.length / 2)
+      ? "Needs Review"
+      : averageConfidence >= 0.75
+        ? "Better Supported"
+        : "Monitor";
+
+  const notes = [];
+  if (gapPolicies.length > 0) {
+    notes.push(`${pluralize(gapPolicies.length, "policy")} currently show visible protection gap pressure.`);
+  }
+  if (missingDeathBenefitPolicies.length > 0) {
+    notes.push(`${pluralize(missingDeathBenefitPolicies.length, "policy")} still do not show a clean visible death benefit.`);
+  }
+  if (lowConfidencePolicies.length > 0) {
+    notes.push(`${pluralize(lowConfidencePolicies.length, "policy")} still read with low confidence and should be refreshed with stronger document support.`);
+  }
+  if (increasingCoiPolicies.length > 0) {
+    notes.push(`${pluralize(increasingCoiPolicies.length, "policy")} show increasing COI pressure in the visible statements.`);
+  }
+  if (totalCoverage > 0) {
+    notes.push(`Visible household death benefit currently totals about ${currencyToDisplay(totalCoverage)}.`);
+  }
+
+  const headline =
+    gapPolicies.length > 0
+      ? `The household insurance read shows protection gaps across ${pluralize(gapPolicies.length, "policy")}, so coverage should be reviewed before it is treated as complete.`
+      : averageConfidence >= 0.75
+        ? "The current household insurance read looks relatively well supported, with no obvious protection gap visible from saved policy evidence."
+        : "The household insurance read is usable, but confidence is still limited by missing fields, document quality, or incomplete coverage visibility.";
+
+  return {
+    totalPolicies: safePolicies.length,
+    totalCoverage,
+    gapDetected: gapPolicies.length > 0,
+    confidence: averageConfidence,
+    status,
+    headline,
+    notes: notes.slice(0, 5),
+    metrics: {
+      gapPolicies: gapPolicies.length,
+      lowConfidencePolicies: lowConfidencePolicies.length,
+      confidentPolicies: confidentPolicies.length,
+      missingDeathBenefitPolicies: missingDeathBenefitPolicies.length,
+    },
+  };
+}
+
+export function buildProtectionComparisonNarrative(basePolicy = {}, comparePolicy = {}) {
+  if (!basePolicy || !comparePolicy) {
+    return {
+      headline: "Protection comparison is not available yet.",
+      bullets: [],
+    };
+  }
+
+  const baseBasics = basePolicy?.basicAnalysis || analyzePolicyBasics({ comparisonSummary: basePolicy });
+  const compareBasics = comparePolicy?.basicAnalysis || analyzePolicyBasics({ comparisonSummary: comparePolicy });
+  const baseGap = basePolicy?.gapAnalysis || detectInsuranceGaps({ comparisonSummary: basePolicy, basics: baseBasics }, { totalPolicies: 2 });
+  const compareGap = comparePolicy?.gapAnalysis || detectInsuranceGaps({ comparisonSummary: comparePolicy, basics: compareBasics }, { totalPolicies: 2 });
+
+  const bullets = [];
+  if (!compareGap.coverageGap && baseGap.coverageGap) {
+    bullets.push(`${comparePolicy.product || "The comparison policy"} currently shows a cleaner protection read than ${basePolicy.product || "the current policy"}.`);
+  }
+  if (compareGap.coverageGap && !baseGap.coverageGap) {
+    bullets.push(`${comparePolicy.product || "The comparison policy"} is stronger on continuity, but it still shows visible protection gap pressure.`);
+  }
+  if ((compareGap.confidence || 0) > (baseGap.confidence || 0)) {
+    bullets.push(`${comparePolicy.product || "The comparison policy"} carries stronger protection confidence from the visible evidence.`);
+  } else if ((compareGap.confidence || 0) < (baseGap.confidence || 0)) {
+    bullets.push(`${basePolicy.product || "The current policy"} carries stronger protection confidence from the visible evidence.`);
+  }
+  if (baseBasics.fundingPattern === "underfunded" && compareBasics.fundingPattern !== "underfunded") {
+    bullets.push("The current policy shows weaker funding support than the comparison file.");
+  }
+  if (compareBasics.coiTrend === "increasing" && baseBasics.coiTrend !== "increasing") {
+    bullets.push("The comparison policy shows more visible COI pressure in the statement trail.");
+  }
+
+  const headline =
+    !compareGap.coverageGap && baseGap.coverageGap
+      ? `${comparePolicy.product || "The comparison policy"} currently looks stronger from a protection perspective, not just a continuity perspective.`
+      : compareGap.coverageGap && !baseGap.coverageGap
+        ? `${basePolicy.product || "The current policy"} currently looks cleaner on protection support, even if the comparison file is stronger elsewhere.`
+        : "Both policies are usable for review, but protection confidence still depends on document support, visible death benefit data, and funding visibility.";
+
+  return {
+    headline,
+    bullets: bullets.slice(0, 5),
   };
 }

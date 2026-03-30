@@ -11,6 +11,7 @@ import {
 import {
   analyzePolicyBasics,
   detectInsuranceGaps,
+  summarizeInsuranceHousehold,
 } from "../domain/insurance/insuranceIntelligence.js";
 
 export const VAULTED_PARSER_VERSION = "v2";
@@ -1715,7 +1716,7 @@ export async function getHouseholdInsuranceSummary(userId, householdId = null) {
   const policies = safeArray(policiesResult.data);
   if (policies.length === 0) {
     return {
-      data: { totalPolicies: 0, totalCoverage: 0, gapDetected: true, confidence: 0.15 },
+      data: summarizeInsuranceHousehold([], { householdId }),
       error: null,
     };
   }
@@ -1735,31 +1736,8 @@ export async function getHouseholdInsuranceSummary(userId, householdId = null) {
   }
 
   const policySummaries = safeArray(comparisonResult.data?.policy_summaries);
-  const totalCoverage = policySummaries.reduce((sum, policy) => {
-    const value = parseCurrencyToNumber(policy?.death_benefit);
-    return sum + (value || 0);
-  }, 0);
-  const gapReads = policySummaries.map((policy) =>
-    detectInsuranceGaps(
-      {
-        comparisonSummary: policy,
-        basics: analyzePolicyBasics({ comparisonSummary: policy }),
-      },
-      { totalPolicies: policies.length }
-    )
-  );
-  const confidence =
-    gapReads.length > 0
-      ? gapReads.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / gapReads.length
-      : 0;
-
   return {
-    data: {
-      totalPolicies: policies.length,
-      totalCoverage,
-      gapDetected: gapReads.some((item) => item.coverageGap),
-      confidence,
-    },
+    data: summarizeInsuranceHousehold(policySummaries, { householdId, totalPolicies: policies.length }),
     error: null,
   };
 }
