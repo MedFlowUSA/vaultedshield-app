@@ -1147,7 +1147,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             })
           ) : (
             <div style={{ color: "#64748b" }}>
-              {loadingStates.insurancePortfolio ? "Loading insurance portfolio..." : loadError || "No saved policies available yet."}
+              {loadingStates.insurancePortfolio ? "Processing..." : loadError || "No policy uploaded yet."}
             </div>
           )}
         </div>

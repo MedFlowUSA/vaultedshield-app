@@ -17,6 +17,12 @@ import {
   sortStatementsChronologically,
 } from "../lib/parser/extractionEngine";
 import { buildPolicyIntelligence } from "../lib/domain/intelligenceEngine";
+import {
+  buildInsuranceDocumentPacket,
+  classifyPacketQuality,
+  normalizeExtractionInput,
+} from "../lib/domain/insurance/insuranceDocumentPacket";
+import { analyzePolicyBasics } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { persistVaultedPolicyAnalysis } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
@@ -164,19 +170,31 @@ function formatAnalyzeFailure(error) {
 }
 
 function normalizeExtractionDocument(extraction, fallbackFileName = "document") {
-  const pages = ensureArray(extraction?.pages).filter((page) => typeof page === "string");
-  const text = typeof extraction?.text === "string" ? extraction.text : pages.join("\n\n");
+  const packet = buildInsuranceDocumentPacket({
+    source: extraction?.sourceType === "image" ? "scan" : "upload",
+    pages: ensureArray(extraction?.pages).filter((page) => typeof page === "string"),
+    text: typeof extraction?.text === "string" ? extraction.text : "",
+    pageCount: extraction?.pageCount,
+    fileName: extraction?.fileName || fallbackFileName,
+    extractionMethod: extraction?.extractionMethod || "unknown",
+    extractionWarnings: ensureArray(extraction?.extractionWarnings).filter(Boolean),
+    pageOcr: ensureArray(extraction?.pageOcr),
+    ocrConfidence: extraction?.ocrConfidence ?? null,
+    metadata: {
+      sourceType: extraction?.sourceType || "unknown",
+    },
+  });
 
   return {
-    text,
-    pages,
-    sourceType: extraction?.sourceType || "unknown",
-    ocrConfidence: extraction?.ocrConfidence ?? null,
-    extractionWarnings: ensureArray(extraction?.extractionWarnings).filter(Boolean),
-    extractionMethod: extraction?.extractionMethod || "unknown",
-    pageCount: extraction?.pageCount || pages.length,
-    pageOcr: ensureArray(extraction?.pageOcr),
-    fileName: extraction?.fileName || fallbackFileName,
+    text: packet.text,
+    pages: packet.pages,
+    sourceType: packet.source === "scan" ? "image" : "pdf",
+    ocrConfidence: packet.metadata.ocrConfidence ?? null,
+    extractionWarnings: packet.metadata.extractionWarnings || [],
+    extractionMethod: packet.metadata.extractionMethod || "unknown",
+    pageCount: packet.pageCount || packet.pages.length,
+    pageOcr: packet.metadata.pageOcr || [],
+    fileName: packet.metadata.fileName || fallbackFileName,
   };
 }
 
@@ -588,6 +606,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     illustration: null,
     statements: [],
   });
+  const [qualityNotice, setQualityNotice] = useState("");
 
   const illustrationScan = useScanSession();
   const statementScan = useScanSession();
@@ -613,6 +632,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     setPendingReplacement({ target: "", pageId: null });
     setExtractionStatus({ phase: "", progress: 0, currentFile: "", detail: "" });
     setDocumentDiagnostics({ illustration: null, statements: [] });
+    setQualityNotice("");
     illustrationScan.clearSession();
     statementScan.clearSession();
   }, [debug.authUserId, debug.householdId]);
@@ -784,6 +804,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       setLoading(true);
       setLoadingMessage("Preparing document extraction...");
       setError("");
+      setQualityNotice("");
       setSaveStatus(null);
       setDocumentDiagnostics({ illustration: null, statements: [] });
 
@@ -836,15 +857,38 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         );
       }
 
-      if (!illustrationExtraction.text.trim() || !illustrationExtraction.pages.length) {
+      const baselinePacket = normalizeExtractionInput(
+        buildInsuranceDocumentPacket({
+          source: illustrationExtraction.sourceType === "image" ? "scan" : "upload",
+          pages: illustrationExtraction.pages,
+          text: illustrationExtraction.text,
+          pageCount: illustrationExtraction.pageCount,
+          fileName: illustrationExtraction.fileName,
+          extractionMethod: illustrationExtraction.extractionMethod,
+          extractionWarnings: illustrationExtraction.extractionWarnings,
+          pageOcr: illustrationExtraction.pageOcr,
+          ocrConfidence: illustrationExtraction.ocrConfidence,
+        })
+      );
+      const baselinePacketQuality = classifyPacketQuality(baselinePacket);
+
+      if (baselinePacket.pageCount === 0) {
+        throw new Error("No policy pages were ready for analysis.");
+      }
+
+      if (!baselinePacket.text.trim()) {
         throw new Error(
           "We could not reliably read this scan. Retake the photo in better lighting, flatter angle, and closer crop."
         );
       }
 
+      if (baselinePacketQuality.isLowQuality) {
+        setQualityNotice("Low-quality document detected. Analysis can continue, but confidence may be limited.");
+      }
+
       setLoadingMessage("Analyzing policy data...");
       const baseline = await runAnalysisStage("baseline parsing", () => Promise.resolve(parseIllustrationDocument({
-        pages: illustrationExtraction.pages,
+        pages: baselinePacket.pages,
         fileName: illustrationFile?.name || illustrationExtraction.fileName || "initial-policy-scan.jpg",
       })), "We could not parse the initial policy document.");
       baseline.extractionMeta = {
@@ -926,7 +970,26 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           throw new Error("No annual statement pages are ready for analysis.");
         }
 
-        if (!extraction.text.trim() || !extraction.pages.length) {
+        const normalizedPacket = normalizeExtractionInput(
+          buildInsuranceDocumentPacket({
+            source: extraction.sourceType === "image" ? "scan" : "upload",
+            pages: extraction.pages,
+            text: extraction.text,
+            pageCount: extraction.pageCount,
+            fileName,
+            extractionMethod: extraction.extractionMethod,
+            extractionWarnings: extraction.extractionWarnings,
+            pageOcr: extraction.pageOcr,
+            ocrConfidence: extraction.ocrConfidence,
+          })
+        );
+        const packetQuality = classifyPacketQuality(normalizedPacket);
+
+        if (normalizedPacket.pageCount === 0) {
+          throw new Error("No annual statement pages are ready for analysis.");
+        }
+
+        if (!normalizedPacket.text.trim()) {
           throw new Error(
             input.branch === "scan"
               ? "We could not reliably read the scanned annual statement pages. Retake the photo in better lighting, flatter angle, and closer crop."
@@ -934,9 +997,13 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           );
         }
 
+        if (packetQuality.isLowQuality) {
+          setQualityNotice("Low-quality document detected. Analysis can continue, but confidence may be limited.");
+        }
+
         setLoadingMessage(`Parsing ${fileName}...`);
         const statement = await runAnalysisStage(`statement parsing: ${fileName}`, () => Promise.resolve(parseStatementDocument({
-          pages: extraction.pages,
+          pages: normalizedPacket.pages,
           fileName,
         })), `We could not parse ${fileName}.`);
         if (!statement || typeof statement !== "object") {
@@ -995,6 +1062,12 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         legacyAnalytics: analytics,
         vaultAiSummary,
       })), "We could not assemble the insurance intelligence output.");
+      const basicPolicyAnalysis = analyzePolicyBasics({
+        normalizedPolicy: intelligence.normalizedPolicy,
+        normalizedAnalytics: intelligence.normalizedAnalytics,
+        comparisonSummary: intelligence.normalizedAnalytics?.comparison_summary || null,
+        statements: sortedStatements,
+      });
 
       setLoadingMessage("Saving policy record...");
       const persistenceStatus = await runAnalysisStage("policy persistence", () => persistVaultedPolicyAnalysis({
@@ -1034,6 +1107,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           "Life policy",
         statementCount: sortedStatements.length,
         errorSummary: persistenceStatus?.errorSummary || "",
+        basicPolicyAnalysis,
       });
     } catch (analysisError) {
       if (import.meta.env.DEV) {
@@ -1313,6 +1387,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         ) : null}
 
         {error ? <div style={{ marginTop: "14px", color: "#991b1b" }}>{error}</div> : null}
+        {qualityNotice ? <div style={{ marginTop: "14px", color: "#92400e" }}>{qualityNotice}</div> : null}
 
         {!hasBaselineInput ? (
           <div style={{ marginTop: "14px", color: "#475569" }}>
@@ -1402,6 +1477,11 @@ export default function LifePolicyUploadPage({ onNavigate }) {
             <div style={{ color: "#475569" }}>
               Annual statements processed: {saveStatus.statementCount}
             </div>
+            {saveStatus.basicPolicyAnalysis ? (
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                Confidence: {Math.round((saveStatus.basicPolicyAnalysis.confidenceScore || 0) * 100)}% | Funding: {saveStatus.basicPolicyAnalysis.fundingPattern} | COI trend: {saveStatus.basicPolicyAnalysis.coiTrend}
+              </div>
+            ) : null}
             {saveStatus.failedStep ? <div style={{ color: "#9a3412" }}>Failed step: {saveStatus.failedStep}</div> : null}
             {saveStatus.errorSummary ? <div style={{ color: "#9a3412" }}>{saveStatus.errorSummary}</div> : null}
             {import.meta.env.DEV && saveStatus.stepResults ? (

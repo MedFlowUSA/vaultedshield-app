@@ -8,6 +8,10 @@ import {
   buildPolicyComparisonSummary,
   buildVaultedPolicyComparisonRows,
 } from "../domain/intelligenceEngine.js";
+import {
+  analyzePolicyBasics,
+  detectInsuranceGaps,
+} from "../domain/insurance/insuranceIntelligence.js";
 
 export const VAULTED_PARSER_VERSION = "v2";
 
@@ -131,14 +135,14 @@ function safeObject(value) {
 async function getCurrentVaultedPolicyScope() {
   const supabase = getSupabaseClient();
   if (!supabase) {
-    return { userId: null, mode: "guest_shared" };
+    return { userId: null, mode: "blocked" };
   }
 
   const { data } = await supabase.auth.getUser();
   const userId = data?.user?.id || null;
   return {
     userId,
-    mode: userId ? "authenticated_owned" : "guest_shared",
+    mode: userId ? "authenticated_owned" : "blocked",
   };
 }
 
@@ -198,6 +202,9 @@ export function normalizeExplicitVaultedPolicyScope(scopeOverride = null) {
     const householdId = scopeOverride.householdId || null;
     const guestFallbackActive = Boolean(scopeOverride.guestFallbackActive);
     const source = scopeOverride.source || "explicit_scope";
+    if (!userId) {
+      return buildBlockedVaultedPolicyScope(`${source}_missing_user`);
+    }
     const explicitAuthScope =
       ownershipMode === "authenticated_owned" ||
       Boolean(householdId) ||
@@ -219,6 +226,9 @@ async function resolveVaultedPolicyScope(scopeOverride = null) {
   const explicitScope = normalizeExplicitVaultedPolicyScope(scopeOverride);
   if (explicitScope) return explicitScope;
   const currentScope = await getCurrentVaultedPolicyScope();
+  if (!currentScope.userId) {
+    return buildBlockedVaultedPolicyScope("resolved_current_session_missing_user");
+  }
   return {
     ...currentScope,
     blocked: false,
@@ -290,6 +300,32 @@ function warnInsertedVaultedPolicyOwnership(row, context) {
       policyNumberMasked: row.policy_number_masked || null,
     });
   }
+}
+
+function buildPolicyStorageShape({
+  policyRow,
+  normalizedPolicy = {},
+  basics = null,
+  householdId = null,
+}) {
+  const computedBasics = basics || analyzePolicyBasics({ normalizedPolicy });
+  const shape = {
+    household_id: householdId || null,
+    policy_number: policyRow?.policy_number || normalizedPolicy?.policy_identity?.policy_number || null,
+    carrier: policyRow?.carrier_name || normalizedPolicy?.policy_identity?.carrier_name || null,
+    type: policyRow?.policy_type || normalizedPolicy?.policy_identity?.policy_type || null,
+    extracted_data: {
+      policy_identity: normalizedPolicy?.policy_identity || {},
+      values: normalizedPolicy?.values || {},
+      funding: normalizedPolicy?.funding || {},
+      death_benefit: normalizedPolicy?.death_benefit || {},
+    },
+    analysis_summary: computedBasics,
+  };
+  if (policyRow?.id) shape.id = policyRow.id;
+  if (policyRow?.user_id) shape.user_id = policyRow.user_id;
+  if (policyRow?.created_at) shape.created_at = policyRow.created_at;
+  return shape;
 }
 
 function isRecognizedQuality(value) {
@@ -1168,6 +1204,7 @@ export async function upsertVaultedPolicyFromAnalysis({
   normalizedPolicy,
   carrierProfile,
   productProfile,
+  householdId = null,
   scopeOverride = null,
 }) {
   const supabase = getSupabaseClient();
@@ -1192,6 +1229,12 @@ export async function upsertVaultedPolicyFromAnalysis({
     owner_name: normalizedPolicy?.policy_identity?.owner_name || null,
     source_status: "active",
   };
+  const storageShape = buildPolicyStorageShape({
+    policyRow: payload,
+    normalizedPolicy,
+    basics: analyzePolicyBasics({ normalizedPolicy }),
+    householdId,
+  });
 
   if (payload.policy_number && payload.carrier_key) {
     const { data, error } = await supabase
@@ -1202,7 +1245,7 @@ export async function upsertVaultedPolicyFromAnalysis({
 
     warnInsertedVaultedPolicyOwnership(data, "upsertVaultedPolicyFromAnalysis");
     if (!error || !isMissingUpsertConstraintError(error)) {
-      return { data, error };
+      return { data: data ? { ...data, ...storageShape } : data, error };
     }
 
     const existingResult = await findVaultedPolicyByIdentity({
@@ -1217,17 +1260,26 @@ export async function upsertVaultedPolicyFromAnalysis({
     if (existingResult.data?.id) {
       const updateResult = await updateRecord("vaulted_policies", existingResult.data.id, payload);
       warnInsertedVaultedPolicyOwnership(updateResult.data, "upsertVaultedPolicyFromAnalysis:updateFallback");
-      return updateResult;
+      return {
+        data: updateResult.data ? { ...updateResult.data, ...storageShape } : updateResult.data,
+        error: updateResult.error,
+      };
     }
 
     const insertResult = await insertRecord("vaulted_policies", payload);
     warnInsertedVaultedPolicyOwnership(insertResult.data, "upsertVaultedPolicyFromAnalysis:insertFallback");
-    return insertResult;
+    return {
+      data: insertResult.data ? { ...insertResult.data, ...storageShape } : insertResult.data,
+      error: insertResult.error,
+    };
   }
 
   const insertResult = await insertRecord("vaulted_policies", payload);
   warnInsertedVaultedPolicyOwnership(insertResult.data, "upsertVaultedPolicyFromAnalysis:insertUnkeyed");
-  return insertResult;
+  return {
+    data: insertResult.data ? { ...insertResult.data, ...storageShape } : insertResult.data,
+    error: insertResult.error,
+  };
 }
 
 async function ensureWritableVaultedPolicy(policyId, scopeOverride = null) {
@@ -1474,6 +1526,9 @@ export async function listVaultedPolicies(scopeOverride = null) {
   return {
     data: safeArray(data).map((row) => ({
       ...row,
+      household_id: scopeOverride?.householdId || null,
+      extracted_data: row?.extracted_data || {},
+      analysis_summary: row?.analysis_summary || null,
       latest_statement_date: latestStatementDate(row.vaulted_policy_statements),
       last_saved_at: row.updated_at || row.created_at,
     })),
@@ -1495,7 +1550,17 @@ export async function getVaultedPolicyById(policyId, scopeOverride = null) {
   const { data, error } = await query.single();
   warnUnexpectedVaultedPolicyRowScope(data, scope, "getVaultedPolicyById");
 
-  return { data, error };
+  return {
+    data: data
+      ? {
+          ...data,
+          household_id: scopeOverride?.householdId || null,
+          extracted_data: data?.extracted_data || {},
+          analysis_summary: data?.analysis_summary || null,
+        }
+      : data,
+    error,
+  };
 }
 
 async function ensureAccessibleVaultedPolicy(policyId, scopeOverride = null) {
@@ -1625,6 +1690,77 @@ export async function getVaultedPolicyBundle(policyId, scopeOverride = null) {
           statements: statementsResult.data,
         },
     error,
+  };
+}
+
+export async function getHouseholdInsuranceSummary(userId, householdId = null) {
+  if (!userId) {
+    return {
+      data: { totalPolicies: 0, totalCoverage: 0, gapDetected: true, confidence: 0 },
+      error: null,
+    };
+  }
+
+  const policiesResult = await listVaultedPolicies({
+    userId,
+    householdId,
+    ownershipMode: "authenticated_owned",
+    source: "household_insurance_summary",
+  });
+
+  if (policiesResult.error) {
+    return { data: null, error: policiesResult.error };
+  }
+
+  const policies = safeArray(policiesResult.data);
+  if (policies.length === 0) {
+    return {
+      data: { totalPolicies: 0, totalCoverage: 0, gapDetected: true, confidence: 0.15 },
+      error: null,
+    };
+  }
+
+  const comparisonResult = await compareVaultedPolicies(
+    policies.map((policy) => policy.id),
+    {
+      userId,
+      householdId,
+      ownershipMode: "authenticated_owned",
+      source: "household_insurance_summary_compare",
+    }
+  );
+
+  if (comparisonResult.error) {
+    return { data: null, error: comparisonResult.error };
+  }
+
+  const policySummaries = safeArray(comparisonResult.data?.policy_summaries);
+  const totalCoverage = policySummaries.reduce((sum, policy) => {
+    const value = parseCurrencyToNumber(policy?.death_benefit);
+    return sum + (value || 0);
+  }, 0);
+  const gapReads = policySummaries.map((policy) =>
+    detectInsuranceGaps(
+      {
+        comparisonSummary: policy,
+        basics: analyzePolicyBasics({ comparisonSummary: policy }),
+      },
+      { totalPolicies: policies.length }
+    )
+  );
+  const confidence =
+    gapReads.length > 0
+      ? gapReads.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / gapReads.length
+      : 0;
+
+  return {
+    data: {
+      totalPolicies: policies.length,
+      totalCoverage,
+      gapDetected: gapReads.some((item) => item.coverageGap),
+      confidence,
+    },
+    error: null,
   };
 }
 
@@ -1810,6 +1946,7 @@ export async function persistVaultedPolicyAnalysis({
       normalizedPolicy,
       carrierProfile,
       productProfile,
+      householdId: scopeOverride?.householdId || null,
       scopeOverride,
     });
 
