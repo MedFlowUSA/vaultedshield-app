@@ -9,7 +9,11 @@ import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementG
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
+import { evaluateInsuranceGaps } from "../lib/domain/insurance/insuranceGapEngine";
 import { getPropertyBundle, listProperties } from "../lib/supabase/propertyData";
+import { listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
+import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
+import { listAutoPolicies } from "../lib/supabase/autoData";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
@@ -35,6 +39,25 @@ function getEquityTone(status) {
   return { background: "#e2e8f0", color: "#334155" };
 }
 
+function getSeverityTone(severity) {
+  if (severity === "high") return { background: "#fee2e2", color: "#991b1b" };
+  if (severity === "medium") return { background: "#ffedd5", color: "#c2410c" };
+  return { background: "#e2e8f0", color: "#334155" };
+}
+
+function getInsuranceStatusTone(status) {
+  if (status === "covered") return { background: "#dcfce7", color: "#166534" };
+  if (status === "partial") return { background: "#fef3c7", color: "#92400e" };
+  if (status === "missing" || status === "gap") return { background: "#fee2e2", color: "#991b1b" };
+  return { background: "#e2e8f0", color: "#334155" };
+}
+
+function formatInsuranceStatus(status) {
+  if (status === "gap") return "Gap";
+  if (!status) return "Unknown";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function getPropertyStatus(propertyBundle = {}) {
   const equity = propertyBundle.propertyEquityPosition || null;
   const visibility = equity?.equity_visibility_status || "limited";
@@ -43,8 +66,9 @@ function getPropertyStatus(propertyBundle = {}) {
   return "limited";
 }
 
-function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, propertyBundles }) {
+function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, propertyBundles, insuranceGaps }) {
   const items = [];
+  const severityWeight = { high: 0, medium: 1, low: 2 };
 
   if (retirementReadiness && retirementReadiness.readinessStatus !== "On Track") {
     items.push({
@@ -52,6 +76,7 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       title: "Retirement readiness needs attention",
       detail: `${retirementReadiness.readinessStatus} at ${retirementReadiness.readinessScore}/100.`,
       actionPath: "/retirement/upload",
+      severity: retirementReadiness.readinessStatus === "Needs Attention" || retirementReadiness.readinessStatus === "Behind" ? "medium" : "low",
     });
   }
 
@@ -64,6 +89,7 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
         title: `${plan.childLabel} college plan needs review`,
         detail: `${plan.readinessStatus} at ${plan.readinessScore}/100 with ${formatCurrency(Math.abs(plan.fundingDifference))} ${plan.fundingDifference >= 0 ? "surplus" : "gap"}.`,
         actionPath: "/college-planning",
+        severity: plan.readinessStatus === "Needs Attention" || plan.readinessStatus === "Behind" ? "medium" : "low",
       });
     });
 
@@ -76,10 +102,50 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
         title: `${bundle.property?.property_name || bundle.property?.property_address || "Property"} has limited equity visibility`,
         detail: `Equity visibility is ${bundle.propertyEquityPosition?.equity_visibility_status || "limited"} and may still need clearer financing or valuation support.`,
         actionPath: bundle.property?.id ? `/property/detail/${bundle.property.id}` : "/property",
+        severity: "low",
       });
     });
 
-  return items.slice(0, 5);
+  const insuranceItems = [
+    {
+      id: "insurance-life",
+      title: "Life coverage needs review",
+      detail: insuranceGaps?.life?.message,
+      actionPath: "/insurance/life/upload",
+      severity: insuranceGaps?.life?.severity || "low",
+      include: insuranceGaps?.life?.status && insuranceGaps.life.status !== "covered",
+    },
+    {
+      id: "insurance-homeowners",
+      title: "Homeowners protection needs review",
+      detail: insuranceGaps?.homeowners?.message,
+      actionPath: "/insurance/homeowners",
+      severity: insuranceGaps?.homeowners?.severity || "low",
+      include: insuranceGaps?.homeowners?.status && insuranceGaps.homeowners.status !== "covered" && insuranceGaps.homeowners.status !== "unknown",
+    },
+    {
+      id: "insurance-umbrella",
+      title: "Umbrella coverage may be missing",
+      detail: insuranceGaps?.umbrella?.message,
+      actionPath: "/insurance",
+      severity: insuranceGaps?.umbrella?.severity || "low",
+      include: insuranceGaps?.umbrella?.status === "gap",
+    },
+    {
+      id: "insurance-auto",
+      title: "Auto coverage visibility is limited",
+      detail: insuranceGaps?.auto?.message,
+      actionPath: "/insurance/auto",
+      severity: insuranceGaps?.auto?.severity || "low",
+      include: insuranceGaps?.auto?.status === "missing",
+    },
+  ]
+    .filter((item) => item.include)
+    .map(({ include, ...item }) => item);
+
+  return [...insuranceItems, ...items]
+    .sort((left, right) => (severityWeight[left.severity] ?? 3) - (severityWeight[right.severity] ?? 3))
+    .slice(0, 5);
 }
 
 export default function HouseholdGoalsDashboardPage({ onNavigate }) {
@@ -88,6 +154,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   const [propertyBundles, setPropertyBundles] = useState([]);
   const [propertyLoading, setPropertyLoading] = useState(true);
   const [propertyError, setPropertyError] = useState("");
+  const [insuranceLoading, setInsuranceLoading] = useState(true);
+  const [insuranceError, setInsuranceError] = useState("");
+  const [lifePolicies, setLifePolicies] = useState([]);
+  const [homeownersPolicies, setHomeownersPolicies] = useState([]);
+  const [autoPolicies, setAutoPolicies] = useState([]);
 
   const storageScope = useMemo(
     () => ({
@@ -130,6 +201,63 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       )
       .sort((left, right) => right.readinessScore - left.readinessScore);
   }, [collegeState]);
+
+  useEffect(() => {
+    if (householdState.loading) return;
+
+    const householdId = householdState.context.householdId || null;
+    const authUserId = debug.authUserId || null;
+    if (!householdId || !authUserId) {
+      setLifePolicies([]);
+      setHomeownersPolicies([]);
+      setAutoPolicies([]);
+      setInsuranceError("");
+      setInsuranceLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    async function loadInsuranceSignals() {
+      setInsuranceLoading(true);
+      const scopeOverride = {
+        authUserId,
+        ownershipMode: householdState.context.ownershipMode || "authenticated_owned",
+        householdId,
+        userId: authUserId,
+        source: "household_goals_dashboard",
+      };
+
+      const [lifeResult, homeownersResult, autoResult] = await Promise.all([
+        listVaultedPolicies(scopeOverride),
+        listHomeownersPolicies(householdId),
+        listAutoPolicies(householdId),
+      ]);
+
+      if (!active) return;
+
+      setLifePolicies(lifeResult.data || []);
+      setHomeownersPolicies(homeownersResult.data || []);
+      setAutoPolicies(autoResult.data || []);
+      setInsuranceError(
+        lifeResult.error?.message ||
+          homeownersResult.error?.message ||
+          autoResult.error?.message ||
+          ""
+      );
+      setInsuranceLoading(false);
+    }
+
+    loadInsuranceSignals();
+    return () => {
+      active = false;
+    };
+  }, [
+    debug.authUserId,
+    householdState.context.householdId,
+    householdState.context.ownershipMode,
+    householdState.loading,
+  ]);
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -204,14 +332,27 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
     };
   }, [propertyBundles]);
 
+  const insuranceGaps = useMemo(
+    () =>
+      evaluateInsuranceGaps({
+        propertyBundles,
+        lifePolicies,
+        homeownersPolicies,
+        autoPolicies,
+        collegePlans,
+      }),
+    [autoPolicies, collegePlans, homeownersPolicies, lifePolicies, propertyBundles]
+  );
+
   const priorityItems = useMemo(
     () =>
       buildHouseholdPriorityItems({
         retirementReadiness,
         collegePlans,
         propertyBundles,
+        insuranceGaps,
       }),
-    [collegePlans, propertyBundles, retirementReadiness]
+    [collegePlans, insuranceGaps, propertyBundles, retirementReadiness]
   );
 
   const summaryItems = useMemo(
@@ -232,12 +373,19 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         helper: `${propertySummary.visibleEquityCount}/${propertySummary.propertyCount} properties with visible equity`,
       },
       {
+        label: "Protection",
+        value: insuranceGaps.summary.protectionFlags.length,
+        helper: insuranceGaps.summary.protectionFlags.length
+          ? `${insuranceGaps.summary.protectionFlags.length} coverage areas need review`
+          : "No obvious protection gaps detected",
+      },
+      {
         label: "Priority Queue",
         value: priorityItems.length,
         helper: priorityItems.length ? "Household goals to review" : "No urgent planning flags yet",
       },
     ],
-    [activeCollegePlan, collegePlans.length, priorityItems.length, propertySummary, retirementReadiness]
+    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, priorityItems.length, propertySummary, retirementReadiness]
   );
 
   const householdNarrative = useMemo(() => {
@@ -265,9 +413,19 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       lines.push("No property records are currently linked into the household goals view.");
     }
 
-    lines.push("Insurance gap rollups are the next planning layer and are not fully connected into this dashboard yet.");
+    if (insuranceGaps.summary.protectionFlags.length === 0) {
+      lines.push("No obvious insurance protection gaps were detected from the policies currently visible here.");
+    } else {
+      const protectionMessages = [];
+      if (insuranceGaps.life.status !== "covered") protectionMessages.push("life coverage needs review");
+      if (insuranceGaps.homeowners.status === "missing" || insuranceGaps.homeowners.status === "partial") protectionMessages.push("homeowners linkage is incomplete");
+      if (insuranceGaps.umbrella.status === "gap") protectionMessages.push("umbrella coverage is not visible");
+      if (protectionMessages.length > 0) {
+        lines.push(`Protection gaps should be reviewed because ${protectionMessages.join(", ")}.`);
+      }
+    }
     return lines.join(" ");
-  }, [activeCollegePlan, propertySummary, retirementReadiness]);
+  }, [activeCollegePlan, insuranceGaps, propertySummary, retirementReadiness]);
 
   const cardGrid = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
 
@@ -326,8 +484,90 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
           propertySummary.propertyCount > 0
             ? `Visible property equity midpoint: ${propertySummary.totalEquityMidpoint !== null ? formatCurrency(propertySummary.totalEquityMidpoint) : "Limited"}.`
             : "Property equity is not in view yet.",
+          insuranceGaps.summary.protectionFlags.length > 0
+            ? `Protection review flags: ${insuranceGaps.summary.protectionFlags.join(", ")}.`
+            : "No obvious insurance protection gaps were detected from the current household data.",
         ]}
       />
+
+      <SectionCard title="Protection & Insurance" subtitle="A simple household protection health check based on visible policy and property data.">
+        {insuranceLoading ? (
+          <div style={{ color: "#64748b" }}>Loading insurance visibility...</div>
+        ) : insuranceError ? (
+          <EmptyState title="Insurance visibility is limited" description={insuranceError} />
+        ) : (
+          <div style={{ display: "grid", gap: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
+              {[
+                { label: "Life", gap: insuranceGaps.life },
+                { label: "Homeowners", gap: insuranceGaps.homeowners },
+                { label: "Auto", gap: insuranceGaps.auto },
+                { label: "Umbrella", gap: insuranceGaps.umbrella },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    padding: "16px",
+                    borderRadius: "14px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        background: getInsuranceStatusTone(item.gap.status).background,
+                        color: getInsuranceStatusTone(item.gap.status).color,
+                        fontWeight: 800,
+                        fontSize: "12px",
+                      }}
+                    >
+                      {formatInsuranceStatus(item.gap.status)}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      width: "fit-content",
+                      padding: "5px 9px",
+                      borderRadius: "999px",
+                      background: getSeverityTone(item.gap.severity).background,
+                      color: getSeverityTone(item.gap.severity).color,
+                      fontWeight: 700,
+                      fontSize: "12px",
+                    }}
+                  >
+                    {item.gap.severity === "high" ? "High priority" : item.gap.severity === "medium" ? "Review soon" : "Lower priority"}
+                  </div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.gap.message}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ color: "#64748b", lineHeight: "1.7" }}>{insuranceGaps.note}</div>
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/insurance")}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Review Coverage
+              </button>
+            </div>
+          </div>
+        )}
+      </SectionCard>
 
       <div style={{ display: "grid", gridTemplateColumns: cardGrid, gap: "18px" }}>
         <SectionCard title="Retirement Readiness" subtitle="Saved retirement goal status for this household.">
@@ -472,22 +712,36 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                     gap: "6px",
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
+                    <div
+                      style={{
+                        padding: "5px 9px",
+                        borderRadius: "999px",
+                        background: getSeverityTone(item.severity).background,
+                        color: getSeverityTone(item.severity).color,
+                        fontWeight: 700,
+                        fontSize: "12px",
+                      }}
+                    >
+                      {item.severity === "high" ? "High" : item.severity === "medium" ? "Medium" : "Low"}
+                    </div>
+                  </div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.detail}</div>
                 </button>
               ))}
             </div>
           ) : (
-            <EmptyState title="No immediate planning flags" description="The current retirement, college, and property signals do not show an obvious needs-attention queue yet." />
+            <EmptyState title="No immediate planning flags" description="The current retirement, college, property, and visible insurance signals do not show an obvious needs-attention queue yet." />
           )}
         </SectionCard>
 
         <SectionCard title="Next Layer" subtitle="The next connected planning surfaces that will make this household dashboard stronger.">
           <AIInsightPanel
             title="Coming next"
-            summary="This first household dashboard ties together retirement, college planning, and property equity. Insurance gap rollups are the next major household planning layer."
+            summary="This first household dashboard now ties together retirement, college planning, property equity, and a simple protection check. Later versions can deepen policy adequacy and household continuity planning."
             bullets={[
-              "Insurance gap rollups will connect protection shortfalls into the same household planning queue.",
+              "Future insurance layers can move from policy presence checks into adequacy, liability limit, and beneficiary review.",
               "Later versions can add a single household readiness narrative that blends goals, protection, and asset continuity.",
               "Persistence is already in place for retirement and college, so this dashboard can grow into an ongoing family planning surface.",
             ]}
