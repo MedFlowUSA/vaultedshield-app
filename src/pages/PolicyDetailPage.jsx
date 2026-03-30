@@ -22,6 +22,10 @@ import {
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { buildPolicyOptimizationEngine } from "../lib/insurance/policyOptimizationEngine";
+import {
+  analyzePolicyBasics,
+  detectInsuranceGaps,
+} from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getVaultedPolicyAnalytics,
@@ -90,6 +94,13 @@ function getInterpretationTone(status) {
   if (status === "performing_well") return "good";
   if (status === "mixed_needs_review") return "warning";
   if (status === "underperforming") return "alert";
+  return "info";
+}
+
+function getProtectionTone(hasGap, confidence = 0) {
+  if (hasGap) return "alert";
+  if (confidence >= 0.75) return "good";
+  if (confidence >= 0.5) return "warning";
   return "info";
 }
 
@@ -636,6 +647,29 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       }),
     [comparisonSummary, normalizedAnalytics, normalizedPolicy, statementTimeline]
   );
+  const basicPolicyAnalysis = useMemo(
+    () =>
+      analyzePolicyBasics({
+        normalizedPolicy,
+        normalizedAnalytics,
+        comparisonSummary,
+        statements: statementTimeline,
+      }),
+    [comparisonSummary, normalizedAnalytics, normalizedPolicy, statementTimeline]
+  );
+  const gapAnalysis = useMemo(
+    () =>
+      detectInsuranceGaps(
+        {
+          normalizedPolicy,
+          comparisonSummary,
+          statements: statementTimeline,
+          basics: basicPolicyAnalysis,
+        },
+        { totalPolicies: insuranceRows.length }
+      ),
+    [basicPolicyAnalysis, comparisonSummary, insuranceRows.length, normalizedPolicy, statementTimeline]
+  );
   const policyAiSummary = useMemo(
     () =>
       buildPolicyInsightSummary({
@@ -698,11 +732,15 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
         statementTimeline,
         normalizedPolicy,
         normalizedAnalytics,
+        basicPolicyAnalysis,
+        gapAnalysis,
       }),
     [
+      basicPolicyAnalysis,
       bundle.policy,
       chargeSummary,
       comparisonRow,
+      gapAnalysis,
       groupedIssues,
       normalizedAnalytics,
       normalizedPolicy,
@@ -825,6 +863,10 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   label={`COI ${formatDisplayValue(comparisonRow?.coi_confidence)}`}
                   tone={getVisibilityTone(comparisonRow?.coi_confidence)}
                 />
+                <StatusBadge
+                  label={gapAnalysis?.coverageGap ? "Gap Review Needed" : "Protection Check"}
+                  tone={getProtectionTone(gapAnalysis?.coverageGap, gapAnalysis?.confidence)}
+                />
               </div>
             </div>
 
@@ -862,6 +904,91 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
               ))}
             </div>
           </section>
+
+          <SectionCard
+            title="Protection Confidence"
+            subtitle="A high-level protection check built from visible death-benefit support, funding pattern, COI trend, and the current extracted evidence."
+          >
+            <div style={{ display: "grid", gap: "16px" }}>
+              <div
+                style={{
+                  padding: "18px 20px",
+                  borderRadius: "18px",
+                  background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                  border: "1px solid rgba(147, 197, 253, 0.28)",
+                  color: "#0f172a",
+                  fontSize: "16px",
+                  lineHeight: "1.8",
+                  fontWeight: 600,
+                }}
+              >
+                {gapAnalysis?.coverageGap
+                  ? "This policy shows visible protection pressure or incomplete support in the current read, so coverage should be reviewed before it is treated as complete."
+                  : "No obvious protection gap is visible from the current extracted read, but confidence still depends on document depth and missing fields."}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Coverage Confidence
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>
+                    {formatConfidencePercent(gapAnalysis?.confidence) || "\u2014"}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Funding Pattern
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {formatDisplayValue(basicPolicyAnalysis?.fundingPattern)}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    COI Trend
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {formatDisplayValue(basicPolicyAnalysis?.coiTrend)}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Visible Gap Status
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap"}
+                  </div>
+                </div>
+              </div>
+
+              {basicPolicyAnalysis?.flags?.length > 0 ? (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Visibility Flags</div>
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                    {basicPolicyAnalysis.flags.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>Protection Notes</div>
+                {gapAnalysis?.notes?.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                    {gapAnalysis.notes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div style={{ color: "#475569" }}>
+                    No additional protection notes are visible from the current extracted evidence.
+                  </div>
+                )}
+              </div>
+            </div>
+          </SectionCard>
 
           {showUnifiedIulReader && iulReader ? (
             <IulReaderPanel reader={iulReader} results={readerResults} />

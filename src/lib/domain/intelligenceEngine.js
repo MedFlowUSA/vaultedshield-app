@@ -1964,6 +1964,8 @@ export function buildPolicyReviewReport(policyBundle = {}) {
   const trendSummary = policyBundle?.trendSummary || buildPolicyTrendSummary(policyBundle?.statementTimeline || []);
   const chargeSummary = policyBundle?.chargeSummary || {};
   const missingGroups = buildPolicyReviewMissingGroups(comparisonRow, policyBundle?.groupedIssues || []);
+  const basicPolicyAnalysis = policyBundle?.basicPolicyAnalysis || {};
+  const gapAnalysis = policyBundle?.gapAnalysis || {};
   const snapshotTitle =
     comparisonRow?.product ||
     policy?.product_name ||
@@ -2014,6 +2016,20 @@ export function buildPolicyReviewReport(policyBundle = {}) {
           interpretation?.strategy_summary,
           interpretation?.confidence_summary,
         ].filter(Boolean),
+      },
+      {
+        id: "protection_confidence",
+        title: "Protection Confidence",
+        kind: "summary",
+        summary: gapAnalysis?.coverageGap
+          ? "Visible protection pressure or incomplete support is present in the current read, so coverage should be reviewed before it is treated as complete."
+          : "No obvious protection gap is visible from the current extracted read, but confidence still depends on document depth and missing fields.",
+        items: [
+          { label: "Coverage Confidence", value: gapAnalysis?.confidence !== null && gapAnalysis?.confidence !== undefined ? `${Math.round(Number(gapAnalysis.confidence) * 100)}%` : "\u2014" },
+          { label: "Funding Pattern", value: displayReportValue(basicPolicyAnalysis?.fundingPattern) },
+          { label: "COI Trend", value: displayReportValue(basicPolicyAnalysis?.coiTrend) },
+          { label: "Gap Status", value: gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap" },
+        ],
       },
       {
         id: "cost_of_insurance",
@@ -2072,7 +2088,15 @@ export function buildPolicyReviewReport(policyBundle = {}) {
         id: "missing_weak_data",
         title: "Missing / Weak Data",
         kind: "groups",
-        groups: missingGroups,
+        groups: [
+          ...missingGroups,
+          ...(Array.isArray(gapAnalysis?.notes) && gapAnalysis.notes.length > 0
+            ? [{ title: "Protection notes", items: gapAnalysis.notes }]
+            : []),
+          ...(Array.isArray(basicPolicyAnalysis?.flags) && basicPolicyAnalysis.flags.length > 0
+            ? [{ title: "Visibility flags", items: basicPolicyAnalysis.flags }]
+            : []),
+        ],
         empty_message: "No critical missing data detected",
       },
       {

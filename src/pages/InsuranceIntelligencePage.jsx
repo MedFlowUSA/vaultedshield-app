@@ -5,7 +5,10 @@ import {
   buildPolicyListInterpretation,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import { useEffect } from "react";
+import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_VALUE = "-";
@@ -62,6 +65,12 @@ function getStatusTone(status) {
   if (status === "Moderate") return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
   if (status === "Weak") return { color: "#9f1239", background: "rgba(244, 63, 94, 0.12)" };
   return { color: "#991b1b", background: "rgba(239, 68, 68, 0.14)" };
+}
+
+function getGapTone(hasGap, confidence = 0) {
+  if (hasGap) return { color: "#991b1b", background: "rgba(239, 68, 68, 0.14)" };
+  if (confidence >= 0.75) return { color: "#166534", background: "rgba(34, 197, 94, 0.12)" };
+  return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
 }
 
 function buildChargeSummaryPreview(row) {
@@ -245,18 +254,53 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const comparisonRef = useRef(null);
   const [expandedPolicyId, setExpandedPolicyId] = useState(null);
   const [showPortfolioReport, setShowPortfolioReport] = useState(false);
-  const { insuranceRows: rows, loadingStates, errors } = usePlatformShellData();
+  const { insuranceRows: rows, loadingStates, errors, debug } = usePlatformShellData();
   const loadError = errors.insurancePortfolio;
+  const [householdInsuranceSummary, setHouseholdInsuranceSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const rankedPolicies = useMemo(() => {
     return [...rows]
-      .map((row) => ({
-        ...row,
-        ranking: buildVaultedPolicyRank(row),
-        interpretation: buildPolicyListInterpretation(row),
-      }))
+      .map((row) => {
+        const basicAnalysis = analyzePolicyBasics({ comparisonSummary: row });
+        return {
+          ...row,
+          ranking: buildVaultedPolicyRank(row),
+          interpretation: buildPolicyListInterpretation(row),
+          basicAnalysis,
+          gapAnalysis: detectInsuranceGaps(
+            {
+              comparisonSummary: row,
+              basics: basicAnalysis,
+            },
+            { totalPolicies: rows.length }
+          ),
+        };
+      })
       .sort((left, right) => right.ranking.score - left.ranking.score);
   }, [rows]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadHouseholdSummary() {
+      if (!debug.authUserId) {
+        setHouseholdInsuranceSummary(null);
+        return;
+      }
+
+      setSummaryLoading(true);
+      const result = await getHouseholdInsuranceSummary(debug.authUserId, debug.householdId || null);
+      if (!active) return;
+      setHouseholdInsuranceSummary(result.data || null);
+      setSummaryLoading(false);
+    }
+
+    loadHouseholdSummary();
+    return () => {
+      active = false;
+    };
+  }, [debug.authUserId, debug.householdId]);
 
   const portfolioBrief = useMemo(() => buildInsurancePortfolioBrief(rankedPolicies), [rankedPolicies]);
   const portfolioReport = useMemo(() => buildInsurancePortfolioReport(rankedPolicies), [rankedPolicies]);
@@ -294,6 +338,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
   const atRiskPolicies = rankedPolicies.filter((row) => row.ranking.status === "At Risk");
   const strongContinuityPolicies = rankedPolicies.filter((row) => row.ranking.status === "Strong");
+  const gapPolicies = rankedPolicies.filter((row) => row.gapAnalysis?.coverageGap);
+  const confidentPolicies = rankedPolicies.filter((row) => (row.gapAnalysis?.confidence || 0) >= 0.75);
 
   const systemInsight = useMemo(() => {
     if (rankedPolicies.length === 0) {
@@ -481,6 +527,56 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     totalCoi,
     weakestConfidencePolicy,
   ]);
+
+  const protectionSummary = useMemo(() => {
+    const summary = householdInsuranceSummary || {
+      totalPolicies: rankedPolicies.length,
+      totalCoverage,
+      gapDetected: gapPolicies.length > 0,
+      confidence:
+        rankedPolicies.length === 0 ? 0 : rankedPolicies.reduce((sum, row) => sum + (row.gapAnalysis?.confidence || 0), 0) / rankedPolicies.length,
+    };
+
+    const lowConfidencePolicies = rankedPolicies.filter((row) => (row.gapAnalysis?.confidence || 0) < 0.5);
+    const missingDeathBenefitPolicies = rankedPolicies.filter((row) => !row.basicAnalysis?.hasDeathBenefit);
+    const missingCashValuePolicies = rankedPolicies.filter((row) => !row.basicAnalysis?.hasCashValue);
+
+    const bullets = [];
+    if (summary.totalPolicies === 0) {
+      bullets.push("No saved policies are currently visible, so protection coverage cannot be confirmed yet.");
+    }
+    if (gapPolicies.length > 0) {
+      bullets.push(`${pluralize(gapPolicies.length, "policy")} currently show a visible protection or coverage gap based on the saved read.`);
+    }
+    if (missingDeathBenefitPolicies.length > 0) {
+      bullets.push(`${pluralize(missingDeathBenefitPolicies.length, "policy")} still do not show a clear visible death benefit in the current extracted read.`);
+    }
+    if (missingCashValuePolicies.length > 0) {
+      bullets.push(`${pluralize(missingCashValuePolicies.length, "policy")} still lack clear cash-value visibility, which lowers confidence in long-term policy interpretation.`);
+    }
+    if (lowConfidencePolicies.length > 0) {
+      bullets.push(`${pluralize(lowConfidencePolicies.length, "policy")} still read with low confidence and should be refreshed with cleaner statements or better scans.`);
+    }
+    if (confidentPolicies.length > 0) {
+      bullets.push(`${pluralize(confidentPolicies.length, "policy")} currently have stronger protection-read confidence based on the available policy evidence.`);
+    }
+
+    const narrative =
+      summary.totalPolicies === 0
+        ? "No saved policies are visible yet, so VaultedShield cannot confirm household protection coverage."
+        : summary.gapDetected
+          ? `The household shows visible protection gaps across ${pluralize(gapPolicies.length, "policy")}, and the current insurance read should be reviewed before treating coverage as complete.`
+          : "No obvious household-level protection gap is visible from the currently saved policies, but coverage confidence still depends on document depth and statement quality.";
+
+    return {
+      totalPolicies: summary.totalPolicies || 0,
+      totalCoverage: summary.totalCoverage || 0,
+      confidence: summary.confidence || 0,
+      gapDetected: Boolean(summary.gapDetected),
+      narrative,
+      bullets: bullets.slice(0, 5),
+    };
+  }, [confidentPolicies.length, gapPolicies.length, householdInsuranceSummary, rankedPolicies, totalCoverage]);
 
   const rankingHighlights = useMemo(() => {
     return rankedPolicies.map((policy) => {
@@ -728,6 +824,119 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             Policies With Issues
           </div>
           <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 800 }}>{policiesWithIssues}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+            Coverage Confidence
+          </div>
+          <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 800 }}>
+            {summaryLoading ? "..." : `${Math.round((protectionSummary.confidence || 0) * 100)}%`}
+          </div>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: sectionPadding,
+          borderRadius: sectionRadius,
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Protection Signals</div>
+          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "980px" }}>
+            This layer checks whether the saved portfolio is actually giving the household enough protection visibility. It does not assume coverage is complete just because policies exist.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+            gap: "14px",
+          }}
+        >
+          <div
+            style={{
+              padding: "18px 18px 20px",
+              borderRadius: "18px",
+              background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(147, 197, 253, 0.28)",
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Household Coverage Read
+            </div>
+            <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{protectionSummary.narrative}</div>
+            <div style={{ color: "#475569", fontSize: "13px", lineHeight: "1.7" }}>
+              {summaryLoading
+                ? "Refreshing household insurance summary..."
+                : `${protectionSummary.totalPolicies} visible polic${protectionSummary.totalPolicies === 1 ? "y" : "ies"} | ${protectionSummary.totalCoverage > 0 ? formatCurrency(protectionSummary.totalCoverage) : "Coverage still unresolved"} total visible death benefit`}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "18px 18px 20px",
+              borderRadius: "18px",
+              background: "#f8fafc",
+              border: "1px solid rgba(148, 163, 184, 0.18)",
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Gap Watch
+            </div>
+            <div
+              style={{
+                justifySelf: "start",
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: getGapTone(protectionSummary.gapDetected, protectionSummary.confidence).background,
+                color: getGapTone(protectionSummary.gapDetected, protectionSummary.confidence).color,
+                fontWeight: 700,
+                fontSize: "12px",
+              }}
+            >
+              {protectionSummary.gapDetected ? "Gap Review Needed" : "No Obvious Gap"}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>
+              {gapPolicies.length > 0
+                ? `${pluralize(gapPolicies.length, "policy")} currently show visible gap pressure or incomplete protection support.`
+                : "The saved portfolio does not currently show a clear household-level protection gap."}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "18px 18px 20px",
+              borderRadius: "18px",
+              background: "#f8fafc",
+              border: "1px solid rgba(148, 163, 184, 0.18)",
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Confidence Notes
+            </div>
+            <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>
+              {summaryLoading ? "Refreshing..." : `${Math.round((protectionSummary.confidence || 0) * 100)}% portfolio coverage confidence`}
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+              {protectionSummary.bullets.map((item) => (
+                <li key={item} style={{ lineHeight: "1.7" }}>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -983,6 +1192,18 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                       >
                         {policy.interpretation.label}
                       </div>
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "999px",
+                          background: getGapTone(policy.gapAnalysis?.coverageGap, policy.gapAnalysis?.confidence).background,
+                          color: getGapTone(policy.gapAnalysis?.coverageGap, policy.gapAnalysis?.confidence).color,
+                          fontWeight: 700,
+                          fontSize: "12px",
+                        }}
+                      >
+                        {policy.gapAnalysis?.coverageGap ? "Coverage Gap" : "Coverage Check"}
+                      </div>
                       <div style={{ fontSize: "12px", color: "#475569", minWidth: "72px", textAlign: "right" }}>
                         {policy.ranking.score}/100
                       </div>
@@ -1017,13 +1238,47 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         <div style={{ display: "grid", gridTemplateColumns: DETAIL_GRID_COLUMNS, gap: "12px", fontSize: "13px" }}>
                           <div><strong>Missing Fields:</strong> {(policy.missing_fields || []).join(", ") || EMPTY_VALUE}</div>
                           <div><strong>COI Source:</strong> {displayNullable(policy.coi_source_kind)}</div>
-                          <div><strong>COI Confidence:</strong> {displayNullable(policy.coi_confidence)}</div>
-                          <div><strong>Charge Visibility:</strong> {displayNullable(policy.charge_visibility_status)}</div>
+                         <div><strong>COI Confidence:</strong> {displayNullable(policy.coi_confidence)}</div>
+                         <div><strong>Charge Visibility:</strong> {displayNullable(policy.charge_visibility_status)}</div>
                         <div><strong>Latest Statement:</strong> {displayNullable(formatDateValue(policy.latest_statement_date))}</div>
                         <div><strong>Data Completeness:</strong> {displayNullable(policy.data_completeness_status)}</div>
                           <div><strong>Policy Health:</strong> {displayNullable(policy.policy_health_status)}</div>
                           <div><strong>Continuity Score:</strong> {policy.ranking.score}</div>
+                          <div><strong>Funding Pattern:</strong> {displayNullable(policy.basicAnalysis?.fundingPattern)}</div>
+                          <div><strong>COI Trend:</strong> {displayNullable(policy.basicAnalysis?.coiTrend)}</div>
+                          <div><strong>Coverage Confidence:</strong> {`${Math.round((policy.gapAnalysis?.confidence || 0) * 100)}%`}</div>
+                          <div><strong>Coverage Gap:</strong> {policy.gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap"}</div>
                         </div>
+                      <div
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "14px",
+                          background: "#ffffff",
+                          border: "1px solid rgba(148, 163, 184, 0.18)",
+                          display: "grid",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>Coverage And Protection Notes</div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          {policy.gapAnalysis?.coverageGap
+                            ? "This policy shows at least one visible protection gap or incomplete coverage signal based on the current extracted read."
+                            : "This policy does not show an obvious gap from the current extracted read, but coverage confidence still depends on document quality and missing fields."}
+                        </div>
+                        {policy.gapAnalysis?.notes?.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                            {policy.gapAnalysis.notes.map((item) => (
+                              <li key={item} style={{ lineHeight: "1.6" }}>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div style={{ color: "#475569" }}>
+                            No additional gap notes are visible from the current extracted evidence.
+                          </div>
+                        )}
+                      </div>
                       <div
                         style={{
                           padding: "14px 16px",

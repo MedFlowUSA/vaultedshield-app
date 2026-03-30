@@ -15,6 +15,10 @@ import {
   buildPolicyListInterpretation,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import {
+  analyzePolicyBasics,
+  detectInsuranceGaps,
+} from "../lib/domain/insurance/insuranceIntelligence";
 
 function formatCurrency(value) {
   const numeric = Number(value);
@@ -46,6 +50,13 @@ function getTone(label) {
   if (label === "Well Supported") return "good";
   if (label === "Stable but Needs Monitoring") return "warning";
   if (label === "At Risk") return "alert";
+  return "info";
+}
+
+function getProtectionTone(hasGap, confidence = 0) {
+  if (hasGap) return "alert";
+  if (confidence >= 0.75) return "good";
+  if (confidence >= 0.5) return "warning";
   return "info";
 }
 
@@ -568,11 +579,22 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
   const rankedPolicies = useMemo(
     () =>
       [...insuranceRows]
-        .map((row) => ({
-          ...row,
-          ranking: buildVaultedPolicyRank(row),
-          interpretation: buildPolicyListInterpretation(row),
-        }))
+        .map((row) => {
+          const basicAnalysis = analyzePolicyBasics({ comparisonSummary: row });
+          return {
+            ...row,
+            ranking: buildVaultedPolicyRank(row),
+            interpretation: buildPolicyListInterpretation(row),
+            basicAnalysis,
+            gapAnalysis: detectInsuranceGaps(
+              {
+                comparisonSummary: row,
+                basics: basicAnalysis,
+              },
+              { totalPolicies: insuranceRows.length }
+            ),
+          };
+        })
         .sort((left, right) => right.ranking.score - left.ranking.score),
     [insuranceRows]
   );
@@ -655,6 +677,82 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
       trendDeltaAnalysis,
     ]
   );
+
+  const protectionComparison = useMemo(() => {
+    if (!basePolicy || !comparisonPolicy) return null;
+
+    const baseConfidence = basePolicy.gapAnalysis?.confidence || 0;
+    const compareConfidence = comparisonPolicy.gapAnalysis?.confidence || 0;
+    const strongerPolicy =
+      compareConfidence > baseConfidence
+        ? "comparison"
+        : compareConfidence < baseConfidence
+          ? "current"
+          : "even";
+
+    const summary =
+      comparisonPolicy.gapAnalysis?.coverageGap && !basePolicy.gapAnalysis?.coverageGap
+        ? `${comparisonPolicy.product || "The comparison policy"} still shows a visible protection gap even though it is the stronger continuity read.`
+        : !comparisonPolicy.gapAnalysis?.coverageGap && basePolicy.gapAnalysis?.coverageGap
+          ? `${comparisonPolicy.product || "The comparison policy"} currently shows a cleaner protection read than ${basePolicy.product || "the current policy"}.`
+          : strongerPolicy === "comparison"
+            ? `${comparisonPolicy.product || "The comparison policy"} currently carries stronger protection confidence from the visible evidence.`
+            : strongerPolicy === "current"
+              ? `${basePolicy.product || "The current policy"} currently carries stronger protection confidence from the visible evidence.`
+              : "Both policies currently show a similar protection-confidence profile from the available evidence.";
+
+    return {
+      summary,
+      strongerPolicy,
+      baseConfidence,
+      compareConfidence,
+      items: [
+        {
+          label: "Coverage Confidence",
+          baseValue: `${Math.round(baseConfidence * 100)}%`,
+          comparisonValue: `${Math.round(compareConfidence * 100)}%`,
+          strongerPolicy,
+        },
+        {
+          label: "Funding Pattern",
+          baseValue: displayNullable(basePolicy.basicAnalysis?.fundingPattern),
+          comparisonValue: displayNullable(comparisonPolicy.basicAnalysis?.fundingPattern),
+          strongerPolicy:
+            comparisonPolicy.basicAnalysis?.fundingPattern === "adequate" || comparisonPolicy.basicAnalysis?.fundingPattern === "overfunded"
+              ? basePolicy.basicAnalysis?.fundingPattern === "adequate" || basePolicy.basicAnalysis?.fundingPattern === "overfunded"
+                ? "even"
+                : "comparison"
+              : basePolicy.basicAnalysis?.fundingPattern === "adequate" || basePolicy.basicAnalysis?.fundingPattern === "overfunded"
+                ? "current"
+                : "even",
+        },
+        {
+          label: "COI Trend",
+          baseValue: displayNullable(basePolicy.basicAnalysis?.coiTrend),
+          comparisonValue: displayNullable(comparisonPolicy.basicAnalysis?.coiTrend),
+          strongerPolicy:
+            comparisonPolicy.basicAnalysis?.coiTrend === "stable"
+              ? basePolicy.basicAnalysis?.coiTrend === "stable"
+                ? "even"
+                : "comparison"
+              : basePolicy.basicAnalysis?.coiTrend === "stable"
+                ? "current"
+                : "even",
+        },
+        {
+          label: "Gap Pressure",
+          baseValue: basePolicy.gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap",
+          comparisonValue: comparisonPolicy.gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap",
+          strongerPolicy:
+            !comparisonPolicy.gapAnalysis?.coverageGap && basePolicy.gapAnalysis?.coverageGap
+              ? "comparison"
+              : comparisonPolicy.gapAnalysis?.coverageGap && !basePolicy.gapAnalysis?.coverageGap
+                ? "current"
+                : "even",
+        },
+      ],
+    };
+  }, [basePolicy, comparisonPolicy]);
 
   useEffect(() => {
     setStatementBundles({});
@@ -796,6 +894,121 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
               ) : null}
             </div>
           </SectionCard>
+
+          {protectionComparison ? (
+            <SectionCard
+              title="Protection Confidence"
+              subtitle="This layer compares coverage-read confidence, funding visibility, and visible gap pressure so the stronger continuity file is not mistaken for complete protection."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(255,255,255,1) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    color: "#0f172a",
+                    fontSize: "16px",
+                    lineHeight: "1.8",
+                    fontWeight: 600,
+                  }}
+                >
+                  {protectionComparison.summary}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                  {[basePolicy, comparisonPolicy].map((policy, index) => (
+                    <div
+                      key={policy.policy_id || index}
+                      style={{
+                        padding: "16px",
+                        borderRadius: "16px",
+                        background: "#f8fafc",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                        display: "grid",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{policy.product || "Unnamed policy"}</div>
+                        <StatusBadge
+                          label={policy.gapAnalysis?.coverageGap ? "Gap Review Needed" : "Protection Check"}
+                          tone={getProtectionTone(policy.gapAnalysis?.coverageGap, policy.gapAnalysis?.confidence)}
+                        />
+                      </div>
+                      <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                        {policy.gapAnalysis?.coverageGap
+                          ? "Visible protection gaps or incomplete support are present in the current read."
+                          : "No obvious protection gap is visible from the current extracted evidence."}
+                      </div>
+                      <div style={{ display: "grid", gap: "8px", color: "#0f172a", fontSize: "14px" }}>
+                        <div><strong>Coverage confidence:</strong> {Math.round((policy.gapAnalysis?.confidence || 0) * 100)}%</div>
+                        <div><strong>Funding pattern:</strong> {displayNullable(policy.basicAnalysis?.fundingPattern)}</div>
+                        <div><strong>COI trend:</strong> {displayNullable(policy.basicAnalysis?.coiTrend)}</div>
+                      </div>
+                      {policy.gapAnalysis?.notes?.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                          {policy.gapAnalysis.notes.map((item) => (
+                            <li key={`${policy.policy_id}-${item}`}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                  {protectionComparison.items.map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        padding: "16px",
+                        borderRadius: "16px",
+                        background: "#ffffff",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                        display: "grid",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.label}</div>
+                        <StatusBadge
+                          label={
+                            item.strongerPolicy === "comparison"
+                              ? "Comparison Stronger"
+                              : item.strongerPolicy === "current"
+                                ? "Current Stronger"
+                                : "Even"
+                          }
+                          tone={
+                            item.strongerPolicy === "comparison"
+                              ? "good"
+                              : item.strongerPolicy === "current"
+                                ? "warning"
+                                : "info"
+                          }
+                        />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                        <div>
+                          <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Current Policy
+                          </div>
+                          <div style={{ marginTop: "4px", color: "#0f172a" }}>{item.baseValue}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Comparison Policy
+                          </div>
+                          <div style={{ marginTop: "4px", color: "#0f172a" }}>{item.comparisonValue}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
+          ) : null}
 
           {comparisonAnalysis ? (
             <SectionCard
