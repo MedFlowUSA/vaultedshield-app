@@ -6,6 +6,7 @@ import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import {
+  buildMortgageReviewSignals,
   getMortgageDocumentClass,
   getMortgageLender,
   getMortgageLoanType,
@@ -170,6 +171,15 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const linkageStatus = getMortgageLinkageStatus({
     linkedProperties: propertyLinks,
   });
+  const mortgageReview = useMemo(
+    () =>
+      buildMortgageReviewSignals({
+        mortgageLoan,
+        documents: bundle?.mortgageDocuments || [],
+        propertyLinks,
+      }),
+    [bundle?.mortgageDocuments, mortgageLoan, propertyLinks]
+  );
 
   const summaryItems = useMemo(() => {
     if (!mortgageLoan) return [];
@@ -178,8 +188,9 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       { label: "Documents", value: bundle?.mortgageDocuments?.length || 0, helper: "Mortgage-specific document records" },
       { label: "Snapshots", value: bundle?.mortgageSnapshots?.length || 0, helper: "Normalized mortgage records" },
       { label: "Analytics", value: bundle?.mortgageAnalytics?.length || 0, helper: "Future mortgage review outputs" },
+      { label: "Review Status", value: mortgageReview.readinessStatus || "unknown", helper: mortgageReview.metrics?.documentSupport || "limited support" },
     ];
-  }, [bundle, mortgageLoan, mortgageLoanType]);
+  }, [bundle, mortgageLoan, mortgageLoanType, mortgageReview]);
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -377,6 +388,81 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
               ) : (
                 <EmptyState title="No linked asset summary" description="This mortgage loan does not currently show a linked generic asset record." />
               )}
+            </SectionCard>
+          </div>
+
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+            <SectionCard
+              title="Mortgage Review Signals"
+              subtitle="A practical first-pass debt review based on loan timing, document support, payoff readiness, and property linkage."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                    border: "1px solid rgba(147, 197, 253, 0.28)",
+                    color: "#0f172a",
+                    fontSize: "16px",
+                    lineHeight: "1.8",
+                    fontWeight: 600,
+                  }}
+                >
+                  {mortgageReview.headline}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Review Status</div>
+                    <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{mortgageReview.readinessStatus}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Confidence</div>
+                    <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{Math.round((mortgageReview.confidence || 0) * 100)}%</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Refinance Review</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.refinanceStatus || "limited"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Payoff Readiness</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.payoffStatus || "limited"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Years Since Origination</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.yearsSinceOrigination ?? "Limited visibility"}</div>
+                  </div>
+                  <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Years To Maturity</div>
+                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{mortgageReview.metrics?.yearsToMaturity ?? "Limited visibility"}</div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Notes</div>
+                  {mortgageReview.notes?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                      {mortgageReview.notes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div style={{ color: "#475569" }}>No additional mortgage review notes are visible yet.</div>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Debt Review Snapshot">
+              <AIInsightPanel
+                title="Current Mortgage Read"
+                summary={mortgageReview.headline}
+                bullets={[
+                  `Document support: ${mortgageReview.metrics?.documentSupport || "limited"}`,
+                  `Property links visible: ${mortgageReview.metrics?.propertyLinkCount || 0}`,
+                  `Refinance review: ${mortgageReview.metrics?.refinanceStatus || "limited"}`,
+                  `Payoff readiness: ${mortgageReview.metrics?.payoffStatus || "limited"}`,
+                ]}
+              />
             </SectionCard>
           </div>
 

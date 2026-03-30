@@ -30,6 +30,10 @@ import {
   MORTGAGE_SCHEMA_TEMPLATE,
   MORTGAGE_SCHEMA_VERSION,
 } from "./mortgageSchema";
+import {
+  buildMortgageReviewSignals,
+  summarizeMortgageHousehold,
+} from "./mortgageIntelligence";
 
 export function getMortgageFoundation() {
   return {
@@ -73,4 +77,6 @@ export {
   getMortgageLoanType,
   getMortgageLender,
   getMortgageDocumentClass,
+  buildMortgageReviewSignals,
+  summarizeMortgageHousehold,
 };

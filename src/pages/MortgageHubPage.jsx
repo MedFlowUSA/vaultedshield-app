@@ -6,9 +6,11 @@ import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import {
+  buildMortgageReviewSignals,
   getMortgageLoanType,
   listMortgageLenders,
   listMortgageLoanTypes,
+  summarizeMortgageHousehold,
 } from "../lib/domain/mortgage";
 import {
   createMortgageLoanWithDependencies,
@@ -82,6 +84,7 @@ export default function MortgageHubPage({ onNavigate }) {
     const activeCount = mortgageLoans.filter((loan) =>
       ["active", "current"].includes(loan.current_status)
     ).length;
+    const householdSummary = summarizeMortgageHousehold(mortgageLoans);
 
     const categoryCount = mortgageLoans.reduce((accumulator, loan) => {
       const loanType = getMortgageLoanType(loan.mortgage_loan_type_key);
@@ -95,8 +98,14 @@ export default function MortgageHubPage({ onNavigate }) {
       { label: "Primary Loans", value: (categoryCount.primary_mortgage || 0) + (categoryCount.government_backed || 0), helper: "Primary home and government-backed mortgage records" },
       { label: "Equity / Junior", value: (categoryCount.equity_line || 0) + (categoryCount.junior_lien || 0), helper: "HELOC and second-lien style records" },
       { label: "Active", value: activeCount, helper: `${mortgageLoans.length - activeCount} non-active records` },
+      { label: "Needs Review", value: householdSummary.needsReviewCount, helper: `${householdSummary.reviewSoonCount} more loans merit near-term review` },
     ];
   }, [mortgageLoans]);
+
+  const householdMortgageSummary = useMemo(
+    () => summarizeMortgageHousehold(mortgageLoans),
+    [mortgageLoans]
+  );
 
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
@@ -180,6 +189,7 @@ export default function MortgageHubPage({ onNavigate }) {
               {mortgageLoans.map((loan) => {
                 const loanType = getMortgageLoanType(loan.mortgage_loan_type_key);
                 const linkedAsset = loan.assets || null;
+                const loanReview = buildMortgageReviewSignals({ mortgageLoan: loan });
                 return (
                   <button
                     key={loan.id}
@@ -203,6 +213,7 @@ export default function MortgageHubPage({ onNavigate }) {
                     <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <StatusBadge label={loanType?.major_category || "mortgage"} tone="info" />
                       <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+                      <StatusBadge label={loanReview.readinessStatus} tone={loanReview.readinessStatus === "Better Supported" ? "good" : loanReview.readinessStatus === "Review Soon" ? "warning" : "alert"} />
                     </div>
 
                     <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", color: "#475569" }}>
@@ -210,6 +221,9 @@ export default function MortgageHubPage({ onNavigate }) {
                       <div><strong>Property:</strong> {loan.property_address || "Limited visibility"}</div>
                       <div><strong>Originated:</strong> {loan.origination_date || "Limited visibility"}</div>
                       <div><strong>Matures:</strong> {loan.maturity_date || "Limited visibility"}</div>
+                    </div>
+                    <div style={{ marginTop: "12px", color: "#475569", lineHeight: "1.7" }}>
+                      {loanReview.headline}
                     </div>
                   </button>
                 );
@@ -273,13 +287,20 @@ export default function MortgageHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 mortgageLoans.length > 0
-                  ? "Mortgage records are now live in the platform shell and ready for document intake, snapshots, analytics placeholders, and later servicing parser work."
+                  ? householdMortgageSummary.headline
                   : "The mortgage module is live-ready but still waiting for its first loan record."
               }
-              bullets={[
-                "Mortgage loan creation now writes both the generic asset row and the deep mortgage loan row.",
-                "Mortgage detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
-              ]}
+              bullets={
+                mortgageLoans.length > 0
+                  ? [
+                      ...householdMortgageSummary.notes,
+                      "Mortgage detail pages now surface payoff-readiness, refinance review, and document-support signals from current records.",
+                    ]
+                  : [
+                      "Mortgage loan creation now writes both the generic asset row and the deep mortgage loan row.",
+                      "Mortgage detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
+                    ]
+              }
             />
           </SectionCard>
         </div>
