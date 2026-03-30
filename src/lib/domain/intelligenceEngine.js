@@ -12,6 +12,11 @@ import {
   getStructuredTableRows,
   hasStrongStructuredSupport,
 } from "../intelligence/structuredAccess.js";
+import {
+  analyzePolicyBasics,
+  buildProtectionComparisonNarrative,
+  detectInsuranceGaps,
+} from "./insurance/insuranceIntelligence.js";
 
 function hasValue(field) {
   return Boolean(field && !field.missing && field.display_value && field.display_value !== "Not found");
@@ -2144,6 +2149,14 @@ export function buildPolicyComparisonReport(primaryPolicy = {}, comparisonPolicy
       : currentRanking.score > referenceRanking.score
         ? `${currentName} currently carries the stronger visible support profile.`
         : "Both policies currently carry a similar visible support profile.";
+  const currentBasics = primaryPolicy?.basicAnalysis || analyzePolicyBasics({ comparisonSummary: currentRow });
+  const referenceBasics = comparisonPolicy?.basicAnalysis || analyzePolicyBasics({ comparisonSummary: referenceRow });
+  const currentGap = primaryPolicy?.gapAnalysis || detectInsuranceGaps({ comparisonSummary: currentRow, basics: currentBasics }, { totalPolicies: 2 });
+  const referenceGap = comparisonPolicy?.gapAnalysis || detectInsuranceGaps({ comparisonSummary: referenceRow, basics: referenceBasics }, { totalPolicies: 2 });
+  const protectionNarrative = buildProtectionComparisonNarrative(
+    { ...currentRow, basicAnalysis: currentBasics, gapAnalysis: currentGap },
+    { ...referenceRow, basicAnalysis: referenceBasics, gapAnalysis: referenceGap }
+  );
 
   return {
     title: `${currentName} vs ${referenceName}`,
@@ -2198,6 +2211,32 @@ export function buildPolicyComparisonReport(primaryPolicy = {}, comparisonPolicy
               { label: "Continuity Status", value: displayReportValue(referenceRanking?.status) },
               { label: "Portfolio Read", value: displayReportValue(referenceInterpretation.label) },
               { label: "Why", value: displayReportValue(referenceRanking?.statusExplanation) },
+            ],
+          },
+        ],
+      },
+      {
+        id: "protection_confidence_comparison",
+        title: "Protection Confidence Comparison",
+        kind: "side_by_side",
+        summary: protectionNarrative.headline,
+        panels: [
+          {
+            title: currentName,
+            items: [
+              { label: "Coverage Confidence", value: `${Math.round(Number(currentGap?.confidence || 0) * 100)}%` },
+              { label: "Funding Pattern", value: displayReportValue(currentBasics?.fundingPattern) },
+              { label: "COI Trend", value: displayReportValue(currentBasics?.coiTrend) },
+              { label: "Gap Status", value: currentGap?.coverageGap ? "Possible gap" : "No obvious gap" },
+            ],
+          },
+          {
+            title: referenceName,
+            items: [
+              { label: "Coverage Confidence", value: `${Math.round(Number(referenceGap?.confidence || 0) * 100)}%` },
+              { label: "Funding Pattern", value: displayReportValue(referenceBasics?.fundingPattern) },
+              { label: "COI Trend", value: displayReportValue(referenceBasics?.coiTrend) },
+              { label: "Gap Status", value: referenceGap?.coverageGap ? "Possible gap" : "No obvious gap" },
             ],
           },
         ],
@@ -2337,10 +2376,23 @@ export function buildPolicyComparisonReport(primaryPolicy = {}, comparisonPolicy
         ],
       },
       {
+        id: "advisor_recommendation",
+        title: "Advisor-Style Recommendation",
+        kind: "bullets",
+        summary: `${strongerLabel} ${protectionNarrative.headline}`.trim(),
+        bullets: [
+          comparisonAnalysis?.summary,
+          trendDeltaAnalysis?.summary,
+          ...((protectionNarrative?.bullets || []).slice(0, 4)),
+          ...(currentGap?.notes || []).slice(0, 2).map((item) => `${currentName}: ${item}`),
+          ...(referenceGap?.notes || []).slice(0, 2).map((item) => `${referenceName}: ${item}`),
+        ].filter(Boolean).slice(0, 8),
+      },
+      {
         id: "bottom_line_summary",
         title: "Bottom Line Summary",
         kind: "summary",
-        summary: `${strongerLabel} ${comparisonAnalysis?.summary || ""} ${trendDeltaAnalysis?.summary || ""}`.trim(),
+        summary: `${strongerLabel} ${comparisonAnalysis?.summary || ""} ${protectionNarrative.headline || ""} ${trendDeltaAnalysis?.summary || ""}`.trim(),
       },
     ],
     debug: {

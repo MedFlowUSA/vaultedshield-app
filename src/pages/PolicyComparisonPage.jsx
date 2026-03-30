@@ -758,6 +758,18 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
       ],
     };
   }, [basePolicy, comparisonPolicy]);
+  const advisorComparisonRead = useMemo(() => {
+    if (!basePolicy || !comparisonPolicy || !protectionNarrative) return null;
+    return {
+      summary: `${comparisonPolicy.product || "The comparison policy"} is the stronger working reference if you want the cleaner current read, but protection confidence should still be judged separately from continuity strength.`,
+      bullets: [
+        protectionNarrative.headline,
+        comparisonAnalysis?.summary,
+        trendDeltaAnalysis?.summary,
+        ...(protectionNarrative.bullets || []),
+      ].filter(Boolean).slice(0, 5),
+    };
+  }, [basePolicy, comparisonAnalysis?.summary, comparisonPolicy, protectionNarrative, trendDeltaAnalysis?.summary]);
 
   useEffect(() => {
     setStatementBundles({});
@@ -1012,6 +1024,35 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                     </div>
                   ))}
                 </div>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {advisorComparisonRead ? (
+            <SectionCard
+              title="Advisor Read"
+              subtitle="A practical recommendation layer that separates cleaner review support from actual protection confidence."
+            >
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                    border: "1px solid rgba(147, 197, 253, 0.28)",
+                    color: "#0f172a",
+                    fontSize: "16px",
+                    lineHeight: "1.8",
+                    fontWeight: 600,
+                  }}
+                >
+                  {advisorComparisonRead.summary}
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                  {advisorComparisonRead.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
               </div>
             </SectionCard>
           ) : null}
