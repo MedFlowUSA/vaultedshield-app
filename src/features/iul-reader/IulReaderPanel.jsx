@@ -142,6 +142,65 @@ export function IulReaderPanel({ reader, results }) {
       </div>
 
       <div style={{ marginTop: "20px", display: "grid", gap: "18px", alignItems: "start" }}>
+        {reader.evidenceAudit ? (
+          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Packet Audit</div>
+                <h3 style={{ margin: "8px 0 0 0" }}>How Trustworthy This IUL Read Is</h3>
+                <p style={{ margin: "6px 0 0 0", color: "#64748b", lineHeight: "1.6" }}>
+                  Evidence strength, chronology sanity, and identity consistency in one place before you trust the finer conclusions.
+                </p>
+              </div>
+              <ReaderStatusBadge
+                status={
+                  reader.evidenceAudit.overallStatus === "strong"
+                    ? "confirmed"
+                    : reader.evidenceAudit.overallStatus === "usable"
+                      ? "review"
+                      : "missing"
+                }
+              >
+                {reader.evidenceAudit.overallStatus}
+              </ReaderStatusBadge>
+            </div>
+            <div style={{ marginTop: "14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+              <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "12px", color: "#64748b" }}>Evidence Score</div>
+                <div style={{ marginTop: "6px", fontSize: "24px", fontWeight: 700, color: "#0f172a" }}>
+                  {reader.evidenceAudit.evidenceScore}/100
+                </div>
+              </div>
+              <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "12px", color: "#64748b" }}>Statements Visible</div>
+                <div style={{ marginTop: "6px", fontSize: "24px", fontWeight: 700, color: "#0f172a" }}>
+                  {reader.evidenceAudit.statementCount}
+                </div>
+              </div>
+              <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "12px", color: "#64748b" }}>Chronology</div>
+                <div style={{ marginTop: "6px", fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+                  {reader.evidenceAudit.chronologyLabel}
+                </div>
+              </div>
+              <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "12px", color: "#64748b" }}>Identity Match</div>
+                <div style={{ marginTop: "6px", fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+                  {reader.evidenceAudit.identityLabel}
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: "14px", color: "#475569", lineHeight: "1.7" }}>{reader.evidenceAudit.headline}</div>
+            {reader.evidenceAudit.notes?.length > 0 ? (
+              <ul style={{ margin: "12px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#475569" }}>
+                {reader.evidenceAudit.notes.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
         <div style={{ background: "#f8fbff", border: "1px solid #dbe7ff", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "16px" }}>
             <div style={{ minWidth: 0 }}>
@@ -221,6 +280,22 @@ export function IulReaderPanel({ reader, results }) {
           <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
             <h3 style={{ marginTop: 0, marginBottom: "10px" }}>Action Center</h3>
             <div style={{ display: "grid", gap: "12px" }}>
+              {reader.pressureSummary ? (
+                <div style={{ paddingBottom: "12px", borderBottom: "1px solid #fdba74", display: "grid", gap: "8px" }}>
+                  <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    What Matters Most Right Now
+                  </div>
+                  <div style={{ color: "#7c2d12", lineHeight: "1.7", fontWeight: 700 }}>{reader.pressureSummary.headline}</div>
+                  {reader.pressureSummary.items?.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#7c2d12" }}>
+                      {reader.pressureSummary.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div>
                 <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Audit Flags</div>
                 {reader.warnings.length > 0 ? (
@@ -241,7 +316,7 @@ export function IulReaderPanel({ reader, results }) {
               <div>
                 <div style={{ fontSize: "12px", color: "#1d4ed8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Best Next Uploads</div>
                 <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
-                  {reader.nextSteps.map((step, index) => (
+                  {(reader.pressureSummary?.checklist?.length ? reader.pressureSummary.checklist : reader.nextSteps).map((step, index) => (
                     <div key={index} style={{ padding: "10px 12px", borderRadius: "12px", background: "#ffffff", border: "1px solid #dbeafe", lineHeight: "1.6" }}>
                       {step}
                     </div>

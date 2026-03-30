@@ -98,6 +98,207 @@ function buildUniformTable(title, description, rows) {
   };
 }
 
+function toDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function pluralize(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function formatScoreValue(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "Limited";
+  return `${Math.round(Number(value))}/100`;
+}
+
+function buildEvidenceAudit(results, sections, warnings) {
+  const statementResults = Array.isArray(results.statementResults) ? results.statementResults : [];
+  const comparison = results.normalizedAnalytics?.comparison_summary || {};
+  const performanceSummary = results.normalizedAnalytics?.performance_summary || {};
+  const chargeSummary = results.normalizedAnalytics?.charge_summary || {};
+  const trendSummary = results.normalizedAnalytics?.trend_summary || {};
+  const issueGroups = Array.isArray(results.groupedIssues) ? results.groupedIssues : [];
+
+  const allFields = sections.flatMap((section) => section.fields);
+  const confirmedCount = allFields.filter((field) => field.status === "confirmed").length;
+  const reviewCount = allFields.filter((field) => field.status === "review").length;
+  const missingCount = allFields.filter((field) => field.status === "missing").length;
+
+  const statementDates = statementResults
+    .map((statement) => statement?.summary?.statementDate)
+    .filter(Boolean);
+  const parsedDates = statementDates.map((value) => toDate(value)).filter(Boolean);
+  const sortedDates = [...parsedDates].sort((left, right) => left.getTime() - right.getTime());
+  const chronologyAligned =
+    parsedDates.length > 1 &&
+    parsedDates.length === sortedDates.length &&
+    parsedDates.every((date, index) => date.getTime() === sortedDates[index].getTime());
+
+  const identityWarnings = warnings.filter((warning) =>
+    /policy numbers do not match|carrier identity differs/i.test(warning)
+  );
+
+  const signals = [
+    comparison.continuity_score !== null && comparison.continuity_score !== undefined
+      ? Math.min(Math.max(Number(comparison.continuity_score) / 100, 0), 1)
+      : 0,
+    confirmedCount / Math.max(allFields.length || 1, 1),
+    statementResults.length >= 2 ? 1 : statementResults.length === 1 ? 0.65 : 0.25,
+    chargeSummary.coi_confidence === "strong" ? 1 : chargeSummary.coi_confidence === "moderate" ? 0.7 : 0.3,
+    performanceSummary.latest_statement_date ? 0.85 : 0.35,
+    warnings.length === 0 ? 1 : 0.45,
+    issueGroups.length <= 1 ? 0.85 : issueGroups.length <= 3 ? 0.65 : 0.45,
+  ];
+  const evidenceScore = Math.round(
+    (signals.reduce((sum, signal) => sum + signal, 0) / Math.max(signals.length, 1)) * 100
+  );
+
+  const overallStatus =
+    evidenceScore >= 80
+      ? "strong"
+      : evidenceScore >= 62
+        ? "usable"
+        : "provisional";
+
+  const notes = [];
+  if (statementResults.length === 0) {
+    notes.push("Only the baseline illustration is visible, so live performance remains mostly unverified.");
+  } else if (statementResults.length === 1) {
+    notes.push("One statement is enough for current position, but not enough for a strong direction-of-travel read.");
+  } else {
+    notes.push(`${pluralize(statementResults.length, "statement")} are visible, which improves chronology and trend support.`);
+  }
+
+  if (comparison.continuity_score !== null && comparison.continuity_score !== undefined) {
+    notes.push(`Continuity support is ${comparison.continuity_score}/100 across the visible illustration and statement packet.`);
+  }
+
+  if (chargeSummary.coi_confidence === "strong") {
+    notes.push("COI support is directly visible enough to anchor a stronger charge read.");
+  } else if (chargeSummary.coi_confidence === "moderate") {
+    notes.push("COI support is usable, but still partly inferred from the visible charge packet.");
+  } else {
+    notes.push("COI support is still thin, so charge interpretation should stay conservative.");
+  }
+
+  if (parsedDates.length >= 2) {
+    notes.push(
+      chronologyAligned
+        ? "Statement chronology looks internally consistent across the visible packet."
+        : "Statement chronology may be out of order or incompletely dated, which weakens trend trust."
+    );
+  }
+
+  if (identityWarnings.length > 0) {
+    notes.push("There are cross-document identity mismatches that should be resolved before trusting fine-grained conclusions.");
+  }
+
+  if (trendSummary?.periods_count >= 2 && trendSummary?.cash_value_trend?.note) {
+    notes.push(trendSummary.cash_value_trend.note);
+  }
+
+  const headline =
+    overallStatus === "strong"
+      ? "The current packet is strong enough to support a relatively dependable IUL read."
+      : overallStatus === "usable"
+        ? "The current packet is usable, but some conclusions still depend on partial charge, chronology, or strategy support."
+        : "The current packet is still provisional, so the reader should be treated as a guided review rather than a final judgment.";
+
+  return {
+    evidenceScore,
+    overallStatus,
+    confirmedCount,
+    reviewCount,
+    missingCount,
+    statementCount: statementResults.length,
+    chronologyStatus: parsedDates.length >= 2 ? (chronologyAligned ? "aligned" : "mixed") : "limited",
+    chronologyLabel:
+      parsedDates.length >= 2 ? (chronologyAligned ? "Chronology aligned" : "Chronology mixed") : "Chronology limited",
+    identityStatus: identityWarnings.length > 0 ? "review" : "clear",
+    identityLabel: identityWarnings.length > 0 ? "Identity mismatches" : "Identity aligned",
+    headline,
+    notes: notes.slice(0, 6),
+  };
+}
+
+function buildPolicyPressureSummary(results, evidenceAudit) {
+  const iulV2 = results.iulV2 || {};
+  const illustration = iulV2.illustrationComparison || {};
+  const charge = iulV2.chargeAnalysis || {};
+  const funding = iulV2.fundingAnalysis || {};
+  const risk = iulV2.riskAnalysis || {};
+  const strategy = iulV2.strategyAnalysis || {};
+  const optimization = results.optimizationAnalysis || null;
+
+  const pressureItems = [];
+  if (illustration.status === "behind") {
+    pressureItems.push("Actual values appear to be trailing the visible illustration checkpoint.");
+  } else if (illustration.status === "ahead") {
+    pressureItems.push("Actual values appear to be ahead of the visible illustration checkpoint.");
+  }
+
+  if (charge.chargeDragLevel === "high") {
+    pressureItems.push("Visible charges look heavy relative to visible funding.");
+  } else if (charge.chargeDragLevel === "moderate") {
+    pressureItems.push("Visible charges are meaningful enough to keep on watch.");
+  }
+
+  if (funding.status === "underfunded") {
+    pressureItems.push("Funding pace appears below the visible target premium.");
+  } else if (funding.status === "aggressive") {
+    pressureItems.push("Funding pace appears stronger than the visible target premium.");
+  }
+
+  if (risk.overallRisk === "high") {
+    pressureItems.push("Overall policy pressure reads high from the currently visible file.");
+  } else if (risk.overallRisk === "moderate") {
+    pressureItems.push("Overall policy pressure is mixed rather than cleanly healthy.");
+  }
+
+  if (strategy.concentrationLevel === "concentrated") {
+    pressureItems.push("Strategy allocation looks concentrated in one visible sleeve.");
+  }
+
+  if (optimization?.priorityLevel === "high") {
+    pressureItems.push("Optimization logic is also pointing to a higher-priority review.");
+  }
+
+  const status =
+    risk.overallRisk === "high" || funding.status === "underfunded" || charge.chargeDragLevel === "high"
+      ? "high"
+      : risk.overallRisk === "moderate" || charge.chargeDragLevel === "moderate" || illustration.status === "behind"
+        ? "moderate"
+        : evidenceAudit.overallStatus === "provisional"
+          ? "unclear"
+          : "low";
+
+  const headline =
+    status === "high"
+      ? "The main visible levers suggest material pressure from funding, charges, risk, or illustration drift."
+      : status === "moderate"
+        ? "The policy looks usable but mixed, with at least one lever that deserves closer annual review."
+        : status === "low"
+          ? "No major visible stress stands out from the current file."
+          : "Pressure is still hard to call because evidence quality is not strong enough yet.";
+
+  const checklist = [];
+  if (illustration.status === "behind") checklist.push("Review the illustration mismatch against the latest policy year and actual values.");
+  if (charge.chargeDragLevel === "high" || charge.coiVisible === false) checklist.push("Review visible COI and total charges from the statement activity pages.");
+  if (funding.status === "underfunded" || funding.status === "unclear") checklist.push("Confirm planned premium, minimum premium, and actual premium pace.");
+  if (strategy.allocationsVisible === false) checklist.push("Upload allocation pages to confirm indexed versus fixed exposure.");
+  if (risk.factors?.some((item) => item.type === "loan_pressure")) checklist.push("Review loan balance versus current cash value and surrender value.");
+  if (checklist.length === 0) checklist.push("Continue annual statement uploads to strengthen trend and projection accuracy.");
+
+  return {
+    status,
+    headline,
+    items: pressureItems.slice(0, 5),
+    checklist: [...new Set(checklist)].slice(0, 5),
+  };
+}
+
 function buildProductExplanation(results) {
   const policyType = firstNonEmpty(
     results.normalizedPolicy?.policy_identity?.policy_type,
@@ -566,6 +767,11 @@ export function buildIulReaderModel(results) {
   const optimizationAnalysis = results.optimizationAnalysis || null;
   const groupedIssues = Array.isArray(results.groupedIssues) ? results.groupedIssues : [];
   const unifiedCards = buildUnifiedFocusCards(results);
+  const evidenceAudit = buildEvidenceAudit(results, sections, warnings);
+  const pressureSummary = buildPolicyPressureSummary(
+    { ...results, optimizationAnalysis },
+    evidenceAudit
+  );
 
   const readerTables = [
     buildUniformTable("Values And Funding", "The main numbers most clients expect in an initial policy read.", [
@@ -627,6 +833,47 @@ export function buildIulReaderModel(results) {
         status: strategy.cap_rate?.display_value || strategy.participation_rate?.display_value || strategy.spread?.display_value ? "confirmed" : "missing",
       }),
     ]),
+    buildUniformTable("Packet Support And Audit", "How dependable the current packet is for a real-world IUL review.", [
+      buildUniformRow("Evidence Score", formatScoreValue(evidenceAudit.evidenceScore), {
+        status:
+          evidenceAudit.overallStatus === "strong"
+            ? "confirmed"
+            : evidenceAudit.overallStatus === "usable"
+              ? "review"
+              : "missing",
+        note: evidenceAudit.headline,
+      }),
+      buildUniformRow("Statement Count", evidenceAudit.statementCount ? String(evidenceAudit.statementCount) : "Illustration only", {
+        status: evidenceAudit.statementCount >= 2 ? "confirmed" : evidenceAudit.statementCount === 1 ? "review" : "missing",
+        note:
+          evidenceAudit.statementCount >= 2
+            ? "Multiple statements improve trend and chronology support."
+            : evidenceAudit.statementCount === 1
+              ? "One statement gives current position but not a strong direction-of-travel read."
+              : "No annual statements are visible yet.",
+      }),
+      buildUniformRow("Chronology", evidenceAudit.chronologyLabel, {
+        status:
+          evidenceAudit.chronologyStatus === "aligned"
+            ? "confirmed"
+            : evidenceAudit.chronologyStatus === "mixed"
+              ? "review"
+              : "missing",
+        note:
+          evidenceAudit.chronologyStatus === "aligned"
+            ? "Statement order looks internally consistent."
+            : evidenceAudit.chronologyStatus === "mixed"
+              ? "Some statement ordering or date support may still need cleanup."
+              : "Not enough dated statements are visible to judge chronology.",
+      }),
+      buildUniformRow("Identity Match", evidenceAudit.identityLabel, {
+        status: evidenceAudit.identityStatus === "clear" ? "confirmed" : "review",
+        note:
+          evidenceAudit.identityStatus === "clear"
+            ? "No cross-document carrier or policy-number mismatch was detected in the strongest visible fields."
+            : "At least one carrier or policy-number mismatch should be resolved before trusting fine-grained conclusions.",
+      }),
+    ]),
   ].filter((table) => table.rows.length > 0);
 
   return {
@@ -642,6 +889,8 @@ export function buildIulReaderModel(results) {
     projectionSummary: benchmarkView.projectionSummary,
     projectionView,
     classification,
+    evidenceAudit,
+    pressureSummary,
     overview: {
       continuityScore:
         comparison.continuity_score !== null && comparison.continuity_score !== undefined

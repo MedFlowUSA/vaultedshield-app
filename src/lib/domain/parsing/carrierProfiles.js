@@ -25,41 +25,52 @@ function buildProfile({
   };
 }
 
+function mergeFieldLabels(overrides = {}) {
+  const merged = {};
+  Object.entries(SHARED_FIELD_LABELS).forEach(([sectionKey, sectionLabels]) => {
+    merged[sectionKey] = {
+      ...sectionLabels,
+      ...(overrides[sectionKey] || {}),
+    };
+  });
+  return merged;
+}
+
 const SHARED_FIELD_LABELS = {
   illustration_summary: {
-    policy_number: ["policy number", "contract number", "certificate number"],
-    issue_date: ["issue date", "policy date", "effective date", "policy effective date"],
-    product_name: ["product name", "plan name", "policy name"],
-    death_benefit: ["death benefit", "initial death benefit", "specified amount", "face amount"],
-    planned_premium: ["planned premium", "annual premium", "modal planned premium", "target premium"],
+    policy_number: ["policy number", "contract number", "certificate number", "policy no", "certificate no"],
+    issue_date: ["issue date", "policy date", "effective date", "policy effective date", "contract date", "date issued"],
+    product_name: ["product name", "plan name", "policy name", "product", "plan"],
+    death_benefit: ["death benefit", "initial death benefit", "specified amount", "face amount", "death benefit amount", "initial specified amount"],
+    planned_premium: ["planned premium", "annual premium", "modal planned premium", "target premium", "planned periodic premium", "modal premium", "periodic premium"],
   },
   statement_summary: {
-    policy_number: ["policy number", "contract number", "certificate number"],
-    statement_date: ["statement date", "report date", "statement ending date", "as of"],
-    accumulation_value: ["accumulation value", "account value", "policy value"],
-    cash_value: ["cash value"],
-    cash_surrender_value: ["cash surrender value", "surrender value", "net cash surrender value"],
-    death_benefit: ["death benefit", "current death benefit"],
-    loan_balance: ["loan balance", "policy loan balance", "indebtedness"],
-    premium_paid: ["premium paid", "premium received", "planned premium"],
-    policy_charges_total: ["policy charges", "total charges", "monthly deduction"],
+    policy_number: ["policy number", "contract number", "certificate number", "policy no", "certificate no"],
+    statement_date: ["statement date", "report date", "statement ending date", "as of", "period ending", "statement period ending", "as of date"],
+    accumulation_value: ["accumulation value", "account value", "policy value", "total accumulation value", "total account value"],
+    cash_value: ["cash value", "net cash value"],
+    cash_surrender_value: ["cash surrender value", "surrender value", "net cash surrender value", "net surrender value"],
+    death_benefit: ["death benefit", "current death benefit", "death benefit amount", "face amount"],
+    loan_balance: ["loan balance", "policy loan balance", "indebtedness", "outstanding loan balance", "total loan balance"],
+    premium_paid: ["premium paid", "premium received", "planned premium", "premium", "premiums paid ytd"],
+    policy_charges_total: ["policy charges", "total charges", "monthly deduction", "annual charges", "visible charges"],
   },
   charges_table: {
-    cost_of_insurance: ["cost of insurance", "coi", "insurance charge"],
-    monthly_deduction: ["monthly deduction", "monthly deductions"],
-    expense_charge: ["expense charge", "expense charges", "premium expense"],
-    admin_fee: ["administrative charge", "administrative fee", "policy fee"],
-    rider_charge: ["rider charge", "rider charges", "cost of riders"],
+    cost_of_insurance: ["cost of insurance", "coi", "insurance charge", "insurance charges", "policy cost of insurance"],
+    monthly_deduction: ["monthly deduction", "monthly deductions", "monthly charges"],
+    expense_charge: ["expense charge", "expense charges", "premium expense", "premium load", "other charges"],
+    admin_fee: ["administrative charge", "administrative fee", "policy fee", "admin fee"],
+    rider_charge: ["rider charge", "rider charges", "cost of riders", "rider(s) charges"],
   },
   allocation_table: {
-    index_strategy: ["indexed account", "allocation option", "strategy", "interest option"],
-    allocation_percent: ["allocation percent", "allocation %", "percent allocated"],
-    cap_rate: ["cap rate"],
-    participation_rate: ["participation rate", "participation %"],
-    spread: ["spread"],
-    crediting_rate: ["crediting rate", "index credit", "declared rate"],
-    fixed_account_value: ["fixed account", "fixed account value"],
-    indexed_account_value: ["indexed account value", "index account value"],
+    index_strategy: ["indexed account", "allocation option", "strategy", "interest option", "indexed strategy", "crediting strategy", "index account strategy"],
+    allocation_percent: ["allocation percent", "allocation %", "percent allocated", "allocation", "% of accumulation value"],
+    cap_rate: ["cap rate", "cap %"],
+    participation_rate: ["participation rate", "participation %", "par rate"],
+    spread: ["spread", "asset fee spread"],
+    crediting_rate: ["crediting rate", "index credit", "declared rate", "credited rate", "interest credit rate"],
+    fixed_account_value: ["fixed account", "fixed account value", "declared interest account", "fixed strategy value"],
+    indexed_account_value: ["indexed account value", "index account value", "total of index accounts", "indexed strategy value"],
   },
 };
 
@@ -97,7 +108,11 @@ export const CARRIER_PARSING_PROFILES = {
       charges_table: ["cost of insurance", "monthly deduction", "administrative charge"],
       allocation_table: ["indexed account", "allocation", "participation rate", "cap rate"],
     },
-    fieldLabels: SHARED_FIELD_LABELS,
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        cash_surrender_value: ["net cash surrender value", "cash surrender value", "surrender value"],
+      },
+    }),
   }),
   symetra: buildProfile({
     key: "symetra",
@@ -111,7 +126,11 @@ export const CARRIER_PARSING_PROFILES = {
       charges_table: ["cost of insurance", "expense charge", "monthly deduction"],
       allocation_table: ["indexed account", "fixed account", "cap rate", "participation rate", "spread"],
     },
-    fieldLabels: SHARED_FIELD_LABELS,
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        statement_date: ["statement date", "report date", "period ending", "statement period ending"],
+      },
+    }),
   }),
   john_hancock: buildProfile({
     key: "john_hancock",
@@ -125,7 +144,11 @@ export const CARRIER_PARSING_PROFILES = {
       charges_table: ["cost of insurance", "policy fee", "monthly deduction"],
       allocation_table: ["indexed account", "fixed account", "cap rate", "participation rate"],
     },
-    fieldLabels: SHARED_FIELD_LABELS,
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        accumulation_value: ["account value", "accumulation value", "policy value"],
+      },
+    }),
   }),
   principal: buildProfile({
     key: "principal",
@@ -139,7 +162,11 @@ export const CARRIER_PARSING_PROFILES = {
       charges_table: ["cost of insurance", "expense charge", "administrative fee"],
       allocation_table: ["indexed account", "cap rate", "participation rate", "allocation"],
     },
-    fieldLabels: SHARED_FIELD_LABELS,
+    fieldLabels: mergeFieldLabels({
+      illustration_summary: {
+        death_benefit: ["specified amount", "face amount", "death benefit", "death benefit amount"],
+      },
+    }),
   }),
   penn_mutual: buildProfile({
     key: "penn_mutual",
@@ -153,7 +180,168 @@ export const CARRIER_PARSING_PROFILES = {
       charges_table: ["cost of insurance", "monthly deduction", "policy fee"],
       allocation_table: ["indexed account", "fixed account", "spread", "allocation"],
     },
-    fieldLabels: SHARED_FIELD_LABELS,
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        statement_date: ["statement date", "statement period ending", "report date", "period ending"],
+      },
+    }),
+  }),
+  allianz: buildProfile({
+    key: "allianz",
+    name: "Allianz Life Insurance Company of North America",
+    aliases: ["allianz", "allianz life", "allianz life insurance company of north america"],
+    detectionPatterns: ["policy summary", "in force illustration", "annual statement", "indexed account"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage summary", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "account value", "net cash surrender value"],
+      statement_summary: ["annual statement", "statement summary", "policy summary", "policy values"],
+      charges_table: ["cost of insurance", "monthly deduction", "policy fee", "charges"],
+      allocation_table: ["indexed account", "allocation", "participation rate", "cap rate", "declared interest"],
+    },
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        cash_surrender_value: ["net cash surrender value", "cash surrender value", "surrender value"],
+      },
+    }),
+  }),
+  pacific_life: buildProfile({
+    key: "pacific_life",
+    name: "Pacific Life Insurance Company",
+    aliases: ["pacific life", "pacific life insurance company"],
+    detectionPatterns: ["policy summary", "annual statement", "in force illustration", "account value"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage summary", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "policy value", "cash surrender value"],
+      statement_summary: ["annual statement", "policy summary", "policy values", "account value"],
+      charges_table: ["cost of insurance", "monthly deduction", "policy fee", "expense charge"],
+      allocation_table: ["indexed account", "allocation option", "participation rate", "cap rate"],
+    },
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        accumulation_value: ["policy value", "account value", "accumulation value"],
+      },
+    }),
+  }),
+  nationwide: buildProfile({
+    key: "nationwide",
+    name: "Nationwide Life Insurance Company",
+    aliases: ["nationwide", "nationwide life", "nationwide life insurance company"],
+    detectionPatterns: ["policy summary", "annual statement", "coverage summary", "account summary"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage summary", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "account value", "surrender value"],
+      statement_summary: ["annual statement", "account summary", "policy summary", "statement date"],
+      charges_table: ["cost of insurance", "monthly deduction", "policy charges"],
+      allocation_table: ["indexed account", "allocation", "cap rate", "participation rate"],
+    },
+    fieldLabels: mergeFieldLabels({
+      illustration_summary: {
+        planned_premium: ["planned premium", "modal premium", "annual premium", "target premium"],
+      },
+    }),
+  }),
+  lincoln_financial: buildProfile({
+    key: "lincoln_financial",
+    name: "Lincoln Financial",
+    aliases: ["lincoln financial", "lincoln", "the lincoln national life insurance company", "lincoln national life insurance company"],
+    detectionPatterns: ["policy summary", "annual statement", "coverage summary", "account value"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage information", "policy detail"],
+      illustration_ledger: ["policy year", "attained age", "cash value", "account value"],
+      statement_summary: ["annual statement", "policy summary", "account value", "current values"],
+      charges_table: ["cost of insurance", "monthly deduction", "administrative fee", "policy fee"],
+      allocation_table: ["indexed account", "fixed account", "allocation", "cap rate"],
+    },
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        cash_value: ["cash value", "account value", "policy value"],
+      },
+    }),
+  }),
+  transamerica: buildProfile({
+    key: "transamerica",
+    name: "Transamerica Life Insurance Company",
+    aliases: ["transamerica", "transamerica life", "transamerica life insurance company"],
+    detectionPatterns: ["policy summary", "annual statement", "in force illustration", "policy values"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage summary", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "account value", "cash surrender value"],
+      statement_summary: ["annual statement", "policy summary", "policy values", "statement date"],
+      charges_table: ["cost of insurance", "monthly deduction", "expense charges", "policy fee"],
+      allocation_table: ["indexed account", "allocation", "cap rate", "participation rate", "spread"],
+    },
+    fieldLabels: mergeFieldLabels({
+      illustration_summary: {
+        policy_number: ["policy number", "policy no", "contract number", "certificate number"],
+      },
+    }),
+  }),
+  north_american: buildProfile({
+    key: "north_american",
+    name: "North American Company for Life and Health Insurance",
+    aliases: ["north american", "north american life", "north american company for life and health insurance"],
+    detectionPatterns: ["policy summary", "annual statement", "in force illustration", "coverage summary"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage summary", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "accumulation value", "surrender value"],
+      statement_summary: ["annual statement", "policy summary", "account summary", "policy values"],
+      charges_table: ["cost of insurance", "monthly deduction", "administrative charge", "policy fee"],
+      allocation_table: ["indexed account", "allocation", "participation rate", "cap rate", "fixed account"],
+    },
+    fieldLabels: mergeFieldLabels({
+      illustration_summary: {
+        death_benefit: ["death benefit", "face amount", "specified amount", "initial specified amount"],
+      },
+    }),
+  }),
+  minnesota_life: buildProfile({
+    key: "minnesota_life",
+    name: "Minnesota Life Insurance Company",
+    aliases: ["minnesota life", "securian", "minnesota life insurance company"],
+    detectionPatterns: ["policy summary", "annual statement", "coverage detail", "account summary"],
+    pageTypeSignals: {
+      illustration_summary: ["policy summary", "coverage detail", "policy information"],
+      illustration_ledger: ["policy year", "attained age", "account value", "cash surrender value"],
+      statement_summary: ["annual statement", "account summary", "policy summary", "period ending"],
+      charges_table: ["cost of insurance", "monthly deduction", "policy charges", "administrative charge"],
+      allocation_table: ["indexed account", "allocation", "cap rate", "participation rate"],
+    },
+    fieldLabels: mergeFieldLabels({
+      statement_summary: {
+        statement_date: ["statement date", "period ending", "statement period ending", "report date"],
+      },
+    }),
+  }),
+  corebridge_aig: buildProfile({
+    key: "corebridge_aig",
+    name: "American General Life Insurance Company",
+    aliases: ["american general life insurance company", "corebridge financial", "aig", "agl", "us life"],
+    detectionPatterns: ["policy activity summary by month", "your account values and allocation", "external indices performance detail", "monthly guarantee premium"],
+    pageTypeSignals: {
+      illustration_summary: ["policy detail", "policy summary", "coverage detail", "monthly guarantee premium"],
+      illustration_ledger: ["policy year", "attained age", "accumulation value", "cash surrender value"],
+      statement_summary: ["annual statement", "policy value summary", "your account values and allocation"],
+      charges_table: ["policy cost of insurance", "expense charges", "rider(s) charges", "monthly administration fee"],
+      allocation_table: ["index account strategies", "allocation", "cap rate", "participation rate", "declared interest account"],
+    },
+    fieldLabels: mergeFieldLabels({
+      illustration_summary: {
+        death_benefit: ["initial specified amount", "death benefit amount", "specified amount", "face amount"],
+        planned_premium: ["planned periodic premium", "periodic premium", "planned premium"],
+      },
+      charges_table: {
+        cost_of_insurance: ["policy cost of insurance", "cost of insurance", "insurance charge"],
+        expense_charge: ["expense charges", "premium expense charge", "premiums expenses", "expense charge"],
+        rider_charge: ["rider(s) charges", "rider charges", "cost of riders"],
+        admin_fee: ["monthly administration fee", "administrative charge", "policy fee"],
+      },
+      allocation_table: {
+        index_strategy: ["index account strategies", "index account strategy", "indexed account", "allocation option"],
+        allocation_percent: ["allocation", "% of accumulation value", "allocation percent"],
+        fixed_account_value: ["declared interest account (dia)", "declared interest account", "fixed account value"],
+        indexed_account_value: ["total of index accounts", "indexed account value", "index account value"],
+      },
+    }),
   }),
 };
 
