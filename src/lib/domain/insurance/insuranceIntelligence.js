@@ -28,6 +28,10 @@ function currencyToDisplay(value) {
   });
 }
 
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
 export function analyzePolicyBasics(parsedData = {}) {
   const normalizedPolicy = parsedData?.normalizedPolicy || parsedData?.policyRecord || {};
   const statements = Array.isArray(parsedData?.statements) ? parsedData.statements : [];
@@ -104,6 +108,84 @@ export function analyzePolicyBasics(parsedData = {}) {
     coiTrend,
     confidenceScore,
     flags,
+  };
+}
+
+export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
+  const basics = policy?.basics || analyzePolicyBasics(policy || {});
+  const normalizedPolicy = policy?.normalizedPolicy || {};
+  const comparisonSummary = policy?.comparisonSummary || {};
+  const lifePolicy = policy?.lifePolicy || {};
+
+  const deathBenefitValue =
+    currencyToNumber(comparisonSummary?.death_benefit) ??
+    currencyToNumber(normalizedPolicy?.death_benefit?.death_benefit?.display_value) ??
+    currencyToNumber(normalizedPolicy?.death_benefit?.initial_face_amount?.display_value) ??
+    null;
+  const ownerVisible = Boolean(normalizeText(lifePolicy?.identity?.ownerName || normalizedPolicy?.policy_identity?.owner_name));
+  const insuredVisible = Boolean(normalizeText(lifePolicy?.identity?.insuredName || normalizedPolicy?.policy_identity?.insured_name));
+  const mortgageCount = Number(householdContext.mortgageCount || 0);
+  const dependentPlanCount = Number(householdContext.dependentPlanCount || 0);
+
+  const targetFloor =
+    mortgageCount > 0 || dependentPlanCount > 0
+      ? 500000
+      : 250000;
+
+  const notes = [];
+  let adequacyStatus = "review";
+
+  if (deathBenefitValue === null) {
+    notes.push("Visible death benefit is still missing, so adequacy cannot be judged confidently.");
+  } else if (deathBenefitValue < targetFloor) {
+    notes.push(`Visible death benefit of ${currencyToDisplay(deathBenefitValue)} may be modest for the current household risk picture.`);
+  } else {
+    adequacyStatus = "more_supported";
+    notes.push(`Visible death benefit of ${currencyToDisplay(deathBenefitValue)} is at least clearing the current starter review threshold.`);
+  }
+
+  if (basics.fundingPattern === "underfunded") {
+    adequacyStatus = "review";
+    notes.push("Funding appears under target, which can weaken long-term policy durability.");
+  }
+
+  if (basics.coiTrend === "increasing") {
+    notes.push("COI pressure is increasing in the visible statement trail.");
+  }
+
+  if (!ownerVisible) {
+    notes.push("Policy owner visibility is limited in the current extracted record.");
+  }
+  if (!insuredVisible) {
+    notes.push("Insured-name visibility is limited in the current extracted record.");
+  }
+
+  // Keep this explicit and honest until beneficiary extraction is added.
+  notes.push("Beneficiary visibility is not yet extracted from the current policy workflow.");
+
+  if (basics.confidenceScore < 0.45) {
+    adequacyStatus = "review";
+  }
+
+  const headline =
+    adequacyStatus === "more_supported"
+      ? "This policy currently looks more supported from a basic adequacy standpoint, but beneficiary and ownership review are still not complete."
+      : "This policy needs review before it can be treated as adequately protective for the household.";
+
+  const displayStatus =
+    adequacyStatus === "more_supported"
+      ? "More Supported"
+      : "Needs Review";
+
+  return {
+    adequacyStatus,
+    displayStatus,
+    ownerVisible,
+    insuredVisible,
+    beneficiaryVisibility: "not_extracted",
+    targetFloor,
+    notes: [...new Set(notes)].slice(0, 6),
+    headline,
   };
 }
 

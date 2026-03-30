@@ -24,6 +24,7 @@ import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { buildPolicyOptimizationEngine } from "../lib/insurance/policyOptimizationEngine";
 import {
   analyzePolicyBasics,
+  buildPolicyAdequacyReview,
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -670,6 +671,21 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       ),
     [basicPolicyAnalysis, comparisonSummary, insuranceRows.length, normalizedPolicy, statementTimeline]
   );
+  const adequacyReview = useMemo(
+    () =>
+      buildPolicyAdequacyReview(
+        {
+          normalizedPolicy,
+          comparisonSummary,
+          lifePolicy,
+          basics: basicPolicyAnalysis,
+        },
+        {
+          mortgageCount: debug?.scopedMortgageCount || 0,
+        }
+      ),
+    [basicPolicyAnalysis, comparisonSummary, debug?.scopedMortgageCount, lifePolicy, normalizedPolicy]
+  );
   const policyAiSummary = useMemo(
     () =>
       buildPolicyInsightSummary({
@@ -734,8 +750,10 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
         normalizedAnalytics,
         basicPolicyAnalysis,
         gapAnalysis,
+        adequacyReview,
       }),
     [
+      adequacyReview,
       basicPolicyAnalysis,
       bundle.policy,
       chargeSummary,
@@ -960,6 +978,38 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     {gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap"}
                   </div>
                 </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Adequacy Status
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {formatDisplayValue(adequacyReview?.displayStatus)}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Owner Visible
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.ownerVisible ? "Yes" : "Limited"}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Insured Visible
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.insuredVisible ? "Yes" : "Limited"}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Beneficiary Visibility
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.beneficiaryVisibility === "not_extracted" ? "Not extracted yet" : formatDisplayValue(adequacyReview?.beneficiaryVisibility)}
+                  </div>
+                </div>
               </div>
 
               {basicPolicyAnalysis?.flags?.length > 0 ? (
@@ -986,6 +1036,20 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     No additional protection notes are visible from the current extracted evidence.
                   </div>
                 )}
+              </div>
+
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>Adequacy Review</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  {adequacyReview?.headline || "Adequacy review is not available yet."}
+                </div>
+                {adequacyReview?.notes?.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                    {adequacyReview.notes.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </div>
           </SectionCard>

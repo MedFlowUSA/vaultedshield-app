@@ -1971,6 +1971,7 @@ export function buildPolicyReviewReport(policyBundle = {}) {
   const missingGroups = buildPolicyReviewMissingGroups(comparisonRow, policyBundle?.groupedIssues || []);
   const basicPolicyAnalysis = policyBundle?.basicPolicyAnalysis || {};
   const gapAnalysis = policyBundle?.gapAnalysis || {};
+  const adequacyReview = policyBundle?.adequacyReview || {};
   const snapshotTitle =
     comparisonRow?.product ||
     policy?.product_name ||
@@ -2037,6 +2038,18 @@ export function buildPolicyReviewReport(policyBundle = {}) {
         ],
       },
       {
+        id: "adequacy_review",
+        title: "Adequacy Review",
+        kind: "summary",
+        summary: adequacyReview?.headline || "Adequacy review is not available yet.",
+        items: [
+          { label: "Adequacy Status", value: displayReportValue(adequacyReview?.displayStatus) },
+          { label: "Owner Visible", value: adequacyReview?.ownerVisible ? "Yes" : "Limited" },
+          { label: "Insured Visible", value: adequacyReview?.insuredVisible ? "Yes" : "Limited" },
+          { label: "Beneficiary Visibility", value: adequacyReview?.beneficiaryVisibility === "not_extracted" ? "Not extracted yet" : displayReportValue(adequacyReview?.beneficiaryVisibility) },
+        ],
+      },
+      {
         id: "cost_of_insurance",
         title: "Cost of Insurance",
         kind: "summary",
@@ -2097,6 +2110,9 @@ export function buildPolicyReviewReport(policyBundle = {}) {
           ...missingGroups,
           ...(Array.isArray(gapAnalysis?.notes) && gapAnalysis.notes.length > 0
             ? [{ title: "Protection notes", items: gapAnalysis.notes }]
+            : []),
+          ...(Array.isArray(adequacyReview?.notes) && adequacyReview.notes.length > 0
+            ? [{ title: "Adequacy notes", items: adequacyReview.notes }]
             : []),
           ...(Array.isArray(basicPolicyAnalysis?.flags) && basicPolicyAnalysis.flags.length > 0
             ? [{ title: "Visibility flags", items: basicPolicyAnalysis.flags }]
