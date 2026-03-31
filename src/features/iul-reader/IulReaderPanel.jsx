@@ -425,6 +425,42 @@ export function IulReaderPanel({ reader, results }) {
             <p style={{ margin: "10px 0 14px 0", color: "#475569", lineHeight: "1.7" }}>{reader.projectionView.narrative}</p>
             {reader.projectionView.available ? (
               <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ padding: "14px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fed7aa" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Annual Review Support
+                      </div>
+                      <div style={{ marginTop: "6px", fontWeight: 700, color: "#7c2d12" }}>{reader.projectionView.annualReviewLabel}</div>
+                    </div>
+                    <ReaderStatusBadge status={reader.projectionView.annualReviewStatus}>
+                      {reader.projectionView.chronologyLabel}
+                    </ReaderStatusBadge>
+                  </div>
+                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
+                    <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#9a3412" }}>Statements Used</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.statementCount}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#9a3412" }}>Duplicate Dates</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.duplicateCount}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#9a3412" }}>Irregular Gaps</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.irregularGapCount}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "10px", color: "#7c2d12", lineHeight: "1.7" }}>{reader.projectionView.chronologyNote}</div>
+                  {reader.projectionView.annualReviewChecklist?.length > 0 ? (
+                    <ul style={{ margin: "10px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#7c2d12" }}>
+                      {reader.projectionView.annualReviewChecklist.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
                 {reader.projectionView.currentMatch ? (
                   <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fbff", border: "1px solid #dbe7ff" }}>
                     <div style={{ fontSize: "12px", color: "#64748b" }}>Current Policy-Year Match</div>

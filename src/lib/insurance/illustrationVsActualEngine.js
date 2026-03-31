@@ -37,10 +37,63 @@ function pushMissing(list, message) {
   if (message && !list.includes(message)) list.push(message);
 }
 
+function parseDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function analyzeStatementChronology(statementRows = []) {
+  const datedRows = [...(Array.isArray(statementRows) ? statementRows : [])]
+    .map((row) => ({
+      raw: row?.statement_date || row?.statement_date_value || null,
+      parsed: parseDate(row?.statement_date || row?.statement_date_value || null),
+    }))
+    .filter((entry) => entry.raw && entry.parsed)
+    .sort((left, right) => left.parsed.getTime() - right.parsed.getTime());
+
+  const duplicateDates =
+    datedRows.length - new Set(datedRows.map((entry) => entry.parsed.toISOString().slice(0, 10))).size;
+  let irregularGapCount = 0;
+  let widestGapDays = null;
+
+  for (let index = 1; index < datedRows.length; index += 1) {
+    const gapDays = Math.round((datedRows[index].parsed.getTime() - datedRows[index - 1].parsed.getTime()) / 86400000);
+    if (widestGapDays === null || gapDays > widestGapDays) widestGapDays = gapDays;
+    if (gapDays > 430) irregularGapCount += 1;
+  }
+
+  const status =
+    datedRows.length < 2
+      ? "limited"
+      : duplicateDates > 0 || irregularGapCount > 0
+        ? "mixed"
+        : "aligned";
+
+  const note =
+    status === "aligned"
+      ? "Statement chronology is reasonably clean across the visible annual history."
+      : status === "mixed"
+        ? duplicateDates > 0
+          ? "Duplicate or overlapping statement dates weaken the annual comparison read."
+          : "Statement spacing is irregular, so the annual comparison read may still be incomplete."
+        : "Fewer than two dated statements are visible, so chronology support remains limited.";
+
+  return {
+    status,
+    statementCount: datedRows.length,
+    duplicateDates,
+    irregularGapCount,
+    widestGapDays,
+    note,
+  };
+}
+
 function validateInputs({ normalizedAnalytics = {}, statementRows = [], missingData = [] }) {
   const projection = normalizedAnalytics?.illustration_projection || {};
   const currentMatch = projection?.current_projection_match || null;
   const benchmarkRows = Array.isArray(projection?.benchmark_rows) ? projection.benchmark_rows : [];
+  const chronology = analyzeStatementChronology(statementRows);
 
   if (!benchmarkRows.length) {
     pushMissing(missingData, "No usable illustration ledger rows were extracted from the current baseline packet.");
@@ -51,8 +104,13 @@ function validateInputs({ normalizedAnalytics = {}, statementRows = [], missingD
   if (!currentMatch?.actual_policy_year && !currentMatch?.matched_policy_year) {
     pushMissing(missingData, "Policy-year alignment is not visible enough for a clean illustration comparison.");
   }
+  if (chronology.status === "limited") {
+    pushMissing(missingData, "Fewer than two dated statements are visible for a cleaner annual comparison.");
+  } else if (chronology.status === "mixed") {
+    pushMissing(missingData, "Statement chronology is irregular, which weakens illustration-versus-actual confidence.");
+  }
 
-  return { projection, currentMatch, benchmarkRows };
+  return { projection, currentMatch, benchmarkRows, chronology };
 }
 
 function alignPolicyYears({ currentMatch, benchmarkRows = [], missingData = [] }) {
@@ -318,16 +376,21 @@ function chooseSelectedMetric({ metrics, variances, drivers = [] }) {
   return { key: "deathBenefit", metric: metrics.deathBenefit, label: "Death Benefit" };
 }
 
-function deriveConfidence({ alignmentConfidence, drivers = [], missingData = [] }) {
+function deriveConfidence({ alignmentConfidence, chronologyStatus = "limited", drivers = [], missingData = [] }) {
   if (alignmentConfidence === "low") return "low";
+  if (chronologyStatus === "mixed") return "low";
   if (alignmentConfidence === "high" && missingData.length <= 1) return "high";
+  if (chronologyStatus === "limited") return "moderate";
   if (drivers.some((driver) => driver.key === "incomplete_data")) return "low";
   return "moderate";
 }
 
-function buildConfidenceExplanation(confidence, alignmentConfidence) {
+function buildConfidenceExplanation(confidence, alignmentConfidence, chronologyStatus = "limited") {
   if (confidence === "high") {
     return "Confidence is high due to strong alignment between the illustration year and current policy duration.";
+  }
+  if (confidence === "low" && chronologyStatus === "mixed") {
+    return "Confidence is limited because the visible statement chronology is irregular or duplicated.";
   }
   if (confidence === "moderate") {
     return "Confidence is moderate due to partial alignment between the illustration and current policy timing.";
@@ -338,7 +401,7 @@ function buildConfidenceExplanation(confidence, alignmentConfidence) {
   return "Confidence is limited because the visible comparison support is still incomplete.";
 }
 
-function generateExplanation({ status, confidence, alignmentConfidence, drivers, metrics, variances, missingData }) {
+function generateExplanation({ status, confidence, alignmentConfidence, chronology, drivers, metrics, variances, missingData }) {
   const directAnswer =
     status === "ahead"
       ? "Based on the visible illustration and current in-force data, this policy appears ahead of the original pace."
@@ -354,6 +417,7 @@ function generateExplanation({ status, confidence, alignmentConfidence, drivers,
       : alignmentConfidence === "moderate"
         ? "This comparison is based on moderate alignment between the visible illustration year and current policy duration."
         : "This comparison is limited because the visible illustration year and current policy duration do not align cleanly.";
+  const chronologyContext = chronology?.note || "";
 
   const primaryDriver = drivers[0]?.summary ||
     "The current packet does not isolate a single clean driver strongly enough.";
@@ -371,7 +435,7 @@ function generateExplanation({ status, confidence, alignmentConfidence, drivers,
       : confidence === "moderate"
         ? "Confidence in this comparison is moderate."
         : "Confidence in this comparison is low because data support is still incomplete.";
-  const confidenceExplanation = buildConfidenceExplanation(confidence, alignmentConfidence);
+  const confidenceExplanation = buildConfidenceExplanation(confidence, alignmentConfidence, chronology?.status || "limited");
 
   return {
     directAnswer,
@@ -381,7 +445,7 @@ function generateExplanation({ status, confidence, alignmentConfidence, drivers,
     confidenceLine,
     confidenceExplanation,
     shortExplanation: `${directAnswer} ${primaryDriver} ${confidenceLine}`,
-    fullExplanation: [directAnswer, context, `The primary driver appears to be ${primaryDriver.charAt(0).toLowerCase()}${primaryDriver.slice(1)}`, impact, confidenceLine, confidenceExplanation].join(" "),
+    fullExplanation: [directAnswer, context, chronologyContext, `The primary driver appears to be ${primaryDriver.charAt(0).toLowerCase()}${primaryDriver.slice(1)}`, impact, confidenceLine, confidenceExplanation].filter(Boolean).join(" "),
     missingData: [...new Set(missingData)],
   };
 }
@@ -395,7 +459,7 @@ export function buildIllustrationVsActualAnalysis({
   missingData = [],
 } = {}) {
   const localMissingData = [...new Set(missingData)];
-  const { projection, currentMatch, benchmarkRows } = validateInputs({
+  const { projection, currentMatch, benchmarkRows, chronology } = validateInputs({
     normalizedAnalytics,
     statementRows,
     missingData: localMissingData,
@@ -434,6 +498,7 @@ export function buildIllustrationVsActualAnalysis({
   });
   const confidence = deriveConfidence({
     alignmentConfidence: alignment.alignmentConfidence,
+    chronologyStatus: chronology.status,
     drivers: driverResults.drivers,
     missingData: localMissingData,
   });
@@ -446,6 +511,7 @@ export function buildIllustrationVsActualAnalysis({
     status,
     confidence,
     alignmentConfidence: alignment.alignmentConfidence,
+    chronology,
     drivers: driverResults.drivers,
     metrics,
     variances,
@@ -456,6 +522,7 @@ export function buildIllustrationVsActualAnalysis({
     status,
     confidence,
     alignmentConfidence: alignment.alignmentConfidence,
+    chronologySupport: chronology,
     policyYearAlignment: {
       actualPolicyYear: alignment.actualPolicyYear,
       matchedPolicyYear: alignment.matchedPolicyYear,
@@ -526,6 +593,7 @@ export function buildIllustrationVsActualAnalysis({
       projectionComparisonPossible: Boolean(projection?.comparison_possible),
       currentMatch,
       benchmarkRowUsed: alignment.matchedBenchmarkRow || null,
+      chronology,
       premiumRatio: driverResults.premiumRatio,
       loanRatio: driverResults.loanRatio,
     },

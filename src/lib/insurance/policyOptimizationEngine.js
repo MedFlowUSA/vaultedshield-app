@@ -91,6 +91,14 @@ export function buildPolicyOptimizationEngine({
   const chargeDragLevel = iulV2?.chargeAnalysis?.chargeDragLevel || "unknown";
   const fundingStatus = iulV2?.fundingAnalysis?.status || "unclear";
   const riskLevel = iulV2?.riskAnalysis?.overallRisk || "unclear";
+  const strategyVisibility =
+    iulV2?.strategyAnalysis?.strategiesVisible
+      ? iulV2?.strategyAnalysis?.allocationsVisible
+        ? "strong"
+        : "moderate"
+      : "limited";
+  const strategyConcentration = iulV2?.strategyAnalysis?.concentrationLevel || "unknown";
+  const chronologyStatus = comparison?.chronologySupport?.status || "limited";
 
   if (type === "iul" || type === "ul") {
     if (!comparison || comparison.status === "indeterminate") {
@@ -115,6 +123,35 @@ export function buildPolicyOptimizationEngine({
           "data_quality",
           "A fuller illustration and additional statements would improve optimization confidence materially.",
           "medium"
+        )
+      );
+    }
+
+    if (chronologyStatus === "mixed") {
+      recommendations.push(
+        buildRecommendation(
+          "data",
+          "Clean up annual statement chronology",
+          "The visible annual statement sequence is irregular or duplicated. Confirm one clean statement per period before leaning too hard on drift conclusions.",
+          "medium",
+          "low"
+        )
+      );
+      risks.push(
+        buildRisk(
+          "chronology_support",
+          "Trend and illustration comparisons are less dependable when annual statement timing is irregular.",
+          "medium"
+        )
+      );
+    } else if (chronologyStatus === "limited") {
+      recommendations.push(
+        buildRecommendation(
+          "data",
+          "Add more dated annual statements",
+          "One clean current statement helps with current position, but a stronger optimization read still needs broader annual history.",
+          "medium",
+          "low"
         )
       );
     }
@@ -169,6 +206,35 @@ export function buildPolicyOptimizationEngine({
           "Visible charges are meaningful enough to review alongside funding and current value development.",
           chargeDragLevel === "high" ? "high" : "medium",
           iulV2?.chargeAnalysis?.confidence || "moderate"
+        )
+      );
+    }
+
+    if (strategyVisibility === "limited") {
+      recommendations.push(
+        buildRecommendation(
+          "strategy",
+          "Upload current allocation detail",
+          "Indexed strategy and allocation visibility are still too thin to judge whether current crediting structure matches the policy's intended role.",
+          "medium",
+          "low"
+        )
+      );
+    } else if (strategyConcentration === "concentrated") {
+      recommendations.push(
+        buildRecommendation(
+          "strategy",
+          "Review concentration in the current strategy mix",
+          "The visible allocation looks concentrated in one main sleeve, so cap, spread, participation, and concentration risk deserve a closer look.",
+          "medium",
+          iulV2?.strategyAnalysis?.confidence || "moderate"
+        )
+      );
+      opportunities.push(
+        buildOpportunity(
+          "strategy_balance",
+          "A more balanced strategy mix could reduce dependence on one visible sleeve or one set of crediting terms.",
+          "medium"
         )
       );
     }
@@ -274,6 +340,7 @@ export function buildPolicyOptimizationEngine({
         ? "at_risk"
         : (
             comparison?.status === "behind" ||
+            chronologyStatus === "mixed" ||
             riskLevel === "moderate" ||
             uniqueRecommendations.some((item) => item.impact === "high") ||
             uniqueRisks.some((item) => item.severity === "medium")

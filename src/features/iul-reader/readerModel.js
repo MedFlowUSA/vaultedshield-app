@@ -655,6 +655,59 @@ function buildProjectionView(results) {
   const projection = results.normalizedAnalytics?.illustration_projection || {};
   const benchmarkRows = Array.isArray(projection.benchmark_rows) ? projection.benchmark_rows : [];
   const currentMatch = projection.current_projection_match || null;
+  const illustrationComparison = results.iulV2?.illustrationComparison || {};
+  const optimization = results.optimizationAnalysis || null;
+  const chronology = illustrationComparison.chronologySupport || null;
+  const chronologyStatus = chronology?.status || "limited";
+  const duplicateCount = Number(chronology?.duplicateDateCount || 0);
+  const irregularGapCount = Number(chronology?.irregularGapCount || 0);
+  const statementCount = Number(chronology?.statementCount || (Array.isArray(results.statementResults) ? results.statementResults.length : 0));
+
+  const annualReviewStatus =
+    chronologyStatus === "healthy" || chronologyStatus === "strong"
+      ? "confirmed"
+      : chronologyStatus === "mixed"
+        ? "missing"
+        : "review";
+
+  const annualReviewLabel =
+    annualReviewStatus === "confirmed"
+      ? "Annual review support is clean"
+      : annualReviewStatus === "review"
+        ? "Annual review support is usable but limited"
+        : "Annual review support needs cleanup";
+
+  const chronologyLabel =
+    chronologyStatus === "healthy" || chronologyStatus === "strong"
+      ? "Chronology aligned"
+      : chronologyStatus === "mixed"
+        ? "Chronology mixed"
+        : "Chronology limited";
+
+  const chronologyNote =
+    chronology?.note ||
+    (chronologyStatus === "mixed"
+      ? "Visible statement timing is irregular or duplicated, which weakens year-over-year comparison confidence."
+      : chronologyStatus === "healthy" || chronologyStatus === "strong"
+        ? "Visible statements appear reasonably clean for year-over-year review."
+        : "There are not enough dated statements yet for a stronger annual comparison read.");
+
+  const annualReviewChecklist = [];
+  if (chronologyStatus === "mixed") {
+    annualReviewChecklist.push("Confirm one clean annual statement per policy year before leaning on drift conclusions.");
+  } else if (chronologyStatus !== "healthy" && chronologyStatus !== "strong") {
+    annualReviewChecklist.push("Add more dated annual statements to improve year-over-year comparison confidence.");
+  }
+
+  if (!currentMatch) {
+    annualReviewChecklist.push("Upload a fuller illustration ledger or in-force ledger with yearly checkpoints.");
+  }
+
+  if (optimization?.recommendations?.length) {
+    optimization.recommendations.slice(0, 2).forEach((item) => {
+      if (item?.title) annualReviewChecklist.push(item.title);
+    });
+  }
 
   return {
     available: Boolean(projection.comparison_possible),
@@ -664,6 +717,15 @@ function buildProjectionView(results) {
       projection.narrative ||
       "Projection support is limited because extracted illustration ledger checkpoints were not available.",
     limitations: projection.limitations || [],
+    chronologyStatus,
+    chronologyLabel,
+    chronologyNote,
+    annualReviewStatus,
+    annualReviewLabel,
+    statementCount,
+    duplicateCount,
+    irregularGapCount,
+    annualReviewChecklist: [...new Set(annualReviewChecklist)].slice(0, 4),
   };
 }
 
