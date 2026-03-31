@@ -23,7 +23,6 @@ import HealthInsuranceHubPage from "./pages/HealthInsuranceHubPage";
 import HealthPlanDetailPage from "./pages/HealthPlanDetailPage";
 import HomeownersHubPage from "./pages/HomeownersHubPage";
 import HomeownersPolicyDetailPage from "./pages/HomeownersPolicyDetailPage";
-import LifePolicyDetailPage from "./pages/LifePolicyDetailPage";
 import LifePolicyUploadPage from "./pages/LifePolicyUploadPage";
 import BankingHubPage from "./pages/BankingHubPage";
 import MortgageHubPage from "./pages/MortgageHubPage";
@@ -214,7 +213,7 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
     case "/insurance/health":
       return <HealthInsuranceHubPage onNavigate={navigate} />;
     case "/insurance/life/policy-detail":
-      return <LifePolicyDetailPage onNavigate={navigate} />;
+      return <LifePolicyUploadPage onNavigate={navigate} />;
     case "/insurance/life/upload":
       return <LifePolicyUploadPage onNavigate={navigate} />;
     case "/banking":

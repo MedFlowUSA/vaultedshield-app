@@ -1163,8 +1163,8 @@ export default function LifePolicyUploadPage({ onNavigate }) {
             <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(false)}>
               Back To Insurance Intelligence
             </button>
-            <button type="button" onClick={() => onNavigate?.("/insurance/life/policy-detail")} style={actionStyle(false)}>
-              Review Upload Workflow
+            <button type="button" onClick={() => onNavigate?.("/guidance")} style={actionStyle(false)}>
+              Open Guidance
             </button>
           </div>
         }

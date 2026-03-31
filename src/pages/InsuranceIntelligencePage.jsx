@@ -672,10 +672,10 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             </button>
             <button
               type="button"
-              onClick={() => onNavigate?.("/insurance/life/policy-detail")}
+              onClick={() => onNavigate?.("/guidance")}
               style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
             >
-              Review Upload Workflow
+              Open Guidance
             </button>
           </div>
         </section>
