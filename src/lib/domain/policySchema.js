@@ -70,6 +70,7 @@ export function createEmptyNormalizedPolicy() {
       rider_charge: null,
       rider_names: [],
       rider_summary: "",
+      death_benefit_option: "",
     },
     policy_timing: {
       statement_date: "",

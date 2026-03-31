@@ -3287,8 +3287,44 @@ export function buildPolicyIntelligence({ baseline, statements, legacyAnalytics,
     })),
   };
   normalizedPolicy.riders = {
-    detected_riders: hasValue(latestStatement?.fields?.rider_charge) ? ["Visible rider charge row detected"] : [],
+    detected_riders: (() => {
+      const riderText = [
+        fieldDisplay(baseline?.fields?.rider_summary),
+        fieldDisplay(latestStatement?.fields?.rider_summary),
+        hasValue(latestStatement?.fields?.rider_charge) ? "Visible rider charge row detected" : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const matches = [
+        ...riderText.matchAll(
+          /\b(accelerated(?:\s+death|\s+benefit)?|chronic illness|terminal illness|critical illness|overloan protection|waiver of (?:monthly deduction|charges|premium)|disability waiver|long term care|ltc|return of premium|guaranteed insurability|children'?s term|spouse(?: rider)?|paid[- ]?up additions?)\b/gi
+        ),
+      ]
+        .map((match) => String(match[0] || "").trim())
+        .filter(Boolean);
+      return [...new Set(matches.length > 0 ? matches : hasValue(latestStatement?.fields?.rider_charge) ? ["Visible rider charge row detected"] : [])];
+    })(),
     rider_charge: latestStatement?.fields?.rider_charge || null,
+    rider_names: (() => {
+      const riderText = [
+        fieldDisplay(baseline?.fields?.rider_summary),
+        fieldDisplay(latestStatement?.fields?.rider_summary),
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const matches = [
+        ...riderText.matchAll(
+          /\b(accelerated(?:\s+death|\s+benefit)?|chronic illness|terminal illness|critical illness|overloan protection|waiver of (?:monthly deduction|charges|premium)|disability waiver|long term care|ltc|return of premium|guaranteed insurability|children'?s term|spouse(?: rider)?|paid[- ]?up additions?)\b/gi
+        ),
+      ]
+        .map((match) => String(match[0] || "").trim())
+        .filter(Boolean);
+      return [...new Set(matches)];
+    })(),
+    rider_summary:
+      fieldDisplay(baseline?.fields?.rider_summary) || fieldDisplay(latestStatement?.fields?.rider_summary) || "",
+    death_benefit_option:
+      fieldDisplay(baseline?.fields?.option_type) || fieldDisplay(latestStatement?.fields?.option_type) || "",
   };
   normalizedPolicy.policy_timing = {
     statement_date: fieldDisplay(latestStatement?.fields?.statement_date),

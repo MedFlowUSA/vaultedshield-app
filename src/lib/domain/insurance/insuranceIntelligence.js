@@ -108,12 +108,19 @@ function resolveCoverageStructureSignals(policy = {}) {
   const lifePolicyRiders = lifePolicy?.riders || {};
 
   const optionType = normalizeText(
-    lifePolicy?.coverage?.optionType || deathBenefit?.option_type?.display_value || deathBenefit?.option_type?.value || deathBenefit?.option_type
+    lifePolicy?.coverage?.optionType ||
+      lifePolicy?.riders?.deathBenefitOption ||
+      deathBenefit?.option_type?.display_value ||
+      deathBenefit?.option_type?.value ||
+      deathBenefit?.option_type
   );
   const detectedRiders = [
     ...safeArray(riders?.detected_riders),
     ...safeArray(riders?.rider_names),
     ...safeArray(lifePolicyRiders?.detectedRiders),
+    ...safeArray(lifePolicyRiders?.riderNames),
+    normalizeText(riders?.rider_summary),
+    normalizeText(lifePolicyRiders?.riderSummary),
   ]
     .map((value) => normalizeText(value))
     .filter(Boolean);

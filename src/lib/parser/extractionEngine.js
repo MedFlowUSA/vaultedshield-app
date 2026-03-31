@@ -3873,6 +3873,7 @@ export function parseIllustrationDocument({ pages, fileName }) {
     "death_benefit",
     "initial_face_amount",
     "option_type",
+    "rider_summary",
     "planned_premium",
     "annual_target_premium",
     "premium_paid",
@@ -3996,6 +3997,8 @@ export function parseIllustrationDocument({ pages, fileName }) {
       beneficiaryStatus: "beneficiary_status",
       deathBenefit: "death_benefit",
       initialFaceAmount: "initial_face_amount",
+      deathBenefitOption: "option_type",
+      riderSummary: "rider_summary",
       periodicPremium: "planned_premium",
       annualTargetPremium: "annual_target_premium",
       paymentMode: "payment_mode",
@@ -4032,7 +4035,9 @@ export function parseStatementDocument({ pages, fileName }) {
     "insured_age",
     "death_benefit",
     "minimum_death_benefit",
+    "option_type",
     "planned_premium",
+    "rider_summary",
     "policy_charges_total",
     "premium_paid",
     "accumulation_value",
@@ -4163,7 +4168,9 @@ export function parseStatementDocument({ pages, fileName }) {
       beneficiaryStatus: "beneficiary_status",
       deathBenefit: "death_benefit",
       minimumDeathBenefit: "minimum_death_benefit",
+      deathBenefitOption: "option_type",
       periodicPremium: "planned_premium",
+      riderSummary: "rider_summary",
       accumulationValue: "accumulation_value",
       cashValue: "cash_value",
       cashSurrenderValue: "cash_surrender_value",
@@ -4213,6 +4220,27 @@ export function sortStatementsChronologically(statementHistory) {
     if (!bDate) return -1;
     return aDate > bDate ? 1 : -1;
   });
+}
+
+function extractDetectedRiderNames(...values) {
+  const combined = values
+    .flatMap((value) => {
+      if (Array.isArray(value)) return value;
+      if (value === null || value === undefined) return [];
+      return [value];
+    })
+    .map((value) => String(value || ""))
+    .join(" | ");
+
+  const matches = [
+    ...combined.matchAll(
+      /\b(accelerated(?:\s+death|\s+benefit)?|chronic illness|terminal illness|critical illness|overloan protection|waiver of (?:monthly deduction|charges|premium)|disability waiver|long term care|ltc|return of premium|guaranteed insurability|children'?s term|spouse(?: rider)?|paid[- ]?up additions?)\b/gi
+    ),
+  ]
+    .map((match) => String(match[0] || "").trim())
+    .filter(Boolean);
+
+  return [...new Set(matches)];
 }
 
 function getPreferredCurrentDeathBenefit(baseline, latestStatement) {

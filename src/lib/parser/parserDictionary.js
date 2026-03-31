@@ -367,8 +367,8 @@ export const PARSER_DICTIONARY = {
     },
     option_type: {
       type: "enum",
-      aliases: ["death benefit option", "option type"],
-      documentTypes: ["illustration"],
+      aliases: ["death benefit option", "option type", "death benefit option type", "option a", "option b", "level death benefit", "increasing death benefit"],
+      documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy schedule", "death benefit option"],
     },
     planned_premium: {
@@ -571,6 +571,23 @@ export const PARSER_DICTIONARY = {
       aliases: ["rider(s) charges", "rider charges", "rider charge", "cost of riders"],
       documentTypes: ["annual_statement"],
       preferredMarkers: ["policy activity summary by month", "rider charges"],
+    },
+    rider_summary: {
+      type: "text",
+      aliases: [
+        "riders",
+        "benefit riders",
+        "policy riders",
+        "optional riders",
+        "coverage riders",
+        "insured riders",
+        "rider summary",
+        "accelerated benefit rider",
+        "chronic illness rider",
+        "waiver of monthly deduction rider",
+      ],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy schedule", "rider summary", "benefits", "coverage detail"],
     },
     expense_charge: {
       type: "currency",

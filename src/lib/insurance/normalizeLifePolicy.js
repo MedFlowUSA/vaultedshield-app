@@ -130,7 +130,10 @@ export function normalizeLifePolicy({
     riders: {
       ...riders,
       detectedRiders: Array.isArray(riders?.detected_riders) ? riders.detected_riders : [],
+      riderNames: Array.isArray(riders?.rider_names) ? riders.rider_names : [],
+      riderSummary: display(riders?.rider_summary),
       riderCharge: display(riders?.rider_charge),
+      deathBenefitOption: display(riders?.death_benefit_option),
     },
     timing: {
       issueDate: identity?.issue_date || timing?.issue_date || null,
