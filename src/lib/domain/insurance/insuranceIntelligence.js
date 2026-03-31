@@ -299,20 +299,48 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
         lowConfidencePolicies: 0,
         confidentPolicies: 0,
         missingDeathBenefitPolicies: 0,
+        ownerVisiblePolicies: 0,
+        insuredVisiblePolicies: 0,
+        beneficiaryNamedPolicies: 0,
+        beneficiaryLimitedPolicies: 0,
       },
     };
   }
 
   const reads = safePolicies.map((policy) => {
     const basics = analyzePolicyBasics({ comparisonSummary: policy });
+    const adequacy = buildPolicyAdequacyReview(
+      {
+        comparisonSummary: policy,
+        normalizedPolicy: {
+          policy_identity: {
+            owner_name: policy?.owner_name || "",
+            insured_name: policy?.insured_name || "",
+            primary_beneficiary_name: policy?.primary_beneficiary_name || "",
+            contingent_beneficiary_name: policy?.contingent_beneficiary_name || "",
+            beneficiary_status: policy?.beneficiary_status || "",
+          },
+        },
+      },
+      householdContext
+    );
     const gap = detectInsuranceGaps(
       {
         comparisonSummary: policy,
         basics,
+        normalizedPolicy: {
+          policy_identity: {
+            owner_name: policy?.owner_name || "",
+            insured_name: policy?.insured_name || "",
+            primary_beneficiary_name: policy?.primary_beneficiary_name || "",
+            contingent_beneficiary_name: policy?.contingent_beneficiary_name || "",
+            beneficiary_status: policy?.beneficiary_status || "",
+          },
+        },
       },
       { ...householdContext, totalPolicies: safePolicies.length }
     );
-    return { policy, basics, gap };
+    return { policy, basics, adequacy, gap };
   });
 
   const totalCoverage = safePolicies.reduce((sum, policy) => {
@@ -324,11 +352,21 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   const confidentPolicies = reads.filter((item) => (item.gap.confidence || 0) >= 0.75);
   const missingDeathBenefitPolicies = reads.filter((item) => !item.basics.hasDeathBenefit);
   const increasingCoiPolicies = reads.filter((item) => item.basics.coiTrend === "increasing");
+  const ownerVisiblePolicies = reads.filter((item) => item.adequacy.ownerVisible);
+  const insuredVisiblePolicies = reads.filter((item) => item.adequacy.insuredVisible);
+  const beneficiaryNamedPolicies = reads.filter(
+    (item) => item.adequacy.beneficiaryVisibility === "named"
+  );
+  const beneficiaryLimitedPolicies = reads.filter(
+    (item) => item.adequacy.beneficiaryVisibility !== "named" && item.adequacy.beneficiaryVisibility !== "mentioned"
+  );
   const averageConfidence =
     reads.reduce((sum, item) => sum + Number(item.gap.confidence || 0), 0) / Math.max(reads.length, 1);
 
   const status =
-    gapPolicies.length > 0 || lowConfidencePolicies.length > Math.ceil(safePolicies.length / 2)
+    gapPolicies.length > 0 ||
+    lowConfidencePolicies.length > Math.ceil(safePolicies.length / 2) ||
+    beneficiaryLimitedPolicies.length > Math.ceil(safePolicies.length / 2)
       ? "Needs Review"
       : averageConfidence >= 0.75
         ? "Better Supported"
@@ -343,6 +381,18 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   }
   if (lowConfidencePolicies.length > 0) {
     notes.push(`${pluralize(lowConfidencePolicies.length, "policy")} still read with low confidence and should be refreshed with stronger document support.`);
+  }
+  if (ownerVisiblePolicies.length < safePolicies.length) {
+    notes.push(`${pluralize(safePolicies.length - ownerVisiblePolicies.length, "policy")} still have limited owner visibility.`);
+  }
+  if (insuredVisiblePolicies.length < safePolicies.length) {
+    notes.push(`${pluralize(safePolicies.length - insuredVisiblePolicies.length, "policy")} still have limited insured-name visibility.`);
+  }
+  if (beneficiaryNamedPolicies.length > 0) {
+    notes.push(`${pluralize(beneficiaryNamedPolicies.length, "policy")} now show named beneficiary visibility in the saved packet.`);
+  }
+  if (beneficiaryLimitedPolicies.length > 0) {
+    notes.push(`${pluralize(beneficiaryLimitedPolicies.length, "policy")} still have limited beneficiary visibility and should be reviewed with fuller identity pages.`);
   }
   if (increasingCoiPolicies.length > 0) {
     notes.push(`${pluralize(increasingCoiPolicies.length, "policy")} show increasing COI pressure in the visible statements.`);
@@ -371,6 +421,10 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
       lowConfidencePolicies: lowConfidencePolicies.length,
       confidentPolicies: confidentPolicies.length,
       missingDeathBenefitPolicies: missingDeathBenefitPolicies.length,
+      ownerVisiblePolicies: ownerVisiblePolicies.length,
+      insuredVisiblePolicies: insuredVisiblePolicies.length,
+      beneficiaryNamedPolicies: beneficiaryNamedPolicies.length,
+      beneficiaryLimitedPolicies: beneficiaryLimitedPolicies.length,
     },
   };
 }
