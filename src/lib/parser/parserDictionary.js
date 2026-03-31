@@ -280,6 +280,8 @@ export const PARSER_DICTIONARY = {
         minimum_death_benefit: ["minimum death benefit", "guaranteed minimum death benefit"],
         owner_name: ["owner name", "policy owner"],
         insured_name: ["insured name", "insured"],
+        trustee_name: ["trustee", "current trustee", "trustee name", "acting trustee"],
+        ownership_structure: ["ownership", "ownership structure", "owner type", "policy ownership", "trust owner"],
         primary_beneficiary_name: ["primary beneficiary", "primary beneficiary name", "beneficiary name", "beneficiary"],
         contingent_beneficiary_name: ["contingent beneficiary", "secondary beneficiary", "alternate beneficiary", "contingent beneficiary name"],
         beneficiary_status: ["beneficiary", "beneficiary designation", "beneficiary information", "designated beneficiary"],
@@ -426,6 +428,18 @@ export const PARSER_DICTIONARY = {
       aliases: ["insured", "insured name", "primary insured"],
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "policy schedule"],
+    },
+    trustee_name: {
+      type: "text",
+      aliases: ["trustee", "current trustee", "trustee name", "acting trustee"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy summary", "ownership", "trust information"],
+    },
+    ownership_structure: {
+      type: "text",
+      aliases: ["ownership", "ownership structure", "owner type", "policy ownership", "trust owner", "ownership type"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy summary", "ownership", "trust information"],
     },
     primary_beneficiary_name: {
       type: "text",

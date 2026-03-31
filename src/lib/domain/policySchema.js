@@ -8,6 +8,8 @@ export function createEmptyNormalizedPolicy() {
       issue_date: "",
       insured_name: "",
       owner_name: "",
+      trustee_name: "",
+      ownership_structure: "",
       primary_beneficiary_name: "",
       contingent_beneficiary_name: "",
       beneficiary_status: "",

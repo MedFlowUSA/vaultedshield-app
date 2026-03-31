@@ -87,6 +87,8 @@ export function normalizeLifePolicy({
       policyNumber: display(identity?.policy_number),
       insuredName: display(identity?.insured_name),
       ownerName: display(identity?.owner_name),
+      trusteeName: display(identity?.trustee_name),
+      ownershipStructure: display(identity?.ownership_structure),
       primaryBeneficiaryName: display(identity?.primary_beneficiary_name),
       contingentBeneficiaryName: display(identity?.contingent_beneficiary_name),
       beneficiaryStatus: display(identity?.beneficiary_status),

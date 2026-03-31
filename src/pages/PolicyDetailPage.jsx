@@ -1004,6 +1004,22 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
                 <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Ownership Structure
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.ownershipStructure || (adequacyReview?.trustOwned ? "Trust-style ownership" : "Limited")}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Trustee Visibility
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.trusteeName || (adequacyReview?.trusteeVisible ? "Yes" : "Limited")}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Beneficiary Visibility
                   </div>
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>

@@ -859,6 +859,13 @@ export function buildPolicyComparisonSummary({ policyId = null, normalizedPolicy
     carrier_name: policyIdentity.carrier_name || null,
     product_name: policyIdentity.product_name || null,
     policy_type: policyIdentity.policy_type || null,
+    owner_name: policyIdentity.owner_name || null,
+    insured_name: policyIdentity.insured_name || null,
+    trustee_name: policyIdentity.trustee_name || null,
+    ownership_structure: policyIdentity.ownership_structure || null,
+    primary_beneficiary_name: policyIdentity.primary_beneficiary_name || null,
+    contingent_beneficiary_name: policyIdentity.contingent_beneficiary_name || null,
+    beneficiary_status: policyIdentity.beneficiary_status || null,
     issue_date: policyIdentity.issue_date || null,
     death_benefit: deathBenefit,
     planned_premium: funding.planned_premium?.display_value || null,
@@ -945,6 +952,13 @@ export function buildVaultedPolicyComparisonRows(policies = []) {
     policy_id: policy.policy_id || null,
     carrier: policy.carrier_name ?? null,
     product: policy.product_name ?? null,
+    owner_name: policy.owner_name ?? null,
+    insured_name: policy.insured_name ?? null,
+    trustee_name: policy.trustee_name ?? null,
+    ownership_structure: policy.ownership_structure ?? null,
+    primary_beneficiary_name: policy.primary_beneficiary_name ?? null,
+    contingent_beneficiary_name: policy.contingent_beneficiary_name ?? null,
+    beneficiary_status: policy.beneficiary_status ?? null,
     issue_date: policy.issue_date ?? null,
     death_benefit: policy.death_benefit ?? null,
     premium: policy.planned_premium ?? null,
@@ -2107,8 +2121,10 @@ export function buildPolicyReviewReport(policyBundle = {}) {
         summary: adequacyReview?.headline || "Adequacy review is not available yet.",
         items: [
           { label: "Adequacy Status", value: displayReportValue(adequacyReview?.displayStatus) },
+          { label: "Ownership Structure", value: displayReportValue(adequacyReview?.ownershipStructure) },
           { label: "Owner Visible", value: adequacyReview?.ownerVisible ? "Yes" : "Limited" },
           { label: "Insured Visible", value: adequacyReview?.insuredVisible ? "Yes" : "Limited" },
+          { label: "Trustee Visible", value: adequacyReview?.trusteeVisible ? "Yes" : "Limited" },
           {
             label: "Beneficiary Visibility",
             value:
@@ -3145,6 +3161,9 @@ export function buildPolicyIntelligence({ baseline, statements, legacyAnalytics,
     issue_date: fieldDisplay(baseline?.fields?.issue_date),
     insured_name: fieldDisplay(baseline?.fields?.insured_name) || fieldDisplay(latestStatement?.fields?.insured_name) || "",
     owner_name: fieldDisplay(baseline?.fields?.owner_name) || fieldDisplay(latestStatement?.fields?.owner_name) || "",
+    trustee_name: fieldDisplay(baseline?.fields?.trustee_name) || fieldDisplay(latestStatement?.fields?.trustee_name) || "",
+    ownership_structure:
+      fieldDisplay(baseline?.fields?.ownership_structure) || fieldDisplay(latestStatement?.fields?.ownership_structure) || "",
     primary_beneficiary_name:
       fieldDisplay(baseline?.fields?.primary_beneficiary_name) ||
       fieldDisplay(latestStatement?.fields?.primary_beneficiary_name) ||
