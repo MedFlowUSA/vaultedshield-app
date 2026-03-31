@@ -36,6 +36,39 @@ function safeDevLog(label, payload) {
   }
 }
 
+function buildDiagnostics(payload) {
+  return import.meta.env.DEV ? payload : undefined;
+}
+
+function buildExtractionResult({
+  success,
+  file,
+  text = "",
+  pages = [],
+  pageCount = 0,
+  warnings = [],
+  classifiedError = null,
+  metadata = {},
+  diagnostics,
+}) {
+  return {
+    success,
+    sourceType: "pdf",
+    fileName: file?.name || "",
+    text,
+    pages: Array.isArray(pages) ? pages : [],
+    pageCount: Number.isFinite(Number(pageCount)) ? Number(pageCount) : 0,
+    warnings: Array.isArray(warnings) ? warnings.filter(Boolean) : [],
+    classifiedError,
+    diagnostics: buildDiagnostics(diagnostics),
+    metadata: {
+      fileName: file?.name || "",
+      size: file?.size || 0,
+      ...metadata,
+    },
+  };
+}
+
 function buildPdfExtractionError(kind, message, cause, meta = {}) {
   const nextError = new Error(message);
   nextError.extractionKind = kind;
@@ -255,12 +288,40 @@ export async function extractTextFromPdf(pdf) {
 }
 
 export async function extractPdfTextSafe(file) {
-  validatePdfFile(file);
-
   const userAgent = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
   const mobileSafari = isLikelyMobileSafari();
   const readAttempts = ["arrayBuffer", "fileReader"];
   let lastError = null;
+
+  try {
+    validatePdfFile(file);
+  } catch (error) {
+    error.extractionResult = buildExtractionResult({
+      success: false,
+      file,
+      text: "",
+      pages: [],
+      pageCount: 0,
+      warnings: [],
+      classifiedError: {
+        kind: error?.extractionKind || "invalid_file",
+        message: error?.message || "Invalid or missing PDF file.",
+      },
+      metadata: {
+        methodUsed: "pre_validation",
+        retryUsed: false,
+      },
+      diagnostics: {
+        userAgent,
+        mobileSafari,
+        fileName: file?.name || null,
+        fileSize: file?.size || null,
+        failureStage: error?.extractionKind || "invalid_file",
+        errorMessage: error?.message || "Invalid or missing PDF file.",
+      },
+    });
+    throw error;
+  }
 
   for (const preferredMethod of readAttempts) {
     let loadingTask = null;
@@ -291,6 +352,18 @@ export async function extractPdfTextSafe(file) {
       pdf = openResult.pdf;
 
       const extractionResult = await extractTextFromPdf(pdf);
+      const warnings = openResult.retryUsed
+        ? ["Used mobile-safe PDF compatibility retry while opening this file."]
+        : [];
+      const diagnostics = {
+        userAgent,
+        mobileSafari,
+        methodUsed: readResult.methodUsed,
+        retryUsed: openResult.retryUsed,
+        pageCount: extractionResult.pageCount,
+        bufferLength: bytes.byteLength,
+        failureStage: null,
+      };
 
       safeDevLog("[VaultedShield] safePdfExtraction success", {
         fileName: file?.name || null,
@@ -300,19 +373,49 @@ export async function extractPdfTextSafe(file) {
         failureStage: null,
       });
 
-      return {
+      return buildExtractionResult({
+        success: true,
+        file,
         text: extractionResult.text,
         pages: extractionResult.pages,
         pageCount: extractionResult.pageCount,
+        warnings,
+        classifiedError: null,
         metadata: {
-          fileName: file?.name || "",
-          size: file?.size || 0,
           methodUsed: readResult.methodUsed,
           retryUsed: openResult.retryUsed,
         },
-      };
+        diagnostics,
+      });
     } catch (error) {
+      const classifiedError = {
+        kind: error?.extractionKind || "unknown",
+        message: error?.message || "PDF extraction failed.",
+      };
+      const diagnostics = {
+        userAgent,
+        mobileSafari,
+        fileName: file?.name || null,
+        fileSize: file?.size || null,
+        preferredMethod,
+        failureStage: error?.extractionKind || "unknown",
+        errorMessage: error?.message || String(error),
+      };
       lastError = error;
+      error.extractionResult = buildExtractionResult({
+        success: false,
+        file,
+        text: "",
+        pages: [],
+        pageCount: 0,
+        warnings: [],
+        classifiedError,
+        metadata: {
+          methodUsed: preferredMethod,
+          retryUsed: false,
+        },
+        diagnostics,
+      });
       safeDevLog("[VaultedShield] safePdfExtraction failure", {
         fileName: file?.name || null,
         preferredMethod,
@@ -336,5 +439,33 @@ export async function extractPdfTextSafe(file) {
     }
   }
 
-  throw lastError || buildPdfExtractionError("pdf_open_failed", "We could not open the selected PDF on this device.");
+  const fallbackError =
+    lastError || buildPdfExtractionError("pdf_open_failed", "We could not open the selected PDF on this device.");
+  if (!fallbackError.extractionResult) {
+    fallbackError.extractionResult = buildExtractionResult({
+      success: false,
+      file,
+      text: "",
+      pages: [],
+      pageCount: 0,
+      warnings: [],
+      classifiedError: {
+        kind: fallbackError?.extractionKind || "pdf_open_failed",
+        message: fallbackError?.message || "We could not open the selected PDF on this device.",
+      },
+      metadata: {
+        methodUsed: "unknown",
+        retryUsed: false,
+      },
+      diagnostics: {
+        userAgent,
+        mobileSafari,
+        fileName: file?.name || null,
+        fileSize: file?.size || null,
+        failureStage: fallbackError?.extractionKind || "pdf_open_failed",
+        errorMessage: fallbackError?.message || "We could not open the selected PDF on this device.",
+      },
+    });
+  }
+  throw fallbackError;
 }

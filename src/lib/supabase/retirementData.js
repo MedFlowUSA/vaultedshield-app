@@ -370,6 +370,8 @@ export async function uploadRetirementDocument({
       page_texts: textExtraction.pageTexts || [],
       page_count: textExtraction.pageCount || 0,
       text_extraction_error: textExtraction.errorSummary || null,
+      text_extraction_warnings: textExtraction.warnings || [],
+      text_extraction_classified_error: textExtraction.classifiedError || null,
     },
   });
 
@@ -459,6 +461,8 @@ async function resolveRetirementDocumentText(assetDocument) {
         (Array.isArray(metadata.page_texts) ? metadata.page_texts.length : 0),
       source: "asset_document_metadata",
       errorSummary: metadata.text_extraction_error || "",
+      warnings: Array.isArray(metadata.text_extraction_warnings) ? metadata.text_extraction_warnings : [],
+      classifiedError: metadata.text_extraction_classified_error || null,
     };
   }
 

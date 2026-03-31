@@ -1,6 +1,5 @@
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker?url";
 import { createEmptyRetirementSchema } from "../../domain/retirement";
+import { extractPdfTextSafe } from "../../../utils/pdf/safePdfExtraction";
 import { RETIREMENT_FIELD_DICTIONARY, RETIREMENT_FIELD_KEYS } from "./retirementFieldDictionary";
 import { classifyRetirementDocument } from "./retirementClassifier";
 import {
@@ -9,8 +8,6 @@ import {
   RETIREMENT_POSITION_ROW_HINTS,
   RETIREMENT_POSITION_SECTION_PATTERNS,
 } from "./retirementPositionDictionary";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 function splitLines(text) {
   return String(text || "")
@@ -653,21 +650,15 @@ export async function extractRetirementDocumentText(file) {
 
   try {
     if (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")) {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const pageTexts = [];
-
-      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-        const page = await pdf.getPage(pageNumber);
-        const textContent = await page.getTextContent();
-        pageTexts.push(textContent.items.map((item) => item.str).join("\n"));
-      }
-
+      const extraction = await extractPdfTextSafe(file);
       return {
-        rawText: pageTexts.join("\n\n"),
-        pageTexts,
-        pageCount: pageTexts.length,
+        rawText: extraction.text || "",
+        pageTexts: extraction.pages || [],
+        pageCount: extraction.pageCount || 0,
         errorSummary: "",
+        success: extraction.success,
+        warnings: extraction.warnings || [],
+        classifiedError: extraction.classifiedError || null,
       };
     }
 
@@ -677,6 +668,9 @@ export async function extractRetirementDocumentText(file) {
       pageTexts: rawText ? [rawText] : [],
       pageCount: rawText ? 1 : 0,
       errorSummary: "",
+      success: true,
+      warnings: [],
+      classifiedError: null,
     };
   } catch (error) {
     return {
@@ -684,6 +678,13 @@ export async function extractRetirementDocumentText(file) {
       pageTexts: [],
       pageCount: 0,
       errorSummary: error?.message || "Document text extraction failed",
+      success: false,
+      warnings: error?.extractionResult?.warnings || [],
+      classifiedError:
+        error?.extractionResult?.classifiedError ||
+        (error?.extractionKind
+          ? { kind: error.extractionKind, message: error.message || "Document text extraction failed" }
+          : null),
     };
   }
 }

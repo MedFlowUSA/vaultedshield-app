@@ -37,7 +37,7 @@ function getStatusTone(status) {
 function mapExtractionError(error) {
   switch (error?.extractionKind) {
     case "invalid_file":
-      return error.message || "Please choose a valid retirement PDF.";
+      return error.message || "Please choose a valid retirement PDF and retry.";
     case "oversized_mobile_pdf":
       return error.message || "This PDF is too large for reliable mobile processing.";
     case "file_read_failed":
@@ -47,7 +47,7 @@ function mapExtractionError(error) {
     case "page_extraction_failed":
       return error.message || "One or more pages in this retirement PDF could not be read.";
     default:
-      return "We could not process this retirement document yet. Please retry with a clearer PDF.";
+      return "We could not process this retirement PDF yet. Please retry with a clearer export or scan.";
   }
 }
 
@@ -56,6 +56,7 @@ function buildEmptyResult(file) {
     id: `${file.name}-${file.lastModified}-${file.size}`,
     fileName: file.name,
     pageCount: 0,
+    success: false,
     status: "error",
     statusLabel: "Extraction failed",
     extraction: null,
@@ -67,6 +68,8 @@ function buildEmptyResult(file) {
       status: "limited",
       missingFields: [],
     },
+    warnings: [],
+    classifiedError: null,
     errorMessage: "",
   };
 }
@@ -206,16 +209,22 @@ export default function RetirementUploadPage({ onNavigate }) {
           id: `${file.name}-${file.lastModified}-${file.size}`,
           fileName: file.name,
           pageCount: extraction.pageCount,
+          success: extraction.success,
           status: "success",
-          statusLabel: summary.status === "complete" ? "Data extracted successfully" : "Limited data detected",
+          statusLabel: summary.status === "complete" ? "Ready for review" : "Ready with limited data",
           extraction,
           summary,
           retirementRead,
+          warnings: extraction.warnings || [],
+          classifiedError: extraction.classifiedError || null,
           errorMessage: "",
         });
       } catch (fileError) {
         const failedResult = buildEmptyResult(file);
         failedResult.errorMessage = mapExtractionError(fileError);
+        failedResult.classifiedError =
+          fileError?.extractionResult?.classifiedError ||
+          (fileError?.extractionKind ? { kind: fileError.extractionKind, message: fileError.message || "" } : null);
         nextResults.push(failedResult);
       }
     }
@@ -287,6 +296,11 @@ export default function RetirementUploadPage({ onNavigate }) {
           />
           <div style={{ color: "#475569", lineHeight: "1.7" }}>
             Supported starter reads include 401(k), IRA, rollover IRA, pension, and brokerage retirement statement PDFs. If extracted data is limited, you can still use the planner manually.
+          </div>
+          <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
+            {results.length > 0
+              ? `${successful.length} retirement PDF${successful.length === 1 ? "" : "s"} ready for review.`
+              : "No retirement PDFs uploaded yet."}
           </div>
           {error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{error}</div> : null}
         </div>
@@ -514,7 +528,7 @@ export default function RetirementUploadPage({ onNavigate }) {
       <SectionCard title="Retirement Extraction Results" subtitle="Each file shows extraction status, page count, and a starter retirement summary.">
         {results.length === 0 ? (
           <EmptyState
-            title="No retirement documents processed yet"
+            title="No retirement PDFs uploaded yet"
             description="Upload one or more retirement PDFs to preview the shared safe-PDF extraction layer, starter retirement field detection, and readiness scoring."
           />
         ) : (
@@ -535,7 +549,7 @@ export default function RetirementUploadPage({ onNavigate }) {
                   <div style={{ display: "grid", gap: "6px" }}>
                     <div style={{ fontWeight: 700, color: "#0f172a", wordBreak: "break-word" }}>{result.fileName}</div>
                     <div style={{ color: "#64748b", fontSize: "14px" }}>
-                      {result.pageCount > 0 ? `${result.pageCount} page${result.pageCount === 1 ? "" : "s"}` : "Page count unavailable"}
+                      {result.pageCount > 0 ? `${result.pageCount} page${result.pageCount === 1 ? "" : "s"}` : "No readable pages detected"}
                     </div>
                   </div>
                   <div
@@ -581,14 +595,21 @@ export default function RetirementUploadPage({ onNavigate }) {
                         ))}
                       </ul>
                     ) : null}
+                    {result.warnings?.length > 0 ? (
+                      <div style={{ display: "grid", gap: "6px", color: "#92400e" }}>
+                        {result.warnings.map((warning) => (
+                          <div key={`${result.id}-${warning}`}>{warning}</div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
 
                 {result.status !== "error" ? (
                   <div style={{ color: "#64748b", lineHeight: "1.7" }}>
                     {result.summary.status === "complete"
-                      ? "Data extracted successfully from this retirement document."
-                      : `Limited data detected. Missing fields: ${result.summary.missingFields.join(", ") || "none"}.`}
+                      ? "This retirement PDF is ready for review."
+                      : `Limited data detected. Missing fields: ${result.summary.missingFields.join(", ") || "none"}. You can still review it and enter planner values manually.`}
                   </div>
                 ) : null}
               </div>
