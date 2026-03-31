@@ -96,6 +96,7 @@ export function normalizeLifePolicy({
     coverage: {
       deathBenefit: display(coverage?.death_benefit || coverage?.current_death_benefit || coverage?.initial_face_amount),
       faceAmount: display(coverage?.initial_face_amount),
+      optionType: display(coverage?.option_type),
       status: comparisonSummary?.policy_status || null,
     },
     funding: {
@@ -126,7 +127,11 @@ export function normalizeLifePolicy({
     loans: {
       loanBalance: display(loans?.loan_balance),
     },
-    riders,
+    riders: {
+      ...riders,
+      detectedRiders: Array.isArray(riders?.detected_riders) ? riders.detected_riders : [],
+      riderCharge: display(riders?.rider_charge),
+    },
     timing: {
       issueDate: identity?.issue_date || timing?.issue_date || null,
       statementDate: comparisonSummary?.latest_statement_date || timing?.statement_date || null,

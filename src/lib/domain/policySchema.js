@@ -68,6 +68,8 @@ export function createEmptyNormalizedPolicy() {
     riders: {
       detected_riders: [],
       rider_charge: null,
+      rider_names: [],
+      rider_summary: "",
     },
     policy_timing: {
       statement_date: "",

@@ -2125,6 +2125,18 @@ export function buildPolicyReviewReport(policyBundle = {}) {
           { label: "Owner Visible", value: adequacyReview?.ownerVisible ? "Yes" : "Limited" },
           { label: "Insured Visible", value: adequacyReview?.insuredVisible ? "Yes" : "Limited" },
           { label: "Trustee Visible", value: adequacyReview?.trusteeVisible ? "Yes" : "Limited" },
+          { label: "Benefit Option", value: displayReportValue(adequacyReview?.benefitOption) },
+          {
+            label: "Rider Visibility",
+            value:
+              adequacyReview?.highlightedRiders?.length
+                ? adequacyReview.highlightedRiders.join(" / ")
+                : adequacyReview?.detectedRiders?.length
+                  ? adequacyReview.detectedRiders.join(" / ")
+                  : adequacyReview?.riderChargeVisible
+                    ? "Charge visible"
+                    : "Limited",
+          },
           {
             label: "Beneficiary Visibility",
             value:

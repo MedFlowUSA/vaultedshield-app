@@ -1020,6 +1020,28 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
                 <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Benefit Option
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.benefitOption || (adequacyReview?.benefitOptionVisible ? "Visible" : "Limited")}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Rider Visibility
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                    {adequacyReview?.highlightedRiders?.length
+                      ? adequacyReview.highlightedRiders.join(" / ")
+                      : adequacyReview?.detectedRiders?.length
+                        ? adequacyReview.detectedRiders.join(" / ")
+                        : adequacyReview?.riderChargeVisible
+                          ? "Charge visible"
+                          : "Limited"}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Beneficiary Visibility
                   </div>
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>

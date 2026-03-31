@@ -674,6 +674,20 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                     </div>
                   </div>
                 </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Benefit Option Visible</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.benefitOptionVisiblePolicies || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Rider Support Visible</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.riderVisiblePolicies || 0}
+                    </div>
+                  </div>
+                </div>
                 {Array.isArray(insuranceSummary.notes) && insuranceSummary.notes.length > 0 ? (
                   <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
                     {insuranceSummary.notes.map((item) => (
