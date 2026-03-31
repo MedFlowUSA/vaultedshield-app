@@ -1515,6 +1515,31 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         <div style={{ color: "#475569", fontSize: "13px", lineHeight: "1.6" }}>
                           {iulV2.illustrationComparison.confidenceExplanation}
                         </div>
+                        {iulV2.illustrationComparison.reviewSupport ? (
+                          <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#ffffff", border: "1px solid #dbeafe", display: "grid", gap: "8px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                Annual Review Support
+                              </div>
+                              <StatusBadge
+                                label={iulV2.illustrationComparison.reviewSupport.supportStatus.replace(/_/g, " ")}
+                                tone={
+                                  iulV2.illustrationComparison.reviewSupport.supportStatus === "clean"
+                                    ? "good"
+                                    : iulV2.illustrationComparison.reviewSupport.supportStatus === "partial"
+                                      ? "warning"
+                                      : "info"
+                                }
+                              />
+                            </div>
+                            <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>
+                              {iulV2.illustrationComparison.reviewSupport.headline}
+                            </div>
+                            <div style={{ color: "#475569", lineHeight: "1.6" }}>
+                              {iulV2.illustrationComparison.reviewSupport.note}
+                            </div>
+                          </div>
+                        ) : null}
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
                           <div>
                             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1539,6 +1564,18 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                             </div>
                           </div>
                         </div>
+                        {iulV2.illustrationComparison.reviewRecommendations?.length > 0 ? (
+                          <div style={{ display: "grid", gap: "6px" }}>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              Annual Review Next Steps
+                            </div>
+                            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                              {iulV2.illustrationComparison.reviewRecommendations.slice(0, 4).map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                         {iulV2.illustrationComparison.drivers?.length > 0 ? (
                           <div style={{ display: "grid", gap: "6px" }}>
                             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Drivers</div>

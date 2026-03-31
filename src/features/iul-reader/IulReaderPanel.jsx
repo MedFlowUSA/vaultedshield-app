@@ -437,6 +437,11 @@ export function IulReaderPanel({ reader, results }) {
                       {reader.projectionView.chronologyLabel}
                     </ReaderStatusBadge>
                   </div>
+                  {reader.projectionView.reviewSupportHeadline ? (
+                    <div style={{ marginTop: "10px", color: "#7c2d12", fontWeight: 700, lineHeight: "1.7" }}>
+                      {reader.projectionView.reviewSupportHeadline}
+                    </div>
+                  ) : null}
                   <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
                     <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
                       <div style={{ fontSize: "12px", color: "#9a3412" }}>Statements Used</div>
@@ -451,7 +456,9 @@ export function IulReaderPanel({ reader, results }) {
                       <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.irregularGapCount}</div>
                     </div>
                   </div>
-                  <div style={{ marginTop: "10px", color: "#7c2d12", lineHeight: "1.7" }}>{reader.projectionView.chronologyNote}</div>
+                  <div style={{ marginTop: "10px", color: "#7c2d12", lineHeight: "1.7" }}>
+                    {reader.projectionView.reviewSupportNote || reader.projectionView.chronologyNote}
+                  </div>
                   {reader.projectionView.annualReviewChecklist?.length > 0 ? (
                     <ul style={{ margin: "10px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#7c2d12" }}>
                       {reader.projectionView.annualReviewChecklist.map((item) => (

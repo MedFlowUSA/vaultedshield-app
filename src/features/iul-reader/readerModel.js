@@ -693,6 +693,9 @@ function buildProjectionView(results) {
         : "There are not enough dated statements yet for a stronger annual comparison read.");
 
   const annualReviewChecklist = [];
+  const reviewRecommendations = Array.isArray(illustrationComparison.reviewRecommendations)
+    ? illustrationComparison.reviewRecommendations
+    : [];
   if (chronologyStatus === "mixed") {
     annualReviewChecklist.push("Confirm one clean annual statement per policy year before leaning on drift conclusions.");
   } else if (chronologyStatus !== "healthy" && chronologyStatus !== "strong") {
@@ -708,6 +711,7 @@ function buildProjectionView(results) {
       if (item?.title) annualReviewChecklist.push(item.title);
     });
   }
+  reviewRecommendations.forEach((item) => annualReviewChecklist.push(item));
 
   return {
     available: Boolean(projection.comparison_possible),
@@ -725,6 +729,8 @@ function buildProjectionView(results) {
     statementCount,
     duplicateCount,
     irregularGapCount,
+    reviewSupportHeadline: illustrationComparison.reviewSupport?.headline || "",
+    reviewSupportNote: illustrationComparison.reviewSupport?.note || "",
     annualReviewChecklist: [...new Set(annualReviewChecklist)].slice(0, 4),
   };
 }

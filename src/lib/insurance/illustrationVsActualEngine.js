@@ -401,6 +401,74 @@ function buildConfidenceExplanation(confidence, alignmentConfidence, chronologyS
   return "Confidence is limited because the visible comparison support is still incomplete.";
 }
 
+function buildReviewSupport({ alignmentConfidence, chronology, status, selectedMetricLabel, missingData = [] }) {
+  const chronologyStatus = chronology?.status || "limited";
+  const matchQuality =
+    alignmentConfidence === "high"
+      ? "matched"
+      : alignmentConfidence === "moderate"
+        ? "near_match"
+        : "weak_match";
+  const supportStatus =
+    alignmentConfidence === "high" && chronologyStatus === "aligned"
+      ? "clean"
+      : alignmentConfidence === "low" || chronologyStatus === "mixed"
+        ? "fragile"
+        : "partial";
+
+  const headline =
+    supportStatus === "clean"
+      ? `The annual review packet supports a cleaner ${selectedMetricLabel.toLowerCase()} comparison right now.`
+      : supportStatus === "partial"
+        ? `The annual review packet supports a usable but still partial ${selectedMetricLabel.toLowerCase()} comparison.`
+        : `The annual review packet is still too fragile for a strong ${selectedMetricLabel.toLowerCase()} conclusion.`;
+
+  const note =
+    supportStatus === "clean"
+      ? "Visible illustration timing and annual statement history line up well enough for a cleaner checkpoint review."
+      : supportStatus === "partial"
+        ? "The comparison is still helpful, but year matching or chronology support is not fully clean yet."
+        : missingData[0] || "More complete illustration and annual statement support is still needed before trusting the comparison too strongly.";
+
+  return {
+    matchQuality,
+    supportStatus,
+    headline,
+    note,
+  };
+}
+
+function buildReviewRecommendations({ alignmentConfidence, chronology, currentMatch, benchmarkRows = [], status, missingData = [] }) {
+  const recommendations = [];
+  const chronologyStatus = chronology?.status || "limited";
+
+  if (alignmentConfidence === "low") {
+    recommendations.push("Upload an in-force ledger or fuller illustration pages so policy-year matching is cleaner.");
+  } else if (!currentMatch?.actual_policy_year || !currentMatch?.matched_policy_year) {
+    recommendations.push("Confirm the current policy year so the illustration checkpoint can be matched more responsibly.");
+  }
+
+  if (chronologyStatus === "mixed") {
+    recommendations.push("Clean up duplicate or irregular annual statements before leaning heavily on drift conclusions.");
+  } else if (chronologyStatus === "limited") {
+    recommendations.push("Add more dated annual statements to strengthen the year-over-year review.");
+  }
+
+  if (!Array.isArray(benchmarkRows) || benchmarkRows.length === 0) {
+    recommendations.push("Upload yearly illustration ledger values so projected checkpoints are not inferred from a thin baseline packet.");
+  }
+
+  if (status === "behind") {
+    recommendations.push("Review funding pace, visible charges, and loan pressure against the current policy-year checkpoint.");
+  }
+
+  if (!recommendations.length && missingData.length > 0) {
+    recommendations.push("Add cleaner supporting pages before treating this annual review as fully settled.");
+  }
+
+  return [...new Set(recommendations)].slice(0, 4);
+}
+
 function generateExplanation({ status, confidence, alignmentConfidence, chronology, drivers, metrics, variances, missingData }) {
   const directAnswer =
     status === "ahead"
@@ -517,6 +585,21 @@ export function buildIllustrationVsActualAnalysis({
     variances,
     missingData: localMissingData,
   });
+  const reviewSupport = buildReviewSupport({
+    alignmentConfidence: alignment.alignmentConfidence,
+    chronology,
+    status,
+    selectedMetricLabel: selectedMetric.label,
+    missingData: localMissingData,
+  });
+  const reviewRecommendations = buildReviewRecommendations({
+    alignmentConfidence: alignment.alignmentConfidence,
+    chronology,
+    currentMatch,
+    benchmarkRows,
+    status,
+    missingData: localMissingData,
+  });
 
   return {
     status,
@@ -588,6 +671,8 @@ export function buildIllustrationVsActualAnalysis({
     impact: explanation.impact,
     confidenceLine: explanation.confidenceLine,
     confidenceExplanation: explanation.confidenceExplanation,
+    reviewSupport,
+    reviewRecommendations,
     missingData: explanation.missingData,
     debug: {
       projectionComparisonPossible: Boolean(projection?.comparison_possible),
