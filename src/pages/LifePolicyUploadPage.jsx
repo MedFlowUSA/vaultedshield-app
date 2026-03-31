@@ -1160,11 +1160,11 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         description="Start with the initial policy illustration, then add annual statements separately to build performance history and a stronger current read."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-            <button type="button" onClick={() => onNavigate?.("/insurance/life/policy-detail")} style={actionStyle(false)}>
-              Back To Life Policy Portal
-            </button>
             <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(false)}>
-              Open Insurance Intelligence
+              Back To Insurance Intelligence
+            </button>
+            <button type="button" onClick={() => onNavigate?.("/insurance/life/policy-detail")} style={actionStyle(false)}>
+              Review Upload Workflow
             </button>
           </div>
         }

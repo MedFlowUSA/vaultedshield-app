@@ -127,7 +127,7 @@ export default function TopNav({
         </button>
         <button
           type="button"
-          onClick={() => onNavigate("/insurance/life/policy-detail")}
+          onClick={() => onNavigate("/insurance")}
           style={{
             border: "none",
             background: "#0f172a",
@@ -140,7 +140,7 @@ export default function TopNav({
             minHeight: "44px",
           }}
         >
-          Open Life Policy Portal
+          Open Insurance Workspace
         </button>
         <button
           type="button"

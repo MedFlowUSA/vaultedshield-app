@@ -28,13 +28,13 @@ export default function LifePolicyDetailPage({ onNavigate }) {
     <div style={{ display: "grid", gap: "20px" }}>
       <PageHeader
         eyebrow="Life Policy Intelligence"
-        title="Life Policy Portal"
-        description="One life-policy workspace for IUL, UL, whole life, term, and final expense. Open a saved policy, compare policies, or upload new documents without using the legacy reader shell."
+        title="Life Policy Workflow Guide"
+        description="This page is the workflow guide for life-policy analysis in VaultedShield. Use it to understand where uploads, policy review, and reports fit without duplicating the main insurance workspace."
       />
 
       <SectionCard
         title="Start Here"
-        subtitle="Use the modern shell pages below. This replaces the older standalone life-policy portal that could lock up the browser."
+        subtitle="Use the modern shell pages below. This guide explains the path, but the real working surfaces are Insurance Intelligence, Life Policy Upload, and Reports."
       >
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(true)}>

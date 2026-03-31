@@ -668,14 +668,14 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               onClick={() => onNavigate?.("/insurance/life/upload")}
               style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
             >
-              Upload Baseline Policy
+              Open Life Policy Upload
             </button>
             <button
               type="button"
-              onClick={() => onNavigate?.("/insurance/life/upload")}
+              onClick={() => onNavigate?.("/insurance/life/policy-detail")}
               style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
             >
-              Scan Policy with Camera
+              Review Upload Workflow
             </button>
           </div>
         </section>
@@ -761,7 +761,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             Compare Policies
           </button>
           <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
-            Upload Policy
+            Open Upload Workspace
           </button>
         </div>
       </section>
