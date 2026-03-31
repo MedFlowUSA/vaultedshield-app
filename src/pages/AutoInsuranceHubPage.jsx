@@ -5,6 +5,7 @@ import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeAutoInsuranceModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getAutoPolicyType,
   listAutoCarriers,
@@ -91,6 +92,8 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
     ];
   }, [autoPolicies]);
 
+  const autoRead = useMemo(() => summarizeAutoInsuranceModule(autoPolicies), [autoPolicies]);
+
   async function handleCreateAutoPolicy(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.auto_policy_type_key) return;
@@ -136,6 +139,30 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+        <SectionCard title="Coverage Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{autoRead.headline}</div>
+              <StatusBadge label={autoRead.status} tone={autoRead.status === "Ready" ? "good" : autoRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {autoRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Watchpoints">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Renewal pending:</strong> {autoRead.metrics.renewalPending}</div>
+            <div><strong>Expiring soon:</strong> {autoRead.metrics.expiringSoon}</div>
+            <div><strong>Missing named insured:</strong> {autoRead.metrics.missingNamedInsured}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Auto Policies" subtitle="Live household auto-insurance records linked into the broader platform asset layer.">

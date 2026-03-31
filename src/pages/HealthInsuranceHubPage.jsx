@@ -5,6 +5,7 @@ import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeHealthModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getHealthPlanType,
   listHealthCarriers,
@@ -92,6 +93,8 @@ export default function HealthInsuranceHubPage({ onNavigate }) {
     ];
   }, [healthPlans]);
 
+  const healthRead = useMemo(() => summarizeHealthModule(healthPlans), [healthPlans]);
+
   async function handleCreateHealthPlan(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.health_plan_type_key) return;
@@ -138,6 +141,30 @@ export default function HealthInsuranceHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+        <SectionCard title="Benefits Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{healthRead.headline}</div>
+              <StatusBadge label={healthRead.status} tone={healthRead.status === "Ready" ? "good" : healthRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {healthRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Watchpoints">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Renewal pending:</strong> {healthRead.metrics.renewalPending}</div>
+            <div><strong>Renewal soon:</strong> {healthRead.metrics.renewalSoon}</div>
+            <div><strong>Missing subscriber:</strong> {healthRead.metrics.missingSubscriber}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Health Plans" subtitle="Live household health-insurance records linked into the broader platform asset layer.">

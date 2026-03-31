@@ -5,6 +5,7 @@ import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeHomeownersModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getHomeownersPolicyType,
   listHomeownersCarriers,
@@ -92,6 +93,8 @@ export default function HomeownersHubPage({ onNavigate }) {
     ];
   }, [policies]);
 
+  const homeownersRead = useMemo(() => summarizeHomeownersModule(policies), [policies]);
+
   async function handleCreatePolicy(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.homeowners_policy_type_key) return;
@@ -138,6 +141,30 @@ export default function HomeownersHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+        <SectionCard title="Property Protection Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{homeownersRead.headline}</div>
+              <StatusBadge label={homeownersRead.status} tone={homeownersRead.status === "Ready" ? "good" : homeownersRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {homeownersRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Watchpoints">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Expiring soon:</strong> {homeownersRead.metrics.expiringSoon}</div>
+            <div><strong>Missing property:</strong> {homeownersRead.metrics.missingProperty}</div>
+            <div><strong>Missing named insured:</strong> {homeownersRead.metrics.missingNamedInsured}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Homeowners Policies" subtitle="Live household homeowners records linked into the broader platform asset layer.">

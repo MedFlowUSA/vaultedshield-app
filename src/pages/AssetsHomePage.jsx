@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
+import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeAssetsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { createAsset, listAssets } from "../lib/supabase/platformData";
 
@@ -86,6 +88,8 @@ export default function AssetsHomePage({ onNavigate }) {
     setLoading(false);
   }
 
+  const assetRead = useMemo(() => summarizeAssetsModule(assets), [assets]);
+
   return (
     <div>
       <PageHeader
@@ -99,8 +103,33 @@ export default function AssetsHomePage({ onNavigate }) {
           { label: "Tracked Assets", value: assets.length, helper: "Live generic asset records" },
           { label: "Insurance Assets", value: assets.filter((item) => item.asset_category === "insurance").length, helper: "Generic insurance asset shells" },
           { label: "Active Assets", value: assets.filter((item) => item.status === "active").length, helper: "Current active records" },
+          { label: "Readiness", value: assetRead.status, helper: "How usable the household asset map looks right now" },
         ]}
       />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px" }}>
+        <SectionCard title="Asset Map Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{assetRead.headline}</div>
+              <StatusBadge label={assetRead.status} tone={assetRead.status === "Ready" ? "good" : assetRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {assetRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Coverage Metrics">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Categories represented:</strong> {assetRead.metrics.categories}</div>
+            <div><strong>Missing institution:</strong> {assetRead.metrics.missingInstitution}</div>
+            <div><strong>Active assets:</strong> {assetRead.metrics.active}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1.25fr", gap: "18px" }}>
         <SectionCard title="Add Asset" subtitle="Minimal create flow for the broad household asset registry.">

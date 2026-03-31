@@ -4,6 +4,7 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
+import { summarizePortalModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { getPortalHubBundle } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
@@ -100,6 +101,8 @@ export default function PortalHubPage({ onNavigate }) {
     }
   }, [activeFilter, bundle.portals]);
 
+  const portalRead = useMemo(() => summarizePortalModule(bundle), [bundle]);
+
   return (
     <div>
       <PageHeader
@@ -150,6 +153,11 @@ export default function PortalHubPage({ onNavigate }) {
             value: bundle.readiness.criticalAssetsWithoutLinkedPortals.length,
             helper: "Insurance, banking, retirement, estate, property",
           },
+          {
+            label: "Continuity Status",
+            value: portalRead.status,
+            helper: "High-level household access-readiness view",
+          },
         ]}
       />
 
@@ -169,6 +177,9 @@ export default function PortalHubPage({ onNavigate }) {
               {bundle.readiness.missingRecoveryCount > 0
                 ? `${bundle.readiness.missingRecoveryCount} portal profiles still need recovery contact hints.`
                 : "Recovery contact visibility looks stronger on the current portal set."}
+            </div>
+            <div>
+              {portalRead.headline}
             </div>
           </div>
         </SectionCard>
@@ -192,6 +203,29 @@ export default function PortalHubPage({ onNavigate }) {
                 {filter.label}
               </button>
             ))}
+          </div>
+        </SectionCard>
+      </div>
+
+      <div style={{ marginTop: "18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+        <SectionCard title="Continuity Watchlist">
+          {portalRead.notes.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {portalRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ color: "#475569" }}>No major portal watchpoints are visible right now.</div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Continuity Metrics">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Limited / Locked:</strong> {portalRead.metrics.limitedPortals}</div>
+            <div><strong>Unverified:</strong> {portalRead.metrics.unverifiedPortals}</div>
+            <div><strong>Missing recovery:</strong> {portalRead.metrics.missingRecovery}</div>
+            <div><strong>Total portals:</strong> {portalRead.metrics.portals}</div>
           </div>
         </SectionCard>
       </div>

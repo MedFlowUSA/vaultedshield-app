@@ -5,6 +5,7 @@ import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeWarrantyModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getWarrantyType,
   listWarrantyProviders,
@@ -98,6 +99,8 @@ export default function WarrantyHubPage({ onNavigate }) {
     ];
   }, [warranties]);
 
+  const warrantyRead = useMemo(() => summarizeWarrantyModule(warranties), [warranties]);
+
   async function handleCreateWarranty(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.warranty_type_key) return;
@@ -144,6 +147,30 @@ export default function WarrantyHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+        <SectionCard title="Coverage Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{warrantyRead.headline}</div>
+              <StatusBadge label={warrantyRead.status} tone={warrantyRead.status === "Ready" ? "good" : warrantyRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {warrantyRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Watchpoints">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Expiring soon:</strong> {warrantyRead.metrics.expiringSoon}</div>
+            <div><strong>Missing expiration:</strong> {warrantyRead.metrics.missingExpiration}</div>
+            <div><strong>Active contracts:</strong> {warrantyRead.metrics.active}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Warranty Contracts" subtitle="Live household warranty and service-contract records linked into the broader platform asset layer.">

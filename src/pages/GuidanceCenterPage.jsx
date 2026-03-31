@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import {
   GUIDE_FAQS,
@@ -26,6 +27,7 @@ function buttonStyle(primary = false) {
 
 export default function GuidanceCenterPage({ onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
+  const { counts, savedPolicies, intelligenceBundle } = usePlatformShellData();
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState([]);
   const latestAnswer = history[0] || null;
@@ -53,8 +55,13 @@ export default function GuidanceCenterPage({ onNavigate }) {
       { label: "Feature Guides", value: GUIDE_FEATURES.length, helper: "Core pages and what they are for" },
       { label: "FAQ Topics", value: GUIDE_FAQS.length, helper: "Common navigation and workflow questions" },
       { label: "Q&A Starters", value: GUIDE_QUESTION_STARTERS.length, helper: "Built-in prompts for new users" },
+      {
+        label: "Current Household Setup",
+        value: `${(counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0) + (savedPolicies?.length || 0)} records`,
+        helper: "Live household context currently visible to the guidance layer",
+      },
     ],
-    []
+    [counts?.assetCount, intelligenceBundle?.assets?.length, savedPolicies?.length]
   );
 
   return (
@@ -79,6 +86,30 @@ export default function GuidanceCenterPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <SectionCard
+        title="Current Household Context"
+        subtitle="Guidance is more useful when it reflects what the current household has already started."
+      >
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
+          <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Assets</div>
+            <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0}</div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Saved Policies</div>
+            <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{savedPolicies?.length || 0}</div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Documents</div>
+            <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{intelligenceBundle?.documents?.length ?? 0}</div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Portals</div>
+            <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{intelligenceBundle?.portalReadiness?.portalCount ?? 0}</div>
+          </div>
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Ask VaultedShield Guide"

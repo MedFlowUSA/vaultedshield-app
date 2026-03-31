@@ -3,7 +3,9 @@ import ContactCard from "../components/shared/ContactCard";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
+import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeContactsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { createContact, listContacts } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
@@ -84,6 +86,8 @@ export default function ContactsPage() {
     setLoading(false);
   }
 
+  const contactRead = summarizeContactsModule(contacts);
+
   return (
     <div>
       <PageHeader
@@ -96,8 +100,37 @@ export default function ContactsPage() {
           { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
           { label: "Contact Records", value: contacts.length, helper: "Live Supabase directory" },
           { label: "Emergency Use", value: contacts.filter((item) => item.contact_type === "family" || item.contact_type === "executor").length, helper: "Family and successor contacts" },
+          { label: "Readiness", value: contactRead.status, helper: "Continuity strength of the current directory" },
         ]}
       />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px" }}>
+        <SectionCard title="Directory Readiness">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{contactRead.headline}</div>
+              <StatusBadge
+                label={contactRead.status}
+                tone={contactRead.status === "Ready" ? "good" : contactRead.status === "Building" ? "warning" : "alert"}
+              />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {contactRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Role Coverage">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Successors:</strong> {contactRead.metrics.successorContacts}</div>
+            <div><strong>Advisors:</strong> {contactRead.metrics.advisorContacts}</div>
+            <div><strong>Institutions:</strong> {contactRead.metrics.institutionContacts}</div>
+            <div><strong>Missing direct reach:</strong> {contactRead.metrics.missingDirectReach}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1.25fr", gap: "18px" }}>
         <SectionCard title="Add Contact" subtitle="Minimal create flow for the household continuity directory.">

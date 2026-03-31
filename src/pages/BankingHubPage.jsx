@@ -1,29 +1,165 @@
-import ModulePageShell from "./ModulePageShell";
+import { useEffect, useMemo, useState } from "react";
+import PageHeader from "../components/layout/PageHeader";
+import EmptyState from "../components/shared/EmptyState";
+import SectionCard from "../components/shared/SectionCard";
+import SummaryPanel from "../components/shared/SummaryPanel";
+import StatusBadge from "../components/shared/StatusBadge";
+import { summarizeBankingModule } from "../lib/domain/platformIntelligence/moduleReadiness";
+import { getPortalHubBundle, listAssets, listContacts } from "../lib/supabase/platformData";
+import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
-export default function BankingHubPage() {
+function getTone(status) {
+  if (status === "Ready") return "good";
+  if (status === "Building") return "warning";
+  return "alert";
+}
+
+export default function BankingHubPage({ onNavigate }) {
+  const householdState = usePlatformHousehold();
+  const [bundle, setBundle] = useState({ assets: [], contacts: [], portalBundle: null });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (householdState.loading) return;
+    if (!householdState.context.householdId) {
+      setBundle({ assets: [], contacts: [], portalBundle: null });
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    async function load() {
+      setLoading(true);
+      const [assetsResult, contactsResult, portalsResult] = await Promise.all([
+        listAssets(householdState.context.householdId),
+        listContacts(householdState.context.householdId),
+        getPortalHubBundle(householdState.context.householdId),
+      ]);
+      if (!active) return;
+      setBundle({
+        assets: assetsResult.data || [],
+        contacts: contactsResult.data || [],
+        portalBundle: portalsResult.data || null,
+      });
+      setLoadError(
+        assetsResult.error?.message || contactsResult.error?.message || portalsResult.error?.message || ""
+      );
+      setLoading(false);
+    }
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, [householdState.context.householdId, householdState.loading]);
+
+  const readiness = useMemo(
+    () =>
+      summarizeBankingModule({
+        assets: bundle.assets,
+        contacts: bundle.contacts,
+        portals: bundle.portalBundle?.portals || [],
+      }),
+    [bundle.assets, bundle.contacts, bundle.portalBundle]
+  );
+
+  const bankingAssets = useMemo(
+    () =>
+      bundle.assets.filter((asset) =>
+        String(`${asset.asset_category} ${asset.asset_subcategory} ${asset.asset_name}`)
+          .toLowerCase()
+          .match(/bank|cash|checking|savings|treasury|brokerage|liquidity|money market/)
+      ),
+    [bundle.assets]
+  );
+
   return (
-    <ModulePageShell
-      eyebrow="Banking and Cash"
-      title="Banking Hub"
-      description="Overview shell for cash accounts, liquidity readiness, key institutions, and emergency-access continuity."
-      summaryItems={[
-        { label: "Liquidity Records", value: "Scaffolded", helper: "Institution and account shells ready" },
-        { label: "Emergency Access", value: "Planned", helper: "Future continuity packet support" },
-        { label: "AI Summary", value: "Placeholder", helper: "Ready for later balance/risk signals" },
-      ]}
-      assetCards={[
-        { title: "Operating Cash Accounts", category: "Liquidity", status: "Placeholder", description: "Ready for account summaries, ownership visibility, and key-access notes." },
-        { title: "Institution Directory", category: "Banking contacts", status: "Placeholder", description: "Ready for bank, private banking, and treasury contact records." },
-      ]}
-      alerts={["Banking ingestion is not implemented in this pass.", "This shell is intended for continuity and household visibility first."]}
-      notes={["Design and layout are aligned with the live insurance module.", "Banking records can later share vault, contacts, and emergency workflows."]}
-      insight={{
-        summary: "The banking shell is ready for future liquidity and account continuity features without changing the broader platform structure.",
-        bullets: ["Emergency-access logic can later connect here.", "Institution contacts and notes are planned as first-class records."],
-      }}
-      documents={[
-        { name: "Bank statement register", role: "Banking", status: "Placeholder", updatedAt: "Pending" },
-      ]}
-    />
+    <div>
+      <PageHeader
+        eyebrow="Banking and Cash"
+        title="Banking Hub"
+        description="Household liquidity continuity, institution access, and emergency-recovery readiness."
+        actions={
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onNavigate?.("/portals")}
+              style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
+            >
+              Review Portals
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.("/contacts")}
+              style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
+            >
+              Review Contacts
+            </button>
+          </div>
+        }
+      />
+
+      <SummaryPanel
+        items={[
+          { label: "Status", value: readiness.status, helper: "High-level banking continuity read" },
+          { label: "Banking Assets", value: readiness.metrics.bankingAssets, helper: "Cash and liquidity records in view" },
+          { label: "Emergency Portals", value: readiness.metrics.emergencyPortals, helper: "Relevant access points for emergencies" },
+          { label: "Institution Contacts", value: readiness.metrics.institutionContacts, helper: "Banks and advisor support contacts" },
+          { label: "Missing Recovery", value: readiness.metrics.missingRecovery, helper: "Emergency portals still missing recovery hints" },
+        ]}
+      />
+
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+        <SectionCard title="Liquidity Continuity Read">
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{readiness.headline}</div>
+              <StatusBadge label={readiness.status} tone={getTone(readiness.status)} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {readiness.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="What This Module Should Do">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div>Show where household cash lives and who can help access it.</div>
+            <div>Flag emergency portal recovery gaps before they become a continuity problem.</div>
+            <div>Keep institution and advisor visibility close to liquidity records.</div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
+        <SectionCard title="Visible Banking Records" subtitle="Current household assets that already look relevant to cash or liquidity continuity.">
+          {loading ? (
+            <div style={{ color: "#64748b" }}>Loading banking context...</div>
+          ) : loadError ? (
+            <EmptyState title="Banking context unavailable" description={loadError} />
+          ) : bankingAssets.length === 0 ? (
+            <EmptyState
+              title="No banking records visible yet"
+              description="This module is ready for cash and liquidity records, but the current household does not yet show obvious banking or cash assets."
+            />
+          ) : (
+            <div style={{ display: "grid", gap: "12px" }}>
+              {bankingAssets.slice(0, 8).map((asset) => (
+                <div key={asset.id} style={{ padding: "16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{asset.asset_name || "Banking asset"}</div>
+                  <div style={{ color: "#475569" }}>
+                    {(asset.asset_category || "Asset") + (asset.asset_subcategory ? ` / ${asset.asset_subcategory}` : "")}
+                  </div>
+                  <div style={{ color: "#64748b" }}>{asset.institution_name || "Institution not yet recorded"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    </div>
   );
 }

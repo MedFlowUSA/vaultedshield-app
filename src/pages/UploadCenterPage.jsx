@@ -3,7 +3,9 @@ import EmptyState from "../components/shared/EmptyState";
 import DocumentTable from "../components/shared/DocumentTable";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
+import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import { summarizeUploadCenterModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import {
   listHouseholdAssetsForSelection,
@@ -228,6 +230,7 @@ export default function UploadCenterPage() {
     status: document.processing_status || "uploaded",
     updatedAt: formatDate(document.created_at),
   }));
+  const uploadRead = summarizeUploadCenterModule({ assets, documents, queue });
 
   return (
     <div style={{ display: "grid", gap: "24px", minWidth: 0, maxWidth: "100%", overflowX: "clip" }}>
@@ -243,8 +246,41 @@ export default function UploadCenterPage() {
           { label: "Assets Available", value: assets.length, helper: "Optional document attachment targets" },
           { label: "Queued Files", value: queue.length, helper: "Current upload queue" },
           { label: "Saved Documents", value: documents.length, helper: "Generic household documents" },
+          { label: "Intake Status", value: uploadRead.status, helper: "High-level generic intake readiness" },
         ]}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.18fr) minmax(0, 0.82fr)",
+          gap: "18px",
+          minWidth: 0,
+        }}
+      >
+        <SectionCard title="Upload Pipeline Readiness">
+          <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{uploadRead.headline}</div>
+              <StatusBadge label={uploadRead.status} tone={uploadRead.status === "Ready" ? "good" : uploadRead.status === "Building" ? "warning" : "alert"} />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+              {uploadRead.notes.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Upload Metrics">
+          <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+            <div><strong>Asset-linked docs:</strong> {uploadRead.metrics.assetLinkedDocuments}</div>
+            <div><strong>Queued:</strong> {uploadRead.metrics.queued}</div>
+            <div><strong>Queue failures:</strong> {uploadRead.metrics.failedQueue}</div>
+            <div><strong>Saved this session:</strong> {uploadRead.metrics.savedQueue}</div>
+          </div>
+        </SectionCard>
+      </div>
 
       <div
         style={{
