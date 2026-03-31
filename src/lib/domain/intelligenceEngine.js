@@ -2138,6 +2138,13 @@ export function buildPolicyReviewReport(policyBundle = {}) {
                     : "Limited",
           },
           {
+            label: "Protection Purpose",
+            value:
+              adequacyReview?.protectionPurposeLabels?.length
+                ? adequacyReview.protectionPurposeLabels.join(" / ")
+                : "Limited",
+          },
+          {
             label: "Beneficiary Visibility",
             value:
               adequacyReview?.primaryBeneficiaryName ||

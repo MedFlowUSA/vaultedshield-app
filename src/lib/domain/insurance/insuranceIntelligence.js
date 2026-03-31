@@ -141,6 +141,55 @@ function resolveCoverageStructureSignals(policy = {}) {
   };
 }
 
+function resolveProtectionPurposeSignals(policy = {}, householdContext = {}) {
+  const ownershipSignals = resolveOwnershipSignals(policy);
+  const beneficiarySignals = resolveBeneficiarySignals(policy);
+  const coverageStructure = resolveCoverageStructureSignals(policy);
+  const mortgageCount = Number(householdContext.mortgageCount || 0);
+  const dependentPlanCount = Number(householdContext.dependentPlanCount || 0);
+  const riderText = coverageStructure.detectedRiders.join(" ").toLowerCase();
+
+  const livingBenefitsVisible = /accelerated|chronic|terminal|critical|long term care|ltc/.test(riderText);
+  const incomeProtectionVisible = /waiver|disability/.test(riderText);
+  const loanProtectionPressure = mortgageCount > 0;
+  const familyProtectionVisible =
+    Boolean(beneficiarySignals.primaryName || beneficiarySignals.contingentName) ||
+    dependentPlanCount > 0 ||
+    mortgageCount > 0;
+
+  const notes = [];
+  if (familyProtectionVisible && beneficiarySignals.anyVisible) {
+    notes.push("Family-protection support is more believable because beneficiary visibility is present.");
+  } else if (familyProtectionVisible) {
+    notes.push("Family-protection intent is plausible, but beneficiary visibility is still limited.");
+  }
+  if (loanProtectionPressure && !ownershipSignals.trustOwned) {
+    notes.push("Mortgage-linked household pressure suggests death-benefit adequacy should be reviewed closely.");
+  }
+  if (livingBenefitsVisible) {
+    notes.push("Living-benefit style rider support is visible in the current packet.");
+  }
+  if (incomeProtectionVisible) {
+    notes.push("Income-protection style rider support is visible in the current packet.");
+  }
+
+  const purposeLabels = [
+    familyProtectionVisible ? "family protection" : "",
+    loanProtectionPressure ? "mortgage protection" : "",
+    livingBenefitsVisible ? "living benefits" : "",
+    incomeProtectionVisible ? "income protection" : "",
+  ].filter(Boolean);
+
+  return {
+    familyProtectionVisible,
+    loanProtectionPressure,
+    livingBenefitsVisible,
+    incomeProtectionVisible,
+    purposeLabels,
+    notes: [...new Set(notes)].slice(0, 4),
+  };
+}
+
 export function analyzePolicyBasics(parsedData = {}) {
   const normalizedPolicy = parsedData?.normalizedPolicy || parsedData?.policyRecord || {};
   const statements = Array.isArray(parsedData?.statements) ? parsedData.statements : [];
@@ -235,6 +284,7 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
   const mortgageCount = Number(householdContext.mortgageCount || 0);
   const dependentPlanCount = Number(householdContext.dependentPlanCount || 0);
   const coverageStructure = resolveCoverageStructureSignals(policy);
+  const purposeSignals = resolveProtectionPurposeSignals(policy, householdContext);
 
   const targetFloor =
     mortgageCount > 0 || dependentPlanCount > 0
@@ -290,6 +340,7 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
   } else {
     notes.push("Beneficiary information is mentioned, but a clean beneficiary name is not yet resolved.");
   }
+  purposeSignals.notes.forEach((note) => notes.push(note));
 
   if (basics.confidenceScore < 0.45) {
     adequacyStatus = "review";
@@ -322,6 +373,11 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     riderChargeVisible: coverageStructure.riderChargeVisible,
     detectedRiders: coverageStructure.detectedRiders,
     highlightedRiders: coverageStructure.highlightedRiders,
+    protectionPurposeLabels: purposeSignals.purposeLabels,
+    familyProtectionVisible: purposeSignals.familyProtectionVisible,
+    loanProtectionPressure: purposeSignals.loanProtectionPressure,
+    livingBenefitsVisible: purposeSignals.livingBenefitsVisible,
+    incomeProtectionVisible: purposeSignals.incomeProtectionVisible,
     beneficiaryVisibility: beneficiarySignals.visibility,
     primaryBeneficiaryName: beneficiarySignals.primaryName,
     contingentBeneficiaryName: beneficiarySignals.contingentName,
@@ -414,6 +470,8 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
         trustOwnedPolicies: 0,
         benefitOptionVisiblePolicies: 0,
         riderVisiblePolicies: 0,
+        livingBenefitVisiblePolicies: 0,
+        incomeProtectionVisiblePolicies: 0,
         beneficiaryNamedPolicies: 0,
         beneficiaryLimitedPolicies: 0,
       },
@@ -475,6 +533,8 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   const trustOwnedPolicies = reads.filter((item) => item.adequacy.trustOwned);
   const benefitOptionVisiblePolicies = reads.filter((item) => item.adequacy.benefitOptionVisible);
   const riderVisiblePolicies = reads.filter((item) => item.adequacy.riderVisible);
+  const livingBenefitVisiblePolicies = reads.filter((item) => item.adequacy.livingBenefitsVisible);
+  const incomeProtectionVisiblePolicies = reads.filter((item) => item.adequacy.incomeProtectionVisible);
   const beneficiaryNamedPolicies = reads.filter(
     (item) => item.adequacy.beneficiaryVisibility === "named"
   );
@@ -521,6 +581,12 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   if (riderVisiblePolicies.length > 0) {
     notes.push(`${pluralize(riderVisiblePolicies.length, "policy")} show visible rider support or rider-charge evidence.`);
   }
+  if (livingBenefitVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(livingBenefitVisiblePolicies.length, "policy")} show visible living-benefit style rider support.`);
+  }
+  if (incomeProtectionVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(incomeProtectionVisiblePolicies.length, "policy")} show visible income-protection or waiver-style rider support.`);
+  }
   if (beneficiaryNamedPolicies.length > 0) {
     notes.push(`${pluralize(beneficiaryNamedPolicies.length, "policy")} now show named beneficiary visibility in the saved packet.`);
   }
@@ -560,6 +626,8 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
       trustOwnedPolicies: trustOwnedPolicies.length,
       benefitOptionVisiblePolicies: benefitOptionVisiblePolicies.length,
       riderVisiblePolicies: riderVisiblePolicies.length,
+      livingBenefitVisiblePolicies: livingBenefitVisiblePolicies.length,
+      incomeProtectionVisiblePolicies: incomeProtectionVisiblePolicies.length,
       beneficiaryNamedPolicies: beneficiaryNamedPolicies.length,
       beneficiaryLimitedPolicies: beneficiaryLimitedPolicies.length,
     },
