@@ -991,7 +991,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     Owner Visible
                   </div>
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.ownerVisible ? "Yes" : "Limited"}
+                    {adequacyReview?.ownerName || (adequacyReview?.ownerVisible ? "Yes" : "Limited")}
                   </div>
                 </div>
                 <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -999,7 +999,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     Insured Visible
                   </div>
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.insuredVisible ? "Yes" : "Limited"}
+                    {adequacyReview?.insuredName || (adequacyReview?.insuredVisible ? "Yes" : "Limited")}
                   </div>
                 </div>
                 <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -1007,7 +1007,9 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     Beneficiary Visibility
                   </div>
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.beneficiaryVisibility === "not_extracted" ? "Not extracted yet" : formatDisplayValue(adequacyReview?.beneficiaryVisibility)}
+                    {adequacyReview?.primaryBeneficiaryName || adequacyReview?.contingentBeneficiaryName
+                      ? [adequacyReview?.primaryBeneficiaryName, adequacyReview?.contingentBeneficiaryName].filter(Boolean).join(" / ")
+                      : adequacyReview?.beneficiaryStatusLabel || formatDisplayValue(adequacyReview?.beneficiaryVisibility)}
                   </div>
                 </div>
               </div>

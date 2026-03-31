@@ -32,6 +32,38 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function resolveBeneficiarySignals(policy = {}) {
+  const normalizedPolicy = policy?.normalizedPolicy || {};
+  const lifePolicy = policy?.lifePolicy || {};
+  const identity = normalizedPolicy?.policy_identity || {};
+
+  const primaryName = normalizeText(
+    lifePolicy?.identity?.primaryBeneficiaryName || identity?.primary_beneficiary_name
+  );
+  const contingentName = normalizeText(
+    lifePolicy?.identity?.contingentBeneficiaryName || identity?.contingent_beneficiary_name
+  );
+  const statusLabel = normalizeText(
+    lifePolicy?.identity?.beneficiaryStatus || identity?.beneficiary_status
+  );
+
+  const anyVisible = Boolean(primaryName || contingentName || statusLabel);
+  const visibility =
+    primaryName || contingentName
+      ? "named"
+      : statusLabel
+        ? "mentioned"
+        : "limited";
+
+  return {
+    primaryName,
+    contingentName,
+    statusLabel,
+    anyVisible,
+    visibility,
+  };
+}
+
 export function analyzePolicyBasics(parsedData = {}) {
   const normalizedPolicy = parsedData?.normalizedPolicy || parsedData?.policyRecord || {};
   const statements = Array.isArray(parsedData?.statements) ? parsedData.statements : [];
@@ -124,6 +156,7 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     null;
   const ownerVisible = Boolean(normalizeText(lifePolicy?.identity?.ownerName || normalizedPolicy?.policy_identity?.owner_name));
   const insuredVisible = Boolean(normalizeText(lifePolicy?.identity?.insuredName || normalizedPolicy?.policy_identity?.insured_name));
+  const beneficiarySignals = resolveBeneficiarySignals(policy);
   const mortgageCount = Number(householdContext.mortgageCount || 0);
   const dependentPlanCount = Number(householdContext.dependentPlanCount || 0);
 
@@ -159,9 +192,13 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
   if (!insuredVisible) {
     notes.push("Insured-name visibility is limited in the current extracted record.");
   }
-
-  // Keep this explicit and honest until beneficiary extraction is added.
-  notes.push("Beneficiary visibility is not yet extracted from the current policy workflow.");
+  if (!beneficiarySignals.anyVisible) {
+    notes.push("Beneficiary visibility is still limited in the current extracted record.");
+  } else if (beneficiarySignals.primaryName) {
+    notes.push(`Primary beneficiary visibility is present for ${beneficiarySignals.primaryName}.`);
+  } else {
+    notes.push("Beneficiary information is mentioned, but a clean beneficiary name is not yet resolved.");
+  }
 
   if (basics.confidenceScore < 0.45) {
     adequacyStatus = "review";
@@ -169,7 +206,7 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
 
   const headline =
     adequacyStatus === "more_supported"
-      ? "This policy currently looks more supported from a basic adequacy standpoint, but beneficiary and ownership review are still not complete."
+      ? "This policy currently looks more supported from a basic adequacy standpoint, but ownership and beneficiary visibility should still be confirmed."
       : "This policy needs review before it can be treated as adequately protective for the household.";
 
   const displayStatus =
@@ -182,7 +219,12 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     displayStatus,
     ownerVisible,
     insuredVisible,
-    beneficiaryVisibility: "not_extracted",
+    ownerName: normalizeText(lifePolicy?.identity?.ownerName || normalizedPolicy?.policy_identity?.owner_name),
+    insuredName: normalizeText(lifePolicy?.identity?.insuredName || normalizedPolicy?.policy_identity?.insured_name),
+    beneficiaryVisibility: beneficiarySignals.visibility,
+    primaryBeneficiaryName: beneficiarySignals.primaryName,
+    contingentBeneficiaryName: beneficiarySignals.contingentName,
+    beneficiaryStatusLabel: beneficiarySignals.statusLabel,
     targetFloor,
     notes: [...new Set(notes)].slice(0, 6),
     headline,
@@ -227,6 +269,11 @@ export function detectInsuranceGaps(policy, householdContext = {}) {
 
   if (basics.confidenceScore < 0.45) {
     notes.push("Confidence is low because key policy fields are still missing.");
+  }
+
+  const beneficiarySignals = resolveBeneficiarySignals(policy);
+  if (!beneficiarySignals.anyVisible) {
+    notes.push("Beneficiary visibility is limited, so protection review is still incomplete.");
   }
 
   return {

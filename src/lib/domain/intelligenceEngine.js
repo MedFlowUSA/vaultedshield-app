@@ -2109,7 +2109,14 @@ export function buildPolicyReviewReport(policyBundle = {}) {
           { label: "Adequacy Status", value: displayReportValue(adequacyReview?.displayStatus) },
           { label: "Owner Visible", value: adequacyReview?.ownerVisible ? "Yes" : "Limited" },
           { label: "Insured Visible", value: adequacyReview?.insuredVisible ? "Yes" : "Limited" },
-          { label: "Beneficiary Visibility", value: adequacyReview?.beneficiaryVisibility === "not_extracted" ? "Not extracted yet" : displayReportValue(adequacyReview?.beneficiaryVisibility) },
+          {
+            label: "Beneficiary Visibility",
+            value:
+              adequacyReview?.primaryBeneficiaryName ||
+              adequacyReview?.contingentBeneficiaryName
+                ? [adequacyReview?.primaryBeneficiaryName, adequacyReview?.contingentBeneficiaryName].filter(Boolean).join(" / ")
+                : adequacyReview?.beneficiaryStatusLabel || displayReportValue(adequacyReview?.beneficiaryVisibility),
+          },
         ],
       },
       {
@@ -3136,8 +3143,20 @@ export function buildPolicyIntelligence({ baseline, statements, legacyAnalytics,
     policy_type: fieldDisplay(baseline?.fields?.policy_type) || fieldDisplay(latestStatement?.fields?.policy_type),
     policy_number: fieldDisplay(baseline?.fields?.policy_number) || fieldDisplay(latestStatement?.fields?.policy_number),
     issue_date: fieldDisplay(baseline?.fields?.issue_date),
-    insured_name: "",
-    owner_name: "",
+    insured_name: fieldDisplay(baseline?.fields?.insured_name) || fieldDisplay(latestStatement?.fields?.insured_name) || "",
+    owner_name: fieldDisplay(baseline?.fields?.owner_name) || fieldDisplay(latestStatement?.fields?.owner_name) || "",
+    primary_beneficiary_name:
+      fieldDisplay(baseline?.fields?.primary_beneficiary_name) ||
+      fieldDisplay(latestStatement?.fields?.primary_beneficiary_name) ||
+      "",
+    contingent_beneficiary_name:
+      fieldDisplay(baseline?.fields?.contingent_beneficiary_name) ||
+      fieldDisplay(latestStatement?.fields?.contingent_beneficiary_name) ||
+      "",
+    beneficiary_status:
+      fieldDisplay(baseline?.fields?.beneficiary_status) ||
+      fieldDisplay(latestStatement?.fields?.beneficiary_status) ||
+      "",
   };
   normalizedPolicy.death_benefit = {
     death_benefit: baseline?.fields?.death_benefit || null,

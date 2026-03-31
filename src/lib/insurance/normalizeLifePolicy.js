@@ -87,6 +87,9 @@ export function normalizeLifePolicy({
       policyNumber: display(identity?.policy_number),
       insuredName: display(identity?.insured_name),
       ownerName: display(identity?.owner_name),
+      primaryBeneficiaryName: display(identity?.primary_beneficiary_name),
+      contingentBeneficiaryName: display(identity?.contingent_beneficiary_name),
+      beneficiaryStatus: display(identity?.beneficiary_status),
     },
     coverage: {
       deathBenefit: display(coverage?.death_benefit || coverage?.current_death_benefit || coverage?.initial_face_amount),
