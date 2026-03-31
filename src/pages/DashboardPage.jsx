@@ -21,6 +21,13 @@ import {
   getHouseholdBlankState,
 } from "../lib/onboarding/isHouseholdBlank";
 import { executeSmartAction } from "../lib/navigation/smartActions";
+import {
+  summarizeAssetsModule,
+  summarizeBankingModule,
+  summarizeEstateModule,
+  summarizePortalModule,
+  summarizeVaultModule,
+} from "../lib/domain/platformIntelligence/moduleReadiness";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
@@ -207,6 +214,9 @@ function getStatusColors(status) {
   if (status === "Strong") return { color: "#bbf7d0", background: "rgba(34,197,94,0.12)" };
   if (status === "Moderate") return { color: "#fde68a", background: "rgba(245,158,11,0.12)" };
   if (status === "Weak") return { color: "#fdba74", background: "rgba(249,115,22,0.12)" };
+  if (status === "Ready") return { color: "#bbf7d0", background: "rgba(34,197,94,0.12)" };
+  if (status === "Building") return { color: "#fde68a", background: "rgba(245,158,11,0.12)" };
+  if (status === "Needs Review") return { color: "#fca5a5", background: "rgba(239,68,68,0.12)" };
   if (status === "At Risk") return { color: "#fca5a5", background: "rgba(239,68,68,0.12)" };
   return { color: "#cbd5e1", background: "rgba(148,163,184,0.12)" };
 }
@@ -625,6 +635,39 @@ export default function DashboardPage({ onNavigate }) {
   }, null);
   const weakestConfidencePolicy = weakPolicyRows[0] || null;
   const totalAssets = (counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0) + savedPolicyCount;
+  const assetsSummary = useMemo(
+    () => summarizeAssetsModule(intelligenceBundle?.assets || []),
+    [intelligenceBundle]
+  );
+  const vaultSummary = useMemo(
+    () => summarizeVaultModule(intelligenceBundle?.documents || []),
+    [intelligenceBundle]
+  );
+  const portalSummary = useMemo(
+    () =>
+      summarizePortalModule({
+        portals: intelligenceBundle?.portals || [],
+        readiness: intelligenceBundle?.portalReadiness || {},
+      }),
+    [intelligenceBundle]
+  );
+  const bankingSummary = useMemo(
+    () =>
+      summarizeBankingModule({
+        assets: intelligenceBundle?.assets || [],
+        portals: intelligenceBundle?.portals || [],
+        contacts: intelligenceBundle?.contacts || [],
+      }),
+    [intelligenceBundle]
+  );
+  const estateSummary = useMemo(
+    () =>
+      summarizeEstateModule({
+        contacts: intelligenceBundle?.contacts || [],
+        assets: intelligenceBundle?.assets || [],
+      }),
+    [intelligenceBundle]
+  );
   const householdMap = useMemo(
     () => buildHouseholdRiskContinuityMap(intelligenceBundle || {}, intelligence, savedPolicyRows || []),
     [intelligenceBundle, intelligence, savedPolicyRows]
@@ -671,41 +714,64 @@ export default function DashboardPage({ onNavigate }) {
     [showHouseholdReport, intelligenceBundle, intelligence, householdMap, queueItems, reviewDigest]
   );
   const latestAssistantEntry = assistantHistory[assistantHistory.length - 1] || null;
-  const moduleRows = [
-    {
-      module: "Insurance",
-      status: getModuleStatus(savedPolicyCount),
-      insight: savedPolicyCount > 0 ? "Comparison and COI reads available." : "No saved policy set yet.",
-    },
-    {
-      module: "Property",
-      status: getModuleStatus(propertySummary.propertyCount ?? 0),
-      insight:
-        (propertySummary.propertiesWithValuationCount || 0) > 0
-          ? "Valuation and stack linkage active."
-          : "Property stack still building.",
-    },
-    {
-      module: "Retirement",
-      status: getModuleStatus(assetCounts.retirement || 0),
-      insight: "Needs beneficiary validation.",
-    },
-    {
-      module: "Banking",
-      status: getModuleStatus(assetCounts.banking || 0),
-      insight: "Needs portal recovery mapping.",
-    },
-    {
-      module: "Estate",
-      status: getModuleStatus(assetCounts.estate || 0),
-      insight: "Needs stronger document depth.",
-    },
-    {
-      module: "Warranties",
-      status: getModuleStatus(assetCounts.warranty || 0),
-      insight: "Needs proof-of-purchase review.",
-    },
-  ];
+  const moduleRows = useMemo(
+    () => [
+      {
+        module: "Insurance",
+        status: getModuleStatus(savedPolicyCount),
+        insight:
+          savedPolicyCount > 0
+            ? weakPolicyRows.length > 0 || missingStatementCount > 0
+              ? "Policies are visible, but some still need stronger statement or charge support."
+              : "Comparison, continuity, and protection reads are available."
+            : "No saved policy set is visible yet.",
+      },
+      {
+        module: "Property",
+        status: getModuleStatus(propertySummary.propertyCount ?? 0),
+        insight:
+          (propertySummary.propertiesWithValuationCount || 0) > 0
+            ? "Property stack linkage and valuation support are active."
+            : "Property stack visibility is still building.",
+      },
+      {
+        module: "Assets",
+        status: assetsSummary.status,
+        insight: assetsSummary.headline,
+      },
+      {
+        module: "Vault",
+        status: vaultSummary.status,
+        insight: vaultSummary.headline,
+      },
+      {
+        module: "Portals",
+        status: portalSummary.status,
+        insight: portalSummary.headline,
+      },
+      {
+        module: "Banking",
+        status: bankingSummary.status,
+        insight: bankingSummary.headline,
+      },
+      {
+        module: "Estate",
+        status: estateSummary.status,
+        insight: estateSummary.headline,
+      },
+    ],
+    [
+      savedPolicyCount,
+      weakPolicyRows,
+      missingStatementCount,
+      propertySummary,
+      assetsSummary,
+      vaultSummary,
+      portalSummary,
+      bankingSummary,
+      estateSummary,
+    ]
+  );
   const aiIntroModuleCards = useMemo(
     () =>
       buildAiIntroModuleCards({

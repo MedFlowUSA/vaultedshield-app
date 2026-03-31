@@ -23,6 +23,13 @@ import {
   buildHouseholdOnboardingChecklist,
   getHouseholdBlankState,
 } from "../lib/onboarding/isHouseholdBlank";
+import {
+  summarizeAssetsModule,
+  summarizeBankingModule,
+  summarizeEstateModule,
+  summarizePortalModule,
+  summarizeVaultModule,
+} from "../lib/domain/platformIntelligence/moduleReadiness";
 
 function buttonStyle(primary = false) {
   return {
@@ -282,6 +289,57 @@ export default function ReportsPage({ onNavigate }) {
     () => buildInsurancePortfolioReport(rankedPolicies),
     [rankedPolicies]
   );
+  const assetsSummary = useMemo(() => summarizeAssetsModule(bundle?.assets || []), [bundle]);
+  const vaultSummary = useMemo(() => summarizeVaultModule(bundle?.documents || []), [bundle]);
+  const portalSummary = useMemo(
+    () =>
+      summarizePortalModule({
+        portals: bundle?.portals || [],
+        readiness: bundle?.portalReadiness || {},
+      }),
+    [bundle]
+  );
+  const bankingSummary = useMemo(
+    () =>
+      summarizeBankingModule({
+        assets: bundle?.assets || [],
+        portals: bundle?.portals || [],
+        contacts: bundle?.contacts || [],
+      }),
+    [bundle]
+  );
+  const estateSummary = useMemo(
+    () =>
+      summarizeEstateModule({
+        contacts: bundle?.contacts || [],
+        assets: bundle?.assets || [],
+      }),
+    [bundle]
+  );
+  const moduleReadinessRows = useMemo(
+    () => [
+      { module: "Assets", summary: assetsSummary },
+      { module: "Vault", summary: vaultSummary },
+      { module: "Portals", summary: portalSummary },
+      { module: "Banking", summary: bankingSummary },
+      { module: "Estate", summary: estateSummary },
+    ],
+    [assetsSummary, vaultSummary, portalSummary, bankingSummary, estateSummary]
+  );
+  const moduleReadinessCounts = useMemo(
+    () =>
+      moduleReadinessRows.reduce(
+        (accumulator, row) => {
+          const status = row.summary?.status || "Needs Review";
+          if (status === "Ready") accumulator.ready += 1;
+          else if (status === "Building") accumulator.building += 1;
+          else accumulator.needsReview += 1;
+          return accumulator;
+        },
+        { ready: 0, building: 0, needsReview: 0 }
+      ),
+    [moduleReadinessRows]
+  );
   const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
   const onboardingChecklist = useMemo(
     () => buildHouseholdOnboardingChecklist(blankHousehold, bundle || {}, rows),
@@ -311,6 +369,17 @@ export default function ReportsPage({ onNavigate }) {
       label: "Upload Document",
       description: "Add the first household file to begin report-ready evidence collection.",
       route: "/upload-center",
+    },
+    {
+      key: "module_readiness",
+      title: "Module Readiness Snapshot",
+      status: "Live",
+      description: "High-level operating read across assets, vault, portals, banking, and estate.",
+      metrics: [
+        { label: "Ready", value: moduleReadinessCounts.ready },
+        { label: "Building", value: moduleReadinessCounts.building },
+        { label: "Needs Review", value: moduleReadinessCounts.needsReview },
+      ],
     },
   ];
 
@@ -591,6 +660,57 @@ export default function ReportsPage({ onNavigate }) {
         ) : (
           <ReportView report={householdReport} onPrint={handlePrintActiveReport} label="Household Report" />
         )}
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: "26px 28px",
+          borderRadius: "24px",
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Module Readiness Snapshot</div>
+          <div style={{ color: "#475569", lineHeight: "1.8" }}>
+            Reports now carry the same high-level readiness model used by the module hubs, so operating context for assets, vault, portals, banking, and estate is visible here too instead of living in separate corners of the app.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {moduleReadinessRows.map((row) => (
+            <div
+              key={row.module}
+              style={{
+                padding: "18px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{row.module}</div>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{row.summary.status}</div>
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{row.summary.headline}</div>
+              <div style={{ display: "grid", gap: "6px", color: "#64748b", fontSize: "13px" }}>
+                {row.summary.notes.slice(0, 2).map((note) => (
+                  <div key={`${row.module}-${note}`}>{note}</div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section
