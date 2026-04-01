@@ -1585,12 +1585,38 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                             <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>
                               {iulV2.illustrationComparison.reviewSupport.headline}
                             </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
+                              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "10px 12px" }}>
+                                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Year Match</div>
+                                <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                                  {iulV2.illustrationComparison.reviewSupport.matchQuality.replace(/_/g, " ")}
+                                </div>
+                              </div>
+                              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "10px 12px" }}>
+                                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Chronology</div>
+                                <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                                  {iulV2.illustrationComparison.chronologySupport?.status?.replace(/_/g, " ") || "limited"}
+                                </div>
+                              </div>
+                              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "10px 12px" }}>
+                                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Selected Metric</div>
+                                <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                                  {iulV2.illustrationComparison.selectedMetricLabel || "Value"}
+                                </div>
+                              </div>
+                            </div>
                             <div style={{ color: "#475569", lineHeight: "1.6" }}>
                               {iulV2.illustrationComparison.reviewSupport.note}
                             </div>
                           </div>
                         ) : null}
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
+                          <div>
+                            <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Policy-Year Match</div>
+                            <div style={{ marginTop: "4px", color: "#0f172a", fontWeight: 700 }}>
+                              {iulV2.illustrationComparison.policyYearAlignment?.actualPolicyYear ?? "?"} vs {iulV2.illustrationComparison.policyYearAlignment?.matchedPolicyYear ?? "?"}
+                            </div>
+                          </div>
                           <div>
                             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                               Illustrated {iulV2.illustrationComparison.selectedMetricLabel || "Value"}

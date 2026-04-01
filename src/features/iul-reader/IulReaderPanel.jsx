@@ -390,6 +390,10 @@ export function IulReaderPanel({ reader, results }) {
                   ) : null}
                   <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
                     <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#9a3412" }}>Year Match</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.yearMatchLabel}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #fed7aa", borderRadius: "12px", padding: "12px" }}>
                       <div style={{ fontSize: "12px", color: "#9a3412" }}>Statements Used</div>
                       <div style={{ marginTop: "4px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.statementCount}</div>
                     </div>
@@ -405,6 +409,9 @@ export function IulReaderPanel({ reader, results }) {
                   <div style={{ marginTop: "10px", color: "#7c2d12", lineHeight: "1.7" }}>
                     {reader.projectionView.reviewSupportNote || reader.projectionView.chronologyNote}
                   </div>
+                  <div style={{ marginTop: "8px", color: "#7c2d12", lineHeight: "1.7" }}>
+                    {reader.projectionView.yearMatchNote}
+                  </div>
                   {reader.projectionView.annualReviewChecklist?.length > 0 ? (
                     <ul style={{ margin: "10px 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#7c2d12" }}>
                       {reader.projectionView.annualReviewChecklist.map((item) => (
@@ -419,6 +426,10 @@ export function IulReaderPanel({ reader, results }) {
                     <div style={{ fontSize: "12px", color: "#64748b" }}>Current Policy-Year Match</div>
                     <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>
                       Actual year {reader.projectionView.currentMatch.actual_policy_year} vs illustration year {reader.projectionView.currentMatch.matched_policy_year}
+                    </div>
+                    <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6" }}>
+                      The primary checkpoint read is using {reader.projectionView.selectedMetricLabel.toLowerCase()}
+                      {reader.projectionView.policyYearGap !== null ? ` with a visible policy-year gap of ${reader.projectionView.policyYearGap}.` : "."}
                     </div>
                     <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
                       <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px" }}>

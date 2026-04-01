@@ -662,11 +662,17 @@ function buildProjectionView(results) {
   const duplicateCount = Number(chronology?.duplicateDateCount || 0);
   const irregularGapCount = Number(chronology?.irregularGapCount || 0);
   const statementCount = Number(chronology?.statementCount || (Array.isArray(results.statementResults) ? results.statementResults.length : 0));
+  const alignmentConfidence = illustrationComparison.alignmentConfidence || "low";
+  const selectedMetricLabel = illustrationComparison.selectedMetricLabel || "Current policy values";
+  const policyYearAlignment = illustrationComparison.policyYearAlignment || {};
+  const policyYearGap = Number.isFinite(Number(policyYearAlignment.policyYearGap))
+    ? Number(policyYearAlignment.policyYearGap)
+    : null;
 
   const annualReviewStatus =
-    chronologyStatus === "healthy" || chronologyStatus === "strong"
+    chronologyStatus === "aligned" && alignmentConfidence === "high"
       ? "confirmed"
-      : chronologyStatus === "mixed"
+      : chronologyStatus === "mixed" || alignmentConfidence === "low"
         ? "missing"
         : "review";
 
@@ -678,17 +684,33 @@ function buildProjectionView(results) {
         : "Annual review support needs cleanup";
 
   const chronologyLabel =
-    chronologyStatus === "healthy" || chronologyStatus === "strong"
+    chronologyStatus === "aligned"
       ? "Chronology aligned"
       : chronologyStatus === "mixed"
         ? "Chronology mixed"
         : "Chronology limited";
 
+  const yearMatchLabel =
+    alignmentConfidence === "high"
+      ? "Policy year match is clean"
+      : alignmentConfidence === "moderate"
+        ? "Policy year match is near"
+        : "Policy year match is fragile";
+
+  const yearMatchNote =
+    alignmentConfidence === "high"
+      ? "The latest visible statement year lines up directly with the extracted illustration checkpoint."
+      : alignmentConfidence === "moderate"
+        ? policyYearGap === 1
+          ? "The latest visible statement is about one policy year away from the nearest extracted illustration checkpoint."
+          : "The latest visible statement is close to the extracted illustration checkpoint, but not a direct match."
+        : "The latest visible statement does not line up cleanly enough with the extracted illustration checkpoint yet.";
+
   const chronologyNote =
     chronology?.note ||
     (chronologyStatus === "mixed"
       ? "Visible statement timing is irregular or duplicated, which weakens year-over-year comparison confidence."
-      : chronologyStatus === "healthy" || chronologyStatus === "strong"
+      : chronologyStatus === "aligned"
         ? "Visible statements appear reasonably clean for year-over-year review."
         : "There are not enough dated statements yet for a stronger annual comparison read.");
 
@@ -698,12 +720,16 @@ function buildProjectionView(results) {
     : [];
   if (chronologyStatus === "mixed") {
     annualReviewChecklist.push("Confirm one clean annual statement per policy year before leaning on drift conclusions.");
-  } else if (chronologyStatus !== "healthy" && chronologyStatus !== "strong") {
+  } else if (chronologyStatus !== "aligned") {
     annualReviewChecklist.push("Add more dated annual statements to improve year-over-year comparison confidence.");
   }
 
   if (!currentMatch) {
     annualReviewChecklist.push("Upload a fuller illustration ledger or in-force ledger with yearly checkpoints.");
+  } else if (alignmentConfidence === "moderate") {
+    annualReviewChecklist.push("Check the nearest policy-year checkpoint before treating the illustration comparison as exact.");
+  } else if (alignmentConfidence === "low") {
+    annualReviewChecklist.push("Confirm current policy year or upload a cleaner illustration ledger so the comparison is not guess-based.");
   }
 
   if (optimization?.recommendations?.length) {
@@ -726,6 +752,11 @@ function buildProjectionView(results) {
     chronologyNote,
     annualReviewStatus,
     annualReviewLabel,
+    yearMatchLabel,
+    yearMatchNote,
+    alignmentConfidence,
+    selectedMetricLabel,
+    policyYearGap,
     statementCount,
     duplicateCount,
     irregularGapCount,
