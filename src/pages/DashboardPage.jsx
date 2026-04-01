@@ -22,6 +22,7 @@ import {
 } from "../lib/onboarding/isHouseholdBlank";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 import {
+  buildModuleReadinessOverview,
   summarizeAssetsModule,
   summarizeBankingModule,
   summarizeEstateModule,
@@ -725,6 +726,14 @@ export default function DashboardPage({ onNavigate }) {
               ? "Policies are visible, but some still need stronger statement or charge support."
               : "Comparison, continuity, and protection reads are available."
             : "No saved policy set is visible yet.",
+        watchpoint:
+          savedPolicyCount > 0
+            ? weakPolicyRows.length > 0
+              ? `${weakPolicyRows.length} polic${weakPolicyRows.length === 1 ? "y still needs" : "ies still need"} stronger charge confidence.`
+              : missingStatementCount > 0
+                ? `${missingStatementCount} polic${missingStatementCount === 1 ? "y is" : "ies are"} still missing a visible latest statement date.`
+                : "Ready for household review."
+            : "Upload a baseline illustration or statement packet to start the insurance read.",
       },
       {
         module: "Property",
@@ -733,32 +742,16 @@ export default function DashboardPage({ onNavigate }) {
           (propertySummary.propertiesWithValuationCount || 0) > 0
             ? "Property stack linkage and valuation support are active."
             : "Property stack visibility is still building.",
+        watchpoint:
+          (propertySummary.propertiesWithValuationCount || 0) > 0
+            ? "Review whether the current property set is running on official comps or simulated support."
+            : "Add or refresh a property so valuation and equity context can join the household read.",
       },
-      {
-        module: "Assets",
-        status: assetsSummary.status,
-        insight: assetsSummary.headline,
-      },
-      {
-        module: "Vault",
-        status: vaultSummary.status,
-        insight: vaultSummary.headline,
-      },
-      {
-        module: "Portals",
-        status: portalSummary.status,
-        insight: portalSummary.headline,
-      },
-      {
-        module: "Banking",
-        status: bankingSummary.status,
-        insight: bankingSummary.headline,
-      },
-      {
-        module: "Estate",
-        status: estateSummary.status,
-        insight: estateSummary.headline,
-      },
+      buildModuleReadinessOverview("Assets", assetsSummary),
+      buildModuleReadinessOverview("Vault", vaultSummary),
+      buildModuleReadinessOverview("Portals", portalSummary),
+      buildModuleReadinessOverview("Banking", bankingSummary),
+      buildModuleReadinessOverview("Estate", estateSummary),
     ],
     [
       savedPolicyCount,
@@ -2096,6 +2089,9 @@ export default function DashboardPage({ onNavigate }) {
                       </span>
                     </div>
                     <div style={{ paddingTop: "2px", color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{row.insight}</div>
+                    <div style={{ color: "#64748b", lineHeight: "1.6", fontSize: "13px" }}>
+                      <span style={{ color: "#cbd5e1", fontWeight: 600 }}>Watchpoint:</span> {row.watchpoint}
+                    </div>
                   </div>
                 );
               })}
@@ -2107,7 +2103,8 @@ export default function DashboardPage({ onNavigate }) {
                   <tr style={{ color: "#64748b", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.14em" }}>
                     <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Module</th>
                     <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Status</th>
-                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Insight</th>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Current Read</th>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Watchpoint</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2133,6 +2130,7 @@ export default function DashboardPage({ onNavigate }) {
                           </span>
                         </td>
                         <td style={{ padding: "14px 0", color: "#94a3b8" }}>{row.insight}</td>
+                        <td style={{ padding: "14px 0", color: "#64748b" }}>{row.watchpoint}</td>
                       </tr>
                     );
                   })}

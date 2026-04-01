@@ -24,6 +24,7 @@ import {
   getHouseholdBlankState,
 } from "../lib/onboarding/isHouseholdBlank";
 import {
+  buildModuleReadinessOverview,
   summarizeAssetsModule,
   summarizeBankingModule,
   summarizeEstateModule,
@@ -226,6 +227,35 @@ function ReportView({ report, onPrint, label }) {
   );
 }
 
+function buildExecutiveSummaryLines({ householdMap, reviewDigest, moduleReadinessRows, rankedPolicies }) {
+  const lines = [];
+  if (householdMap?.bottom_line) lines.push(householdMap.bottom_line);
+  if (reviewDigest?.summary) lines.push(reviewDigest.summary);
+
+  const needsReviewModules = moduleReadinessRows
+    .filter((row) => row.status === "Needs Review")
+    .map((row) => row.module);
+  const buildingModules = moduleReadinessRows
+    .filter((row) => row.status === "Building")
+    .map((row) => row.module);
+
+  if (needsReviewModules.length > 0) {
+    lines.push(`Modules needing the most reinforcement right now: ${needsReviewModules.join(", ")}.`);
+  } else if (buildingModules.length > 0) {
+    lines.push(`Modules still building toward stronger household coverage: ${buildingModules.join(", ")}.`);
+  } else {
+    lines.push("Core module readiness is broadly usable across the currently tracked household surfaces.");
+  }
+
+  if (rankedPolicies.length > 0) {
+    lines.push(`Insurance reporting is live across ${rankedPolicies.length} visible polic${rankedPolicies.length === 1 ? "y" : "ies"}.`);
+  } else {
+    lines.push("Insurance reporting will deepen once at least one saved policy is visible.");
+  }
+
+  return lines.slice(0, 4);
+}
+
 export default function ReportsPage({ onNavigate }) {
   const { householdState, intelligenceBundle: bundle, insuranceRows: rows, debug, errors, loadingStates } = usePlatformShellData();
   const [activeReport, setActiveReport] = useState("household");
@@ -318,11 +348,11 @@ export default function ReportsPage({ onNavigate }) {
   );
   const moduleReadinessRows = useMemo(
     () => [
-      { module: "Assets", summary: assetsSummary },
-      { module: "Vault", summary: vaultSummary },
-      { module: "Portals", summary: portalSummary },
-      { module: "Banking", summary: bankingSummary },
-      { module: "Estate", summary: estateSummary },
+      buildModuleReadinessOverview("Assets", assetsSummary),
+      buildModuleReadinessOverview("Vault", vaultSummary),
+      buildModuleReadinessOverview("Portals", portalSummary),
+      buildModuleReadinessOverview("Banking", bankingSummary),
+      buildModuleReadinessOverview("Estate", estateSummary),
     ],
     [assetsSummary, vaultSummary, portalSummary, bankingSummary, estateSummary]
   );
@@ -339,6 +369,16 @@ export default function ReportsPage({ onNavigate }) {
         { ready: 0, building: 0, needsReview: 0 }
       ),
     [moduleReadinessRows]
+  );
+  const executiveSummaryLines = useMemo(
+    () =>
+      buildExecutiveSummaryLines({
+        householdMap,
+        reviewDigest,
+        moduleReadinessRows,
+        rankedPolicies,
+      }),
+    [householdMap, moduleReadinessRows, rankedPolicies, reviewDigest]
   );
   const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
   const onboardingChecklist = useMemo(
@@ -503,6 +543,17 @@ export default function ReportsPage({ onNavigate }) {
 
   const reportCards = [
     {
+      key: "executive",
+      title: "Executive Summary Packet",
+      status: bundle ? "Live" : "Loading",
+      description: "Top-line household read, review pressure, module watchpoints, and insurance visibility in one export-oriented surface.",
+      metrics: [
+        { label: "Bottom Line", value: householdMap?.overall_score ?? "—" },
+        { label: "Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
+        { label: "Modules Needing Review", value: moduleReadinessCounts.needsReview },
+      ],
+    },
+    {
       key: "household",
       title: "Household Review Brief",
       status: "Live",
@@ -634,6 +685,13 @@ export default function ReportsPage({ onNavigate }) {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
+            onClick={() => setActiveReport("executive")}
+            style={reportButtonStyle(activeReport === "executive")}
+          >
+            Executive Summary
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveReport("household")}
             style={reportButtonStyle(activeReport === "household")}
           >
@@ -657,6 +715,128 @@ export default function ReportsPage({ onNavigate }) {
 
         {activeReport === "insurance" ? (
           <ReportView report={insurancePortfolioReport} onPrint={handlePrintActiveReport} label="Portfolio Report" />
+        ) : activeReport === "executive" ? (
+          <section
+            style={{
+              display: "grid",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gap: "14px",
+                padding: "24px",
+                borderRadius: "18px",
+                background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                border: "1px solid rgba(147, 197, 253, 0.28)",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Executive Summary Packet
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Cross-Module Household Read</div>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
+                A tighter operating summary for household planning, continuity review, and export-friendly leadership readout.
+              </div>
+              <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(true)}>
+                Print Executive Summary
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: "22px 24px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Executive Narrative</div>
+              <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.8" }}>
+                {executiveSummaryLines.map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {renderReportFactsGrid(
+                [
+                  { label: "Household Readiness", value: displayValue(householdMap?.overall_score) },
+                  { label: "Active Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
+                  { label: "Reopened Items", value: reviewDigest.reopened_count || 0 },
+                  { label: "Modules Needing Review", value: moduleReadinessCounts.needsReview },
+                  { label: "Modules Building", value: moduleReadinessCounts.building },
+                  { label: "Visible Policies", value: rankedPolicies.length },
+                ],
+                3
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.1fr 0.9fr",
+                gap: "18px",
+              }}
+            >
+              <div
+                style={{
+                  padding: "22px 24px",
+                  borderRadius: "18px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  display: "grid",
+                  gap: "14px",
+                }}
+              >
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Top Watchpoints</div>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {moduleReadinessRows
+                    .filter((row) => row.status !== "Ready")
+                    .slice(0, 4)
+                    .map((row) => (
+                      <div key={row.module} style={{ color: "#475569", lineHeight: "1.7" }}>
+                        <strong style={{ color: "#0f172a" }}>{row.module}:</strong> {row.watchpoint}
+                      </div>
+                    ))}
+                  {moduleReadinessRows.filter((row) => row.status !== "Ready").length === 0 ? (
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      No major module watchpoints are currently outranking the others.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "22px 24px",
+                  borderRadius: "18px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  display: "grid",
+                  gap: "14px",
+                }}
+              >
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Export Packet Includes</div>
+                <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                  <li>Household continuity bottom line and review digest.</li>
+                  <li>Cross-module readiness watchpoints for assets, vault, portals, banking, and estate.</li>
+                  <li>Insurance portfolio visibility and continuity ranking status.</li>
+                  <li>A cleaner top-line summary for advisor, family, or executive review.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
         ) : (
           <ReportView report={householdReport} onPrint={handlePrintActiveReport} label="Household Report" />
         )}
@@ -700,13 +880,14 @@ export default function ReportsPage({ onNavigate }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{row.module}</div>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{row.summary.status}</div>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{row.status}</div>
               </div>
-              <div style={{ color: "#475569", lineHeight: "1.7" }}>{row.summary.headline}</div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{row.insight}</div>
               <div style={{ display: "grid", gap: "6px", color: "#64748b", fontSize: "13px" }}>
-                {row.summary.notes.slice(0, 2).map((note) => (
-                  <div key={`${row.module}-${note}`}>{note}</div>
-                ))}
+                <div>
+                  <span style={{ color: "#334155", fontWeight: 600 }}>Watchpoint:</span> {row.watchpoint}
+                </div>
+                {row.summary?.notes?.slice(1, 2).map((note) => <div key={`${row.module}-${note}`}>{note}</div>)}
               </div>
             </div>
           ))}

@@ -30,6 +30,25 @@ function classifyStatus(goodThresholdMet, warningThresholdMet) {
   return "Needs Review";
 }
 
+function buildWatchpoint(summary) {
+  const notes = normalizeArray(summary?.notes).filter(Boolean);
+  if (notes.length > 0) return notes[0];
+  const status = summary?.status || "Needs Review";
+  if (status === "Ready") return "Ready for household review.";
+  if (status === "Building") return "Usable, but still building toward fuller household support.";
+  return "More records are needed before this module can support a strong household read.";
+}
+
+export function buildModuleReadinessOverview(module, summary = {}) {
+  return {
+    module,
+    status: summary?.status || "Needs Review",
+    insight: summary?.headline || "Readiness details are still being built.",
+    watchpoint: buildWatchpoint(summary),
+    summary,
+  };
+}
+
 export function summarizeBankingModule({ assets = [], portals = [], contacts = [] } = {}) {
   const safeAssets = normalizeArray(assets);
   const safePortals = normalizeArray(portals);

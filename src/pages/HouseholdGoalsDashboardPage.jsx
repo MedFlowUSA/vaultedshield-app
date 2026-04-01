@@ -75,9 +75,33 @@ function getPropertyStatus(propertyBundle = {}) {
   return "limited";
 }
 
+function getPriorityUrgencyTone(priority) {
+  if (priority === "Now") return { background: "#fee2e2", color: "#991b1b" };
+  if (priority === "Soon") return { background: "#ffedd5", color: "#c2410c" };
+  return { background: "#e2e8f0", color: "#334155" };
+}
+
+function getPriorityUrgencyLabel(severity) {
+  if (severity === "high") return "Now";
+  if (severity === "medium") return "Soon";
+  return "Watch";
+}
+
+function scorePriorityItem(item) {
+  const severityWeight = { high: 300, medium: 200, low: 100 };
+  const moduleWeight = {
+    insurance: 40,
+    retirement: 32,
+    mortgage: 24,
+    college: 20,
+    property: 12,
+  };
+  const score = (severityWeight[item.severity] || 0) + (moduleWeight[item.moduleKey] || 0) + Number(item.impactScore || 0);
+  return score;
+}
+
 function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, propertyBundles, insuranceGaps, mortgageSummary }) {
   const items = [];
-  const severityWeight = { high: 0, medium: 1, low: 2 };
 
   if (retirementReadiness && retirementReadiness.readinessStatus !== "On Track") {
     items.push({
@@ -86,6 +110,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: `${retirementReadiness.readinessStatus} at ${retirementReadiness.readinessScore}/100.`,
       actionPath: "/retirement/upload",
       severity: retirementReadiness.readinessStatus === "Needs Attention" || retirementReadiness.readinessStatus === "Behind" ? "medium" : "low",
+      moduleKey: "retirement",
+      impactScore: Math.max(0, 100 - Number(retirementReadiness.readinessScore || 0)),
     });
   }
 
@@ -99,6 +125,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
         detail: `${plan.readinessStatus} at ${plan.readinessScore}/100 with ${formatCurrency(Math.abs(plan.fundingDifference))} ${plan.fundingDifference >= 0 ? "surplus" : "gap"}.`,
         actionPath: "/college-planning",
         severity: plan.readinessStatus === "Needs Attention" || plan.readinessStatus === "Behind" ? "medium" : "low",
+        moduleKey: "college",
+        impactScore: Math.max(0, 100 - Number(plan.readinessScore || 0)),
       });
     });
 
@@ -111,7 +139,9 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
         title: `${bundle.property?.property_name || bundle.property?.property_address || "Property"} has limited equity visibility`,
         detail: `Equity visibility is ${bundle.propertyEquityPosition?.equity_visibility_status || "limited"} and may still need clearer financing or valuation support.`,
         actionPath: bundle.property?.id ? `/property/detail/${bundle.property.id}` : "/property",
-        severity: "low",
+        severity: getPropertyStatus(bundle) === "limited" ? "medium" : "low",
+        moduleKey: "property",
+        impactScore: getPropertyStatus(bundle) === "limited" ? 55 : 25,
       });
     });
 
@@ -122,6 +152,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: `${mortgageSummary.needsReviewCount} loan${mortgageSummary.needsReviewCount === 1 ? "" : "s"} still need stronger statement, payment, or property-link visibility.`,
       actionPath: "/mortgage",
       severity: "medium",
+      moduleKey: "mortgage",
+      impactScore: Math.min(90, (mortgageSummary.needsReviewCount || 0) * 18),
     });
   } else if ((mortgageSummary?.reviewSoonCount || 0) > 0) {
     items.push({
@@ -130,6 +162,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: `${mortgageSummary.reviewSoonCount} loan${mortgageSummary.reviewSoonCount === 1 ? "" : "s"} merit refinance, payoff, or maturity review soon.`,
       actionPath: "/mortgage",
       severity: "low",
+      moduleKey: "mortgage",
+      impactScore: Math.min(60, (mortgageSummary.reviewSoonCount || 0) * 10),
     });
   }
 
@@ -140,6 +174,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: insuranceGaps?.life?.message,
       actionPath: "/insurance/life/upload",
       severity: insuranceGaps?.life?.severity || "low",
+      moduleKey: "insurance",
+      impactScore: insuranceGaps?.life?.status === "missing" ? 95 : 65,
       include: insuranceGaps?.life?.status && insuranceGaps.life.status !== "covered",
     },
     {
@@ -148,6 +184,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: insuranceGaps?.homeowners?.message,
       actionPath: "/insurance/homeowners",
       severity: insuranceGaps?.homeowners?.severity || "low",
+      moduleKey: "insurance",
+      impactScore: insuranceGaps?.homeowners?.status === "missing" ? 88 : 58,
       include: insuranceGaps?.homeowners?.status && insuranceGaps.homeowners.status !== "covered" && insuranceGaps.homeowners.status !== "unknown",
     },
     {
@@ -156,6 +194,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: insuranceGaps?.umbrella?.message,
       actionPath: "/insurance",
       severity: insuranceGaps?.umbrella?.severity || "low",
+      moduleKey: "insurance",
+      impactScore: 52,
       include: insuranceGaps?.umbrella?.status === "gap",
     },
     {
@@ -164,6 +204,8 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       detail: insuranceGaps?.auto?.message,
       actionPath: "/insurance/auto",
       severity: insuranceGaps?.auto?.severity || "low",
+      moduleKey: "insurance",
+      impactScore: 30,
       include: insuranceGaps?.auto?.status === "missing",
     },
   ]
@@ -171,7 +213,12 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
     .map(({ include, ...item }) => item);
 
   return [...insuranceItems, ...items]
-    .sort((left, right) => (severityWeight[left.severity] ?? 3) - (severityWeight[right.severity] ?? 3))
+    .map((item) => ({
+      ...item,
+      urgency: getPriorityUrgencyLabel(item.severity),
+      priorityScore: scorePriorityItem(item),
+    }))
+    .sort((left, right) => right.priorityScore - left.priorityScore)
     .slice(0, 5);
 }
 
@@ -460,7 +507,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       {
         label: "Priority Queue",
         value: priorityItems.length,
-        helper: priorityItems.length ? "Household goals to review" : "No urgent planning flags yet",
+        helper: priorityItems.length ? `${priorityItems[0].urgency}: ${priorityItems[0].title}` : "No urgent planning flags yet",
       },
     ],
     [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, insuranceSummary, mortgageSummary, priorityItems.length, propertySummary, retirementReadiness]
@@ -468,6 +515,18 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
 
   const householdNarrative = useMemo(() => {
     const lines = [];
+    const leadingPriority = priorityItems[0] || null;
+    const secondaryPriority = priorityItems[1] || null;
+
+    if (leadingPriority) {
+      lines.push(
+        secondaryPriority
+          ? `The biggest household priorities right now are ${leadingPriority.title.toLowerCase()} and ${secondaryPriority.title.toLowerCase()}.`
+          : `The main household priority right now is ${leadingPriority.title.toLowerCase()}.`
+      );
+    } else {
+      lines.push("No single household issue is rising above the others right now, so the current view reads as more monitor-than-urgent.");
+    }
 
     if (retirementReadiness) {
       lines.push(`Retirement is currently ${retirementReadiness.readinessStatus.toLowerCase()} at ${retirementReadiness.readinessScore}/100.`);
@@ -511,7 +570,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       }
     }
     return lines.join(" ");
-  }, [activeCollegePlan, insuranceGaps, insuranceSummary, mortgageSummary, propertySummary, retirementReadiness]);
+  }, [activeCollegePlan, insuranceGaps, insuranceSummary, mortgageSummary, priorityItems, propertySummary, retirementReadiness]);
 
   const cardGrid = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
 
@@ -561,6 +620,9 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         title="Household planning read"
         summary={householdNarrative}
         bullets={[
+          priorityItems[0]
+            ? `Top household priority: ${priorityItems[0].title}. ${priorityItems[0].detail}`
+            : "No urgent household planning item is currently outranking the others.",
           retirementReadiness
             ? `Retirement projected balance: ${formatCurrency(retirementReadiness.projectedRetirementBalance)}.`
             : "Retirement goal has not been saved yet.",
@@ -987,13 +1049,13 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                       style={{
                         padding: "5px 9px",
                         borderRadius: "999px",
-                        background: getSeverityTone(item.severity).background,
-                        color: getSeverityTone(item.severity).color,
+                        background: getPriorityUrgencyTone(item.urgency).background,
+                        color: getPriorityUrgencyTone(item.urgency).color,
                         fontWeight: 700,
                         fontSize: "12px",
                       }}
                     >
-                      {item.severity === "high" ? "High" : item.severity === "medium" ? "Medium" : "Low"}
+                      {item.urgency}
                     </div>
                   </div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.detail}</div>
