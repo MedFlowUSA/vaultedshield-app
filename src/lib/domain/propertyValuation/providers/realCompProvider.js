@@ -15,7 +15,7 @@ function safeFetchLog(stage, detail = {}) {
 export function getRealPropertyValuationProviderDiagnostics() {
   const endpoint =
     import.meta.env.VITE_PROPERTY_VALUATION_API_URL ||
-    (typeof window !== "undefined" && window.location.hostname !== "localhost" ? "/api/property-comps" : "");
+    (typeof window !== "undefined" ? "/api/property-comps" : "");
   const providerKind = (import.meta.env.VITE_PROPERTY_VALUATION_PROVIDER || "attom_proxy").trim().toLowerCase();
   const allowFallback = String(import.meta.env.VITE_PROPERTY_VALUATION_ALLOW_SIMULATED_FALLBACK || "true").toLowerCase() !== "false";
 
@@ -24,7 +24,14 @@ export function getRealPropertyValuationProviderDiagnostics() {
     endpoint,
     providerKind,
     allowSimulatedFallback: allowFallback,
+    endpointMode: endpoint.startsWith("/") ? "same_origin_proxy" : endpoint ? "external_proxy" : "disabled",
   };
+}
+
+function classifyOfficialDataQuality(sourceCount = 0, compCount = 0) {
+  if (compCount >= 3 || (compCount >= 2 && sourceCount >= 1)) return "strong";
+  if (compCount >= 1 || sourceCount >= 1) return "limited";
+  return "unavailable";
 }
 
 function buildRequestPayload(subject = {}) {
@@ -180,6 +187,8 @@ function normalizeProviderPayload(payload = {}, subject = {}, providerKind = "at
       provider_version: providerKind,
       comp_pool_size: rawComps.length,
       selected_comp_count: comps.length,
+      official_signal_count: comps.length + sources.length,
+      official_data_quality: classifyOfficialDataQuality(sources.length, comps.length),
       comp_data_origin: "official_api",
       provider_response_shape: Array.isArray(rawComps) ? "comparables_array" : "unknown",
       provider_payload_keys: Object.keys(payload || {}),
@@ -218,20 +227,43 @@ export async function runRealPropertyValuationProvider(subject = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Real comp endpoint returned ${response.status}`);
+    let errorPayload = null;
+    try {
+      errorPayload = await response.json();
+    } catch {
+      errorPayload = null;
+    }
+    const message =
+      errorPayload?.message ||
+      errorPayload?.details?.message ||
+      errorPayload?.error ||
+      `Real comp endpoint returned ${response.status}`;
+    const error = new Error(message);
+    error.providerStatus = response.status;
+    error.providerCode = errorPayload?.error || "real_comp_endpoint_failed";
+    error.providerDetails = errorPayload?.details || null;
+    throw error;
   }
 
   const payload = await response.json();
   const normalized = normalizeProviderPayload(payload, subject, diagnostics.providerKind);
   safeFetchLog("request_succeeded", {
-    providerKind: diagnostics.providerKind,
-    compCount: normalized.comps.length,
-    sourceCount: normalized.sources.length,
-  });
+      providerKind: diagnostics.providerKind,
+      compCount: normalized.comps.length,
+      sourceCount: normalized.sources.length,
+      officialDataQuality: normalized.metadata?.official_data_quality,
+    });
 
   if (!normalized.comps.length && !normalized.sources.length) {
     throw new Error("Real comp endpoint returned no usable valuation signals.");
   }
+
+  normalized.metadata = {
+    ...(normalized.metadata || {}),
+    requested_provider: diagnostics.providerKind,
+    attempted_endpoint: diagnostics.endpoint,
+    endpoint_mode: diagnostics.endpointMode,
+  };
 
   return normalized;
 }

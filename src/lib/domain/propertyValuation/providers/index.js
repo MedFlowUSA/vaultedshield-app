@@ -21,6 +21,10 @@ export function getPropertyValuationProvider() {
             ...(fallback.metadata || {}),
             comp_data_origin: "simulated",
             provider_mode: "mock_only",
+            requested_provider: diagnostics.providerKind,
+            attempted_endpoint: diagnostics.endpoint,
+            endpoint_mode: diagnostics.endpointMode,
+            allow_simulated_fallback: diagnostics.allowSimulatedFallback,
           },
         };
       }
@@ -33,6 +37,10 @@ export function getPropertyValuationProvider() {
             ...(realResult.metadata || {}),
             comp_data_origin: "official_api",
             provider_mode: "official_api",
+            requested_provider: diagnostics.providerKind,
+            attempted_endpoint: diagnostics.endpoint,
+            endpoint_mode: diagnostics.endpointMode,
+            allow_simulated_fallback: diagnostics.allowSimulatedFallback,
           },
         };
       } catch (error) {
@@ -50,6 +58,11 @@ export function getPropertyValuationProvider() {
             fallback_reason: error?.message || "Real comp provider failed",
             requested_provider: diagnostics.providerKind,
             attempted_endpoint: diagnostics.endpoint,
+            endpoint_mode: diagnostics.endpointMode,
+            provider_error_code: error?.providerCode || null,
+            provider_error_status: error?.providerStatus || null,
+            provider_error_details: error?.providerDetails || null,
+            allow_simulated_fallback: diagnostics.allowSimulatedFallback,
           },
         };
       }

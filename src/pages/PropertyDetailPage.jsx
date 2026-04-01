@@ -553,6 +553,13 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     compDataOrigin === "official_api" ? "good" : compDataOrigin === "simulated_fallback" ? "warning" : "info";
   const providerMode = valuationMetadata.provider_mode || "mock_only";
   const providerFallbackReason = valuationMetadata.fallback_reason || "";
+  const providerErrorStatus = valuationMetadata.provider_error_status || null;
+  const providerErrorCode = valuationMetadata.provider_error_code || "";
+  const requestedProvider = valuationMetadata.requested_provider || "attom_proxy";
+  const attemptedEndpoint = valuationMetadata.attempted_endpoint || "";
+  const endpointMode = valuationMetadata.endpoint_mode || "disabled";
+  const officialDataQuality = valuationMetadata.official_data_quality || "unavailable";
+  const officialSignalCount = valuationMetadata.official_signal_count ?? 0;
   const officialMarketContext = [
     valuationMetadata.official_market_signals?.market_city,
     valuationMetadata.official_market_signals?.market_state,
@@ -1561,6 +1568,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                       <StatusBadge label={`${discardedCompCount} excluded`} tone="warning" />
                     ) : null}
                     <StatusBadge label={compDataOriginLabel} tone={compDataOriginTone} />
+                    {compDataOrigin === "official_api" ? (
+                      <StatusBadge
+                        label={officialDataQuality === "strong" ? "Official support strong" : officialDataQuality === "limited" ? "Official support limited" : "Official support unavailable"}
+                        tone={officialDataQuality === "strong" ? "good" : officialDataQuality === "limited" ? "warning" : "info"}
+                      />
+                    ) : null}
                     <StatusBadge label={`Official market ${officialMarketSupportLabel.toLowerCase()}`} tone={officialMarketSupportLabel === "Aligned" ? "good" : officialMarketSupportLabel === "Mixed" ? "warning" : "info"} />
                     {hasInvalidSavedValuation ? (
                       <StatusBadge label="Valuation invalid" tone="alert" />
@@ -1575,11 +1588,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", lineHeight: "1.7", fontWeight: 600 }}>
                       Official comp data was requested, but this run fell back to simulated comps.
                       {providerFallbackReason ? ` Reason: ${providerFallbackReason}.` : ""}
+                      {providerErrorStatus ? ` Upstream status: ${providerErrorStatus}.` : ""}
                     </div>
                   ) : null}
                   {providerMode === "mock_only" ? (
                     <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", lineHeight: "1.7", fontWeight: 600 }}>
                       This run is still using simulated comps. Configure a real property comp API endpoint to replace heuristic comparable sales.
+                    </div>
+                  ) : null}
+                  {providerMode === "official_api" && officialDataQuality === "limited" ? (
+                    <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", lineHeight: "1.7", fontWeight: 600 }}>
+                      Official comp data was available for this run, but support is still limited. Treat this as a broader review range rather than a tight market call.
                     </div>
                   ) : null}
                   <div style={{ display: "grid", gridTemplateColumns: tripleMetricLayout, gap: "12px" }}>
@@ -1593,6 +1612,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     <div><strong>Valuation Date:</strong> {formatDate(latestPropertyValuation.valuation_date)}</div>
                     <div><strong>Matched Market Context:</strong> {officialMarketContext || "Local market context only"}</div>
                     <div><strong>Estimate Shape:</strong> {valuationIsBroad ? "Broad review range" : "Tighter review range"}</div>
+                    <div><strong>Comp Source Path:</strong> {requestedProvider} via {endpointMode === "same_origin_proxy" ? "same-origin proxy" : endpointMode === "external_proxy" ? "external proxy" : "simulated only"}</div>
+                    <div><strong>Official Signals:</strong> {officialSignalCount}</div>
+                    {import.meta.env.DEV && attemptedEndpoint ? <div><strong>Comp Endpoint:</strong> {attemptedEndpoint}</div> : null}
+                    {providerErrorCode ? <div><strong>Fallback Code:</strong> {providerErrorCode}</div> : null}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: fiveMetricLayout, gap: "12px" }}>
                     <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
