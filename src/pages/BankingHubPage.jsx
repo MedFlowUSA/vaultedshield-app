@@ -137,13 +137,13 @@ export default function BankingHubPage({ onNavigate }) {
       <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
         <SectionCard title="Visible Banking Records" subtitle="Current household assets that already look relevant to cash or liquidity continuity.">
           {loading ? (
-            <div style={{ color: "#64748b" }}>Loading banking context...</div>
+            <div style={{ color: "#64748b" }}>Loading banking readiness...</div>
           ) : loadError ? (
             <EmptyState title="Banking context unavailable" description={loadError} />
           ) : bankingAssets.length === 0 ? (
             <EmptyState
-              title="No banking records visible yet"
-              description="This module is ready for cash and liquidity records, but the current household does not yet show obvious banking or cash assets."
+              title="No banking records uploaded yet"
+              description="Add cash, checking, savings, or liquidity-related assets to make this readiness view more useful."
             />
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>

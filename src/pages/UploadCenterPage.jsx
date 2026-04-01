@@ -488,8 +488,8 @@ export default function UploadCenterPage() {
             </div>
           ) : (
             <EmptyState
-              title="No files queued"
-              description="Add one or more files to the queue to create generic platform document records."
+              title="No files added yet"
+              description="Add one or more files to prepare them for upload into the shared household document pipeline."
             />
           )}
         </SectionCard>
@@ -500,8 +500,8 @@ export default function UploadCenterPage() {
           <DocumentTable rows={documentRows} />
         ) : (
           <EmptyState
-            title="No generic documents yet"
-            description="Upload generic documents here to populate the broader platform vault without affecting the specialized IUL workflow."
+            title="No uploaded household documents yet"
+            description="Upload generic documents here to populate the broader platform vault without affecting the specialized insurance workflow."
           />
         )}
       </SectionCard>

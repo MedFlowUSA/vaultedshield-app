@@ -283,7 +283,7 @@ export default function RetirementUploadPage({ onNavigate }) {
               cursor: loading ? "progress" : "pointer",
             }}
           >
-            {loading ? "Processing Retirement PDFs..." : "Select Retirement PDFs"}
+            {loading ? "Preparing Retirement PDF Review..." : "Select Retirement PDFs"}
           </label>
           <input
             id="retirement-upload-input"
@@ -300,7 +300,7 @@ export default function RetirementUploadPage({ onNavigate }) {
           <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
             {results.length > 0
               ? `${successful.length} retirement PDF${successful.length === 1 ? "" : "s"} ready for review.`
-              : "No retirement PDFs uploaded yet."}
+              : "No retirement PDFs added yet."}
           </div>
           {error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{error}</div> : null}
         </div>
@@ -528,7 +528,7 @@ export default function RetirementUploadPage({ onNavigate }) {
       <SectionCard title="Retirement Extraction Results" subtitle="Each file shows extraction status, page count, and a starter retirement summary.">
         {results.length === 0 ? (
           <EmptyState
-            title="No retirement PDFs uploaded yet"
+            title="No retirement PDFs added yet"
             description="Upload one or more retirement PDFs to preview the shared safe-PDF extraction layer, starter retirement field detection, and readiness scoring."
           />
         ) : (

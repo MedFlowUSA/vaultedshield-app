@@ -125,13 +125,13 @@ export default function EstateHubPage({ onNavigate }) {
       <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
         <SectionCard title="Visible Successor Contacts" subtitle="Contacts already in the household record who can anchor estate and handoff workflows.">
           {loading ? (
-            <div style={{ color: "#64748b" }}>Loading estate context...</div>
+            <div style={{ color: "#64748b" }}>Loading estate readiness...</div>
           ) : loadError ? (
             <EmptyState title="Estate context unavailable" description={loadError} />
           ) : successorContacts.length === 0 ? (
             <EmptyState
-              title="No successor contacts visible yet"
-              description="Add trustees, executors, attorneys, or family successors in Contacts to make this module more actionable."
+              title="No successor contacts uploaded yet"
+              description="Add trustees, executors, attorneys, or family successors in Contacts to make this readiness view more actionable."
             />
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>

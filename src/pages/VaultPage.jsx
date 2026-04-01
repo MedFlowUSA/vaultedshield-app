@@ -103,8 +103,8 @@ export default function VaultPage() {
             <DocumentTable rows={documentRows} />
           ) : (
             <EmptyState
-              title="No generic vault documents yet"
-              description="This vault view reads from the new platform document table. Specialized life-policy documents continue to live under the deep insurance workflow for now."
+              title="No household documents uploaded yet"
+              description="Upload household documents through the shared upload center to populate this vault view. Specialized insurance documents still remain in the deeper insurance workflow."
             />
           )}
         </SectionCard>

@@ -769,7 +769,7 @@ export default function ReportsPage({ onNavigate }) {
       </section>
 
       {loadingStates.householdData || loadingStates.insurancePortfolio ? (
-        <div style={{ color: "#475569", fontSize: "14px" }}>Loading reports data...</div>
+        <div style={{ color: "#475569", fontSize: "14px" }}>Loading report-ready household data...</div>
       ) : null}
 
       {loadError ? (

@@ -1293,7 +1293,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               <div style={{ color: "#64748b" }}>
                 {statementScan.hasPages
                   ? `${statementScan.pages.length} scanned statement page${statementScan.pages.length === 1 ? "" : "s"} ready.`
-                  : "No annual statements selected yet. Upload PDF statements or scan pages to prepare a statement packet."}
+                  : "No annual statement PDFs added yet. Upload PDF statements or scan pages to prepare a statement packet."}
               </div>
             )}
 
@@ -1311,7 +1311,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               <div style={{ color: "#475569", lineHeight: "1.6" }}>
                 {normalizedStatementInput.length > 0
                   ? `${normalizedStatementInput.length} annual statement input${normalizedStatementInput.length === 1 ? "" : "s"} ready for analysis.`
-                  : "No annual statement pages are ready for analysis yet."}
+                  : "No annual statement inputs are ready for analysis yet."}
               </div>
               {normalizedStatementInput.length > 0 ? (
                 <div style={{ color: "#64748b", fontSize: "14px" }}>
