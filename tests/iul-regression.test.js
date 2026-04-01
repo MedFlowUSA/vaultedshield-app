@@ -464,6 +464,62 @@ runTest("computeDerivedAnalytics does not use face amount as illustration varian
   assert.equal(analytics.illustration_variance.value, null);
 });
 
+runTest("policy intelligence derives policy-year match from issue date and statement date when explicit policy year is missing", () => {
+  const baseline = parseIllustrationDocument({
+    fileName: "derived-policy-year-illustration.pdf",
+    pages: [
+      [
+        "F&G Life Insurance Company",
+        "Issue Date: 06/01/2015",
+        "Policy Year",
+        "Attained Age",
+        "Premium Outlay",
+        "Accumulation Value",
+        "Cash Surrender Value",
+        "Death Benefit",
+        "10",
+        "54",
+        "$50,000.00",
+        "$68,500.00",
+        "$60,100.00",
+        "$500,000.00",
+      ].join("\n"),
+    ],
+  });
+
+  const statement = parseStatementDocument({
+    fileName: "derived-policy-year-statement.pdf",
+    pages: [
+      [
+        "F&G Life Insurance Company",
+        "Annual Statement",
+        "Statement Date: 12/31/2024",
+        "Accumulation Value: $70,000.00",
+        "Cash Surrender Value: $61,500.00",
+      ].join("\n"),
+    ],
+  });
+
+  const intelligence = buildPolicyIntelligence({
+    baseline,
+    statements: [statement],
+    legacyAnalytics: {
+      charge_analysis: {},
+      policy_health_score: { value: { value: 5, label: "Limited", factors: [] } },
+    },
+  });
+
+  assert.equal(intelligence.normalizedAnalytics.illustration_projection.current_projection_match.actual_policy_year, 10);
+  assert.equal(
+    intelligence.normalizedAnalytics.illustration_projection.current_projection_match.actual_policy_year_source,
+    "derived_from_issue_and_statement_date"
+  );
+  assert.equal(
+    intelligence.normalizedAnalytics.illustration_projection.narrative.includes("estimated from issue date and statement date"),
+    true
+  );
+});
+
 runTest("sortStatementsChronologically orders statements by trusted statement date values", () => {
   const sorted = sortStatementsChronologically([
     { fileName: "statement-2024.pdf", fields: { statement_date: field("2024-12-31", "high", "12/31/2024") } },

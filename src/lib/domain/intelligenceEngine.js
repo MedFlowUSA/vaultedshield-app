@@ -35,6 +35,24 @@ function fieldValue(field) {
   return hasValue(field) ? field.value : null;
 }
 
+function parseComparableDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function derivePolicyYearFromDates(issueDateValue, statementDateValue) {
+  const issueDate = parseComparableDate(issueDateValue);
+  const statementDate = parseComparableDate(statementDateValue);
+  if (!issueDate || !statementDate || statementDate < issueDate) return null;
+
+  let years = statementDate.getFullYear() - issueDate.getFullYear();
+  const anniversaryThisYear = new Date(issueDate);
+  anniversaryThisYear.setFullYear(statementDate.getFullYear());
+  if (statementDate < anniversaryThisYear) years -= 1;
+  return Math.max(1, years + 1);
+}
+
 function buildStructuredField(value, type = "text") {
   if (value === null || value === undefined || value === "") return null;
   return {
@@ -3025,7 +3043,18 @@ function buildIllustrationProjectionAnalytics(baseline, statements) {
     structuredLedgerSupport.supported ||
     ledgerQualityStrong ||
     baselineTableQuality.includes("moderate");
-  const currentPolicyYear = fieldValue(latest?.fields?.policy_year);
+  const explicitCurrentPolicyYear = fieldValue(latest?.fields?.policy_year);
+  const derivedCurrentPolicyYear = derivePolicyYearFromDates(
+    fieldValue(baseline?.fields?.issue_date),
+    fieldValue(latest?.fields?.statement_date)
+  );
+  const currentPolicyYear = explicitCurrentPolicyYear ?? derivedCurrentPolicyYear;
+  const currentPolicyYearSource =
+    explicitCurrentPolicyYear !== null
+      ? "statement_policy_year"
+      : derivedCurrentPolicyYear !== null
+        ? "derived_from_issue_and_statement_date"
+        : "unavailable";
   const currentAccumulationValue = fieldValue(latest?.fields?.accumulation_value);
   const currentCashSurrenderValue = fieldValue(latest?.fields?.cash_surrender_value);
   const matchedRow =
@@ -3065,6 +3094,7 @@ function buildIllustrationProjectionAnalytics(baseline, statements) {
         ? {
             matched_policy_year: matchedRow.policy_year,
             actual_policy_year: currentPolicyYear,
+            actual_policy_year_source: currentPolicyYearSource,
             projected_accumulation_value: matchedRow.accumulation_value?.display || "",
             actual_accumulation_value: fieldDisplay(latest?.fields?.accumulation_value),
             accumulation_variance: accumulationVariance,
@@ -3084,8 +3114,8 @@ function buildIllustrationProjectionAnalytics(baseline, statements) {
           ? accumulationVariance === null
             ? `Illustration checkpoints were identified through policy year ${matchedRow.policy_year}, but the current statement still lacks enough value support for a direct projected-versus-actual comparison.`
             : accumulationVariance >= 0
-              ? `At the current visible policy year, actual accumulation value is tracking at or above the extracted illustration checkpoint by ${formatCurrency(accumulationVariance)}.`
-              : `At the current visible policy year, actual accumulation value is trailing the extracted illustration checkpoint by ${formatCurrency(accumulationVariance)}.`
+              ? `At the current visible policy year${currentPolicyYearSource === "derived_from_issue_and_statement_date" ? " (estimated from issue date and statement date)" : ""}, actual accumulation value is tracking at or above the extracted illustration checkpoint by ${formatCurrency(accumulationVariance)}.`
+              : `At the current visible policy year${currentPolicyYearSource === "derived_from_issue_and_statement_date" ? " (estimated from issue date and statement date)" : ""}, actual accumulation value is trailing the extracted illustration checkpoint by ${formatCurrency(accumulationVariance)}.`
           : "Illustration checkpoints were identified, but the latest statement does not yet align cleanly enough by policy year for a direct projected-versus-actual comparison.",
     limitations:
       rows.length === 0
@@ -3094,7 +3124,11 @@ function buildIllustrationProjectionAnalytics(baseline, statements) {
           ? ["Illustration ledger reconstruction quality was weak, so projection comparison is being withheld."]
         : matchedRow
           ? []
-          : ["Latest statement policy year did not align cleanly with the extracted illustration ledger rows."],
+          : [
+              currentPolicyYearSource === "derived_from_issue_and_statement_date"
+                ? "Derived policy year from issue date and statement date did not align cleanly with the extracted illustration ledger rows."
+                : "Latest statement policy year did not align cleanly with the extracted illustration ledger rows.",
+            ],
     reconstruction_quality: baselineTableQuality,
     structured_quality_summary: baselineStructuredQuality,
   };
