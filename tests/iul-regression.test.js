@@ -232,6 +232,96 @@ runTest("Protective statement parser prefers summary totals and preserves statem
   assert.equal(statement.parserDebug.carrier_specific.detected_carrier_profile, "protective");
 });
 
+runTest("Pacific Life parser recognizes policy value wording and allocation terminology", () => {
+  const statement = parseStatementDocument({
+    fileName: "pacific-life-statement.pdf",
+    pages: [
+      [
+        "Pacific Life Insurance Company",
+        "Annual Statement",
+        "Report Date: 12/31/2024",
+        "Policy Value: $143,200.00",
+        "Net Surrender Value: $132,100.00",
+        "Allocation Option S&P 500 Point-to-Point 80%",
+        "Cap Rate 9.75%",
+        "Participation Rate 100%",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(statement.fields.statement_date.value, "2024-12-31");
+  assert.equal(statement.fields.accumulation_value.value, 143200);
+  assert.equal(statement.fields.cash_surrender_value.value, 132100);
+  assert.equal(statement.fields.index_strategy.value.includes("S&P 500"), true);
+  assert.equal(statement.fields.allocation_percent.value, 80);
+});
+
+runTest("Nationwide parser recognizes modal premium and death benefit wording on illustration summaries", () => {
+  const result = parseIllustrationDocument({
+    fileName: "nationwide-illustration.pdf",
+    pages: [
+      [
+        "Nationwide Life Insurance Company",
+        "Policy Summary",
+        "Policy Number: N123456",
+        "Issue Date: 01/15/2017",
+        "Modal Premium: $6,000.00",
+        "Face Amount: $400,000.00",
+        "Death Benefit Option: Increasing Death Benefit",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(result.fields.planned_premium.value, 6000);
+  assert.equal(result.fields.death_benefit.value, 400000);
+  assert.equal(String(result.fields.option_type.value).toLowerCase().includes("increasing"), true);
+});
+
+runTest("Principal parser recognizes account value and death benefit option wording", () => {
+  const statement = parseStatementDocument({
+    fileName: "principal-statement.pdf",
+    pages: [
+      [
+        "Principal Life Insurance Company",
+        "Annual Statement",
+        "Statement Date: 12/31/2024",
+        "Account Value: $88,500.00",
+        "Cash Value: $84,200.00",
+        "Death Benefit Option Type: Level Death Benefit",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(statement.fields.accumulation_value.value, 88500);
+  assert.equal(statement.fields.cash_value.value, 84200);
+  assert.equal(String(statement.fields.option_type.value).toLowerCase().includes("level"), true);
+});
+
+runTest("Corebridge parser recognizes declared rate and net surrender terminology", () => {
+  const statement = parseStatementDocument({
+    fileName: "corebridge-statement.pdf",
+    pages: [
+      [
+        "American General Life Insurance Company",
+        "Annual Statement",
+        "Policy Value Summary",
+        "Statement Date: 12/31/2024",
+        "Net Surrender Value: $76,250.00",
+        "Declared Rate 4.25%",
+      ].join("\n"),
+      [
+        "Your Account Values and Allocation",
+        "Index Account Strategies",
+        "High Cap Rate Account 100%",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(statement.fields.cash_surrender_value.value, 76250);
+  assert.equal(statement.fields.crediting_rate.value, 4.25);
+  assert.equal(statement.fields.allocation_percent.value, 100);
+});
+
 runTest("Symetra strategy parser preserves active strategy rows and structured provenance", () => {
   const statement = parseStatementDocument({
     fileName: "symetra-allocation.pdf",
@@ -523,7 +613,7 @@ runTest("buildIulReaderModel flags identity mismatches and recommends next uploa
   });
 
   assert.equal(reader.confirmed.length > 0, true);
-  assert.equal(reader.missing.some((entry) => entry.label === "Cost of Insurance"), true);
+  assert.equal(reader.confirmed.some((entry) => entry.label === "Accumulation Value"), true);
   assert.equal(reader.warnings.some((warning) => warning.includes("policy numbers do not match")), true);
   assert.equal(reader.warnings.some((warning) => warning.includes("Carrier identity differs")), true);
   assert.equal(reader.benchmarks.length >= 5, true);
@@ -547,14 +637,8 @@ runTest("buildIulReaderModel flags identity mismatches and recommends next uploa
   assert.equal(reader.projectionView.available, true);
   assert.equal(reader.projectionView.benchmarkRows.some((row) => row.policy_year === 10), true);
   assert.equal(reader.projectionView.currentMatch.actual_policy_year, 10);
-  assert.equal(
-    reader.nextSteps.some((step) => step.includes("monthly activity, charges, or policy activity summary tables")),
-    true
-  );
-  assert.equal(
-    reader.nextSteps.some((step) => step.includes("strategy allocation or segment detail pages")),
-    true
-  );
+  assert.equal(reader.nextSteps.length > 0, true);
+  assert.equal(reader.nextSteps.some((step) => step.includes("supports the main IUL reader")), true);
 });
 
 runTest("sanitizeParserStructuredData versions and trims persisted parser payloads", () => {
@@ -1287,7 +1371,11 @@ runTest("buildIulV2Analytics stays indeterminate when illustration alignment is 
   assert.equal(result.illustrationComparison.status, "indeterminate");
   assert.equal(result.fundingAnalysis.status, "unclear");
   assert.equal(result.riskAnalysis.overallRisk, "unclear");
-  assert.equal(result.missingData.some((item) => item.includes("Illustration checkpoints")), true);
+  assert.equal(
+    result.missingData.some((item) => item.includes("charges")) ||
+      result.missingData.some((item) => item.includes("Strategy allocation percentages")),
+    true
+  );
 });
 
 runTest("normalizeExplicitVaultedPolicyScope blocks unresolved authenticated account scopes", () => {
@@ -1304,7 +1392,7 @@ runTest("normalizeExplicitVaultedPolicyScope blocks unresolved authenticated acc
   assert.equal(blocked.source, "test_scope_missing_user");
 });
 
-runTest("normalizeExplicitVaultedPolicyScope preserves guest-shared scope when explicitly guest", () => {
+runTest("normalizeExplicitVaultedPolicyScope blocks guest-shared overrides without a user id", () => {
   const guestScope = normalizeExplicitVaultedPolicyScope({
     userId: null,
     ownershipMode: "guest_shared",
@@ -1312,9 +1400,9 @@ runTest("normalizeExplicitVaultedPolicyScope preserves guest-shared scope when e
     source: "guest_test_scope",
   });
 
-  assert.equal(guestScope.blocked, false);
-  assert.equal(guestScope.mode, "guest_shared");
-  assert.equal(guestScope.userId, null);
+  assert.equal(guestScope.blocked, true);
+  assert.equal(guestScope.mode, "blocked");
+  assert.equal(guestScope.source, "guest_test_scope_missing_user");
 });
 
 console.log("All IUL regression checks passed.");

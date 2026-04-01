@@ -1,4 +1,4 @@
-import { buildIllustrationVsActualAnalysis } from "./illustrationVsActualEngine";
+import { buildIllustrationVsActualAnalysis } from "./illustrationVsActualEngine.js";
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);

@@ -120,37 +120,49 @@ export const PARSER_DICTIONARY = {
     "Allianz": {
       aliases: ["allianz", "allianz life", "allianz life insurance company of north america"],
       preferredLabels: {
-        cash_surrender_value: ["net cash surrender value", "cash surrender value"],
+        cash_surrender_value: ["net cash surrender value", "cash surrender value", "net surrender value"],
+        index_strategy: ["indexed account", "allocation option", "crediting strategy"],
+        crediting_rate: ["declared rate", "credited rate", "crediting rate"],
       },
     },
     "Pacific Life": {
       aliases: ["pacific life", "pacific life insurance company"],
       preferredLabels: {
-        accumulation_value: ["accumulation value", "policy value"],
+        accumulation_value: ["accumulation value", "policy value", "account value", "current account value"],
+        statement_date: ["statement date", "report date", "period ending", "as of date"],
+        index_strategy: ["allocation option", "indexed account", "crediting strategy"],
       },
     },
     "Nationwide": {
       aliases: ["nationwide", "nationwide life insurance company"],
       preferredLabels: {
         planned_premium: ["planned premium", "modal premium"],
+        statement_date: ["statement date", "statement period ending", "report date", "as of date"],
+        death_benefit: ["death benefit", "face amount", "specified amount"],
       },
     },
     "Lincoln Financial": {
       aliases: ["lincoln", "lincoln financial", "lincoln national life insurance company"],
       preferredLabels: {
-        cash_value: ["cash value", "account value"],
+        cash_value: ["cash value", "account value", "policy value"],
+        accumulation_value: ["account value", "policy value", "accumulation value"],
+        rider_summary: ["rider summary", "coverage riders", "policy riders"],
       },
     },
     "Transamerica": {
       aliases: ["transamerica", "transamerica life insurance company"],
       preferredLabels: {
         policy_number: ["policy number", "policy no"],
+        statement_date: ["statement date", "report date", "period ending"],
+        allocation_percent: ["allocation %", "allocation percent", "% allocated"],
       },
     },
     "North American": {
       aliases: ["north american", "north american company for life and health insurance"],
       preferredLabels: {
         death_benefit: ["death benefit", "face amount"],
+        option_type: ["death benefit option", "option type", "level death benefit", "increasing death benefit"],
+        cap_rate: ["cap rate", "cap %"],
       },
     },
     "Protective Life": {
@@ -158,6 +170,8 @@ export const PARSER_DICTIONARY = {
       preferredLabels: {
         policy_number: ["policy number", "contract number", "certificate number"],
         issue_date: ["issue date", "policy effective date", "contract date"],
+        policy_charges_total: ["annual charges", "policy charges", "total charges"],
+        cash_surrender_value: ["net cash surrender value", "cash surrender value", "surrender value"],
       },
     },
     "Symetra": {
@@ -165,6 +179,8 @@ export const PARSER_DICTIONARY = {
       preferredLabels: {
         planned_premium: ["planned premium", "modal premium", "annual planned premium"],
         statement_date: ["statement date", "report date", "period ending"],
+        crediting_rate: ["crediting rate", "declared rate", "interest credit rate"],
+        fixed_account_value: ["fixed account", "fixed account value", "fixed strategy value"],
       },
     },
     "John Hancock": {
@@ -179,6 +195,8 @@ export const PARSER_DICTIONARY = {
       preferredLabels: {
         issue_date: ["issue date", "contract date", "policy date"],
         death_benefit: ["specified amount", "face amount", "death benefit"],
+        accumulation_value: ["account value", "accumulation value", "policy value"],
+        option_type: ["death benefit option", "option type", "death benefit option type"],
       },
     },
     "Penn Mutual": {
@@ -186,12 +204,15 @@ export const PARSER_DICTIONARY = {
       preferredLabels: {
         policy_number: ["policy number", "policy no", "contract number"],
         statement_date: ["statement date", "statement period ending", "report date"],
+        spread: ["spread", "asset fee spread", "spread rate"],
+        crediting_rate: ["crediting rate", "declared rate", "credited rate"],
       },
     },
     "Minnesota Life": {
       aliases: ["minnesota life", "securian", "minnesota life insurance company"],
       preferredLabels: {
-        statement_date: ["statement date", "period ending"],
+        statement_date: ["statement date", "period ending", "statement period ending", "report date"],
+        beneficiary_status: ["beneficiary information", "beneficiary designation", "beneficiary"],
       },
     },
     "American General Life Insurance Company": {
@@ -208,6 +229,8 @@ export const PARSER_DICTIONARY = {
         fixed_account_value: ["declared interest account (dia)", "declared interest account"],
         cap_rate: ["cap rate", "high cap rate account"],
         participation_rate: ["participation rate"],
+        crediting_rate: ["declared rate", "interest credit rate", "crediting rate"],
+        cash_surrender_value: ["cash surrender value", "net cash surrender value", "net surrender value"],
       },
     },
     "F&G Life Insurance Company": {

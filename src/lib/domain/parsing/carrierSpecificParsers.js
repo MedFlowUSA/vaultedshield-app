@@ -382,6 +382,51 @@ function entryQualityToTier(quality = "weak") {
   return "none";
 }
 
+function buildAllocationLineRows(pageAnalyses, pages) {
+  const rows = [];
+  pageAnalyses
+    .filter((page) => page.page_type === "allocation_table")
+    .forEach((page) => {
+      const lines = String(pages[page.page_number - 1] || "")
+        .split("\n")
+        .map((line) => line.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+
+      lines.forEach((line) => {
+        const lower = line.toLowerCase();
+        if (!/(index|indexed|strategy|allocation option|fixed account|point-to-point|one-year|one year)/i.test(lower)) return;
+        const percentMatches = [...line.matchAll(/(\d{1,3}(?:\.\d+)?)\s*%/g)].map((match) => Number(match[1]));
+        const strategy = line
+          .replace(/(\d{1,3}(?:\.\d+)?)\s*%/g, "")
+          .replace(/\b(cap rate|participation rate|spread|declared rate|crediting rate)\b.*$/i, "")
+          .replace(/\ballocation option\b/i, "")
+          .trim();
+
+        if (!strategy) return;
+
+        rows.push({
+          strategy,
+          allocation_percent: percentMatches[0] ?? null,
+          cap_rate: /cap rate/i.test(line) ? percentMatches[1] ?? null : null,
+          participation_rate: /participation rate/i.test(line)
+            ? percentMatches[/cap rate/i.test(line) ? 2 : 1] ?? null
+            : null,
+          spread: /spread/i.test(line)
+            ? percentMatches[/participation rate/i.test(line) ? 2 : /cap rate/i.test(line) ? 2 : 1] ?? null
+            : null,
+          crediting_rate: /(crediting rate|declared rate)/i.test(line)
+            ? percentMatches[1] ?? percentMatches[0] ?? null
+            : null,
+          source_page_number: page.page_number,
+          source_line: line,
+          row_kind: /fixed account|declared interest/i.test(lower) ? "fixed" : "active",
+        });
+      });
+    });
+
+  return rows;
+}
+
 function parseSymetraAllocationPages(pageAnalyses, pages, carrierProfile, documentType, fileName = "") {
   const reconstructions = pageAnalyses
     .filter((page) => page.page_type === "allocation_table")
@@ -473,21 +518,23 @@ function createCarrierParser(carrierProfile) {
             carrierKey: carrierProfile.key,
           })
         );
-      const bestRow = reconstructions.flatMap((entry) => entry.rows || [])[0] || null;
+      const reconstructedRows = reconstructions.flatMap((entry) => entry.rows || []);
+      const fallbackRows = reconstructedRows.length > 0 ? [] : buildAllocationLineRows(pageAnalyses, pages);
+      const bestRow = reconstructedRows[0] || fallbackRows[0] || null;
       const extractedFields = {};
       if (bestRow?.strategy) {
         extractedFields.index_strategy = buildFieldResult({
           fieldKey: "index_strategy",
           value: bestRow.strategy,
           rawLabel: "strategy row",
-          rawValue: bestRow.strategy,
+          rawValue: bestRow.source_line || bestRow.strategy,
           pageNumber: bestRow.source_page_number,
           fileName,
           documentType,
           carrierName: carrierProfile.name,
-          method: "carrier_strategy_row",
-          confidenceTier: entryQualityToTier(reconstructions[0]?.quality || "moderate"),
-          evidence: ["strategy extracted from allocation table row"],
+          method: fallbackRows.length > 0 ? "carrier_strategy_line" : "carrier_strategy_row",
+          confidenceTier: fallbackRows.length > 0 ? "moderate" : entryQualityToTier(reconstructions[0]?.quality || "moderate"),
+          evidence: [fallbackRows.length > 0 ? "strategy extracted from allocation summary line" : "strategy extracted from allocation table row"],
           sourcePageType: "allocation_table",
         });
       }
@@ -497,18 +544,18 @@ function createCarrierParser(carrierProfile) {
           fieldKey,
           value: bestRow[fieldKey],
           rawLabel: fieldKey.replace(/_/g, " "),
-          rawValue: String(bestRow[fieldKey]),
+          rawValue: bestRow.source_line || String(bestRow[fieldKey]),
           pageNumber: bestRow.source_page_number,
           fileName,
           documentType,
           carrierName: carrierProfile.name,
-          method: "carrier_strategy_row",
-          confidenceTier: entryQualityToTier(reconstructions[0]?.quality || "moderate"),
-          evidence: [`${fieldKey} extracted from allocation table row`],
+          method: fallbackRows.length > 0 ? "carrier_strategy_line" : "carrier_strategy_row",
+          confidenceTier: fallbackRows.length > 0 ? "moderate" : entryQualityToTier(reconstructions[0]?.quality || "moderate"),
+          evidence: [fallbackRows.length > 0 ? `${fieldKey} extracted from allocation summary line` : `${fieldKey} extracted from allocation table row`],
           sourcePageType: "allocation_table",
         });
       });
-      return { extractedFields, reconstructions, strategyRows: reconstructions.flatMap((entry) => entry.rows || []) };
+      return { extractedFields, reconstructions, strategyRows: reconstructedRows.length > 0 ? reconstructedRows : fallbackRows };
     },
     parseIllustrationSummary({ pageAnalyses, pages, documentType, fileName }) {
       return parseByLabelMap(
