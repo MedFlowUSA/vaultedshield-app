@@ -40,8 +40,14 @@ function resolveBeneficiarySignals(policy = {}) {
   const primaryName = normalizeText(
     lifePolicy?.identity?.primaryBeneficiaryName || identity?.primary_beneficiary_name
   );
+  const primaryShare = normalizeText(
+    lifePolicy?.identity?.primaryBeneficiaryShare || identity?.primary_beneficiary_share
+  );
   const contingentName = normalizeText(
     lifePolicy?.identity?.contingentBeneficiaryName || identity?.contingent_beneficiary_name
+  );
+  const contingentShare = normalizeText(
+    lifePolicy?.identity?.contingentBeneficiaryShare || identity?.contingent_beneficiary_share
   );
   const statusLabel = normalizeText(
     lifePolicy?.identity?.beneficiaryStatus || identity?.beneficiary_status
@@ -57,7 +63,9 @@ function resolveBeneficiarySignals(policy = {}) {
 
   return {
     primaryName,
+    primaryShare,
     contingentName,
+    contingentShare,
     statusLabel,
     anyVisible,
     visibility,
@@ -73,11 +81,20 @@ function resolveOwnershipSignals(policy = {}) {
   const ownerName = normalizeText(
     lifePolicy?.identity?.ownerName || identity?.owner_name || comparisonSummary?.owner_name
   );
+  const jointInsuredName = normalizeText(
+    lifePolicy?.identity?.jointInsuredName || identity?.joint_insured_name || comparisonSummary?.joint_insured_name
+  );
   const insuredName = normalizeText(
     lifePolicy?.identity?.insuredName || identity?.insured_name || comparisonSummary?.insured_name
   );
+  const payorName = normalizeText(
+    lifePolicy?.identity?.payorName || identity?.payor_name || comparisonSummary?.payor_name
+  );
   const trusteeName = normalizeText(
     lifePolicy?.identity?.trusteeName || identity?.trustee_name || comparisonSummary?.trustee_name
+  );
+  const trustName = normalizeText(
+    lifePolicy?.identity?.trustName || identity?.trust_name || comparisonSummary?.trust_name
   );
   const ownershipStructure = normalizeText(
     lifePolicy?.identity?.ownershipStructure ||
@@ -85,17 +102,23 @@ function resolveOwnershipSignals(policy = {}) {
       comparisonSummary?.ownership_structure
   );
   const trustOwned = /trust|trustee|revocable|irrevocable/i.test(
-    [ownerName, trusteeName, ownershipStructure].filter(Boolean).join(" ")
+    [ownerName, trusteeName, trustName, ownershipStructure].filter(Boolean).join(" ")
   );
 
   return {
     ownerName,
+    jointInsuredName,
     insuredName,
+    payorName,
     trusteeName,
+    trustName,
     ownershipStructure,
     ownerVisible: Boolean(ownerName),
+    jointInsuredVisible: Boolean(jointInsuredName),
     insuredVisible: Boolean(insuredName),
+    payorVisible: Boolean(payorName),
     trusteeVisible: Boolean(trusteeName),
+    trustNameVisible: Boolean(trustName),
     trustOwned,
   };
 }
@@ -318,10 +341,19 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
   if (!ownershipSignals.insuredVisible) {
     notes.push("Insured-name visibility is limited in the current extracted record.");
   }
+  if (ownershipSignals.jointInsuredVisible) {
+    notes.push(`Joint-insured visibility is present for ${ownershipSignals.jointInsuredName}.`);
+  }
+  if (ownershipSignals.payorVisible) {
+    notes.push(`Payor visibility is present for ${ownershipSignals.payorName}.`);
+  }
   if (ownershipSignals.trustOwned && !ownershipSignals.trusteeVisible) {
     notes.push("Trust-style ownership is suggested, but trustee visibility is still limited.");
   } else if (ownershipSignals.trustOwned && ownershipSignals.trusteeVisible) {
     notes.push(`Trust-style ownership is visible with trustee support for ${ownershipSignals.trusteeName}.`);
+  }
+  if (ownershipSignals.trustNameVisible) {
+    notes.push(`Trust-name visibility is present for ${ownershipSignals.trustName}.`);
   }
   if (coverageStructure.optionVisible) {
     notes.push(`Death benefit option is visible as ${coverageStructure.optionType}.`);
@@ -339,6 +371,11 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     notes.push(`Primary beneficiary visibility is present for ${beneficiarySignals.primaryName}.`);
   } else {
     notes.push("Beneficiary information is mentioned, but a clean beneficiary name is not yet resolved.");
+  }
+  if (beneficiarySignals.primaryShare || beneficiarySignals.contingentShare) {
+    notes.push(
+      `Beneficiary share support is visible${beneficiarySignals.primaryShare ? ` with primary share ${beneficiarySignals.primaryShare}` : ""}${beneficiarySignals.contingentShare ? `${beneficiarySignals.primaryShare ? " and" : " with"} contingent share ${beneficiarySignals.contingentShare}` : ""}.`
+    );
   }
   purposeSignals.notes.forEach((note) => notes.push(note));
 
@@ -360,12 +397,18 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     adequacyStatus,
     displayStatus,
     ownerVisible: ownershipSignals.ownerVisible,
+    jointInsuredVisible: ownershipSignals.jointInsuredVisible,
     insuredVisible: ownershipSignals.insuredVisible,
+    payorVisible: ownershipSignals.payorVisible,
     trusteeVisible: ownershipSignals.trusteeVisible,
+    trustNameVisible: ownershipSignals.trustNameVisible,
     trustOwned: ownershipSignals.trustOwned,
     ownerName: ownershipSignals.ownerName,
+    jointInsuredName: ownershipSignals.jointInsuredName,
     insuredName: ownershipSignals.insuredName,
+    payorName: ownershipSignals.payorName,
     trusteeName: ownershipSignals.trusteeName,
+    trustName: ownershipSignals.trustName,
     ownershipStructure: ownershipSignals.ownershipStructure,
     benefitOption: coverageStructure.optionType,
     benefitOptionVisible: coverageStructure.optionVisible,
@@ -380,7 +423,9 @@ export function buildPolicyAdequacyReview(policy = {}, householdContext = {}) {
     incomeProtectionVisible: purposeSignals.incomeProtectionVisible,
     beneficiaryVisibility: beneficiarySignals.visibility,
     primaryBeneficiaryName: beneficiarySignals.primaryName,
+    primaryBeneficiaryShare: beneficiarySignals.primaryShare,
     contingentBeneficiaryName: beneficiarySignals.contingentName,
+    contingentBeneficiaryShare: beneficiarySignals.contingentShare,
     beneficiaryStatusLabel: beneficiarySignals.statusLabel,
     targetFloor,
     notes: [...new Set(notes)].slice(0, 6),
@@ -465,8 +510,11 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
         confidentPolicies: 0,
         missingDeathBenefitPolicies: 0,
         ownerVisiblePolicies: 0,
+        jointInsuredVisiblePolicies: 0,
         insuredVisiblePolicies: 0,
+        payorVisiblePolicies: 0,
         trusteeVisiblePolicies: 0,
+        trustNameVisiblePolicies: 0,
         trustOwnedPolicies: 0,
         benefitOptionVisiblePolicies: 0,
         riderVisiblePolicies: 0,
@@ -474,6 +522,7 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
         incomeProtectionVisiblePolicies: 0,
         beneficiaryNamedPolicies: 0,
         beneficiaryLimitedPolicies: 0,
+        beneficiaryShareVisiblePolicies: 0,
       },
     };
   }
@@ -528,8 +577,11 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   const missingDeathBenefitPolicies = reads.filter((item) => !item.basics.hasDeathBenefit);
   const increasingCoiPolicies = reads.filter((item) => item.basics.coiTrend === "increasing");
   const ownerVisiblePolicies = reads.filter((item) => item.adequacy.ownerVisible);
+  const jointInsuredVisiblePolicies = reads.filter((item) => item.adequacy.jointInsuredVisible);
   const insuredVisiblePolicies = reads.filter((item) => item.adequacy.insuredVisible);
+  const payorVisiblePolicies = reads.filter((item) => item.adequacy.payorVisible);
   const trusteeVisiblePolicies = reads.filter((item) => item.adequacy.trusteeVisible);
+  const trustNameVisiblePolicies = reads.filter((item) => item.adequacy.trustNameVisible);
   const trustOwnedPolicies = reads.filter((item) => item.adequacy.trustOwned);
   const benefitOptionVisiblePolicies = reads.filter((item) => item.adequacy.benefitOptionVisible);
   const riderVisiblePolicies = reads.filter((item) => item.adequacy.riderVisible);
@@ -540,6 +592,9 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   );
   const beneficiaryLimitedPolicies = reads.filter(
     (item) => item.adequacy.beneficiaryVisibility !== "named" && item.adequacy.beneficiaryVisibility !== "mentioned"
+  );
+  const beneficiaryShareVisiblePolicies = reads.filter(
+    (item) => item.adequacy.primaryBeneficiaryShare || item.adequacy.contingentBeneficiaryShare
   );
   const averageConfidence =
     reads.reduce((sum, item) => sum + Number(item.gap.confidence || 0), 0) / Math.max(reads.length, 1);
@@ -569,8 +624,17 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   if (insuredVisiblePolicies.length < safePolicies.length) {
     notes.push(`${pluralize(safePolicies.length - insuredVisiblePolicies.length, "policy")} still have limited insured-name visibility.`);
   }
+  if (jointInsuredVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(jointInsuredVisiblePolicies.length, "policy")} now show visible joint-insured support.`);
+  }
+  if (payorVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(payorVisiblePolicies.length, "policy")} now show visible payor support in the extracted packet.`);
+  }
   if (trustOwnedPolicies.length > 0) {
     notes.push(`${pluralize(trustOwnedPolicies.length, "policy")} appear to use trust-style ownership in the visible packet.`);
+  }
+  if (trustNameVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(trustNameVisiblePolicies.length, "policy")} now show visible trust-name support.`);
   }
   if (trustOwnedPolicies.length > trusteeVisiblePolicies.length) {
     notes.push(`${pluralize(trustOwnedPolicies.length - trusteeVisiblePolicies.length, "policy")} suggest trust ownership but still have limited trustee visibility.`);
@@ -592,6 +656,9 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
   }
   if (beneficiaryLimitedPolicies.length > 0) {
     notes.push(`${pluralize(beneficiaryLimitedPolicies.length, "policy")} still have limited beneficiary visibility and should be reviewed with fuller identity pages.`);
+  }
+  if (beneficiaryShareVisiblePolicies.length > 0) {
+    notes.push(`${pluralize(beneficiaryShareVisiblePolicies.length, "policy")} now show beneficiary share support in the visible packet.`);
   }
   if (increasingCoiPolicies.length > 0) {
     notes.push(`${pluralize(increasingCoiPolicies.length, "policy")} show increasing COI pressure in the visible statements.`);
@@ -619,20 +686,24 @@ export function summarizeInsuranceHousehold(policies = [], householdContext = {}
       gapPolicies: gapPolicies.length,
       lowConfidencePolicies: lowConfidencePolicies.length,
       confidentPolicies: confidentPolicies.length,
-      missingDeathBenefitPolicies: missingDeathBenefitPolicies.length,
-      ownerVisiblePolicies: ownerVisiblePolicies.length,
-      insuredVisiblePolicies: insuredVisiblePolicies.length,
-      trusteeVisiblePolicies: trusteeVisiblePolicies.length,
-      trustOwnedPolicies: trustOwnedPolicies.length,
-      benefitOptionVisiblePolicies: benefitOptionVisiblePolicies.length,
-      riderVisiblePolicies: riderVisiblePolicies.length,
+        missingDeathBenefitPolicies: missingDeathBenefitPolicies.length,
+        ownerVisiblePolicies: ownerVisiblePolicies.length,
+        jointInsuredVisiblePolicies: jointInsuredVisiblePolicies.length,
+        insuredVisiblePolicies: insuredVisiblePolicies.length,
+        payorVisiblePolicies: payorVisiblePolicies.length,
+        trusteeVisiblePolicies: trusteeVisiblePolicies.length,
+        trustNameVisiblePolicies: trustNameVisiblePolicies.length,
+        trustOwnedPolicies: trustOwnedPolicies.length,
+        benefitOptionVisiblePolicies: benefitOptionVisiblePolicies.length,
+        riderVisiblePolicies: riderVisiblePolicies.length,
       livingBenefitVisiblePolicies: livingBenefitVisiblePolicies.length,
-      incomeProtectionVisiblePolicies: incomeProtectionVisiblePolicies.length,
-      beneficiaryNamedPolicies: beneficiaryNamedPolicies.length,
-      beneficiaryLimitedPolicies: beneficiaryLimitedPolicies.length,
-    },
-  };
-}
+        incomeProtectionVisiblePolicies: incomeProtectionVisiblePolicies.length,
+        beneficiaryNamedPolicies: beneficiaryNamedPolicies.length,
+        beneficiaryLimitedPolicies: beneficiaryLimitedPolicies.length,
+        beneficiaryShareVisiblePolicies: beneficiaryShareVisiblePolicies.length,
+      },
+    };
+  }
 
 export function buildProtectionComparisonNarrative(basePolicy = {}, comparePolicy = {}) {
   if (!basePolicy || !comparePolicy) {

@@ -13,6 +13,7 @@ import {
   listPortalProfiles,
 } from "../lib/supabase/platformData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { buildAssetCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
 const ACCESS_STATUS = ["active", "limited", "locked", "unknown"];
@@ -252,6 +253,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     status: document.processing_status || "uploaded",
     updatedAt: formatDate(document.created_at),
   }));
+  const commandCenter = useMemo(() => buildAssetCommandCenter(bundle), [bundle]);
 
   return (
     <div>
@@ -292,6 +294,101 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           },
         ]}
       />
+
+      <SectionCard title="Continuity Command" subtitle="The clearest blockers and next steps for keeping this asset dependable.">
+        <div style={{ display: "grid", gap: "14px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ color: "#475569", lineHeight: "1.7", maxWidth: "820px" }}>{commandCenter.headline}</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {[
+                { label: "Critical", value: commandCenter.metrics.critical },
+                { label: "Warning", value: commandCenter.metrics.warning },
+                { label: "Docs", value: commandCenter.metrics.documents },
+                { label: "Portals", value: commandCenter.metrics.linkedPortals },
+              ].map((metric) => (
+                <span
+                  key={`asset-command-${metric.label}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#334155",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  {metric.label}: {metric.value}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {commandCenter.blockers.length > 0 ? (
+            <div style={{ display: "grid", gap: "12px" }}>
+              {commandCenter.blockers.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "16px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: item.urgencyMeta.accent,
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                        }}
+                      >
+                        {item.urgencyMeta.badge}
+                      </span>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: "#475569",
+                          background: "#ffffff",
+                          border: "1px solid #e2e8f0",
+                        }}
+                      >
+                        {item.staleLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
+                  <div style={{ color: "#334155", fontWeight: 700 }}>{item.nextAction}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No active blockers"
+              description="This asset does not currently show major continuity issues across documents, tasks, alerts, or portal access."
+            />
+          )}
+        </div>
+      </SectionCard>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: "18px" }}>
         <SectionCard title="Asset Summary">

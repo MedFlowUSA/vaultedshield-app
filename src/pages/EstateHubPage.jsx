@@ -5,6 +5,7 @@ import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import { summarizeEstateModule } from "../lib/domain/platformIntelligence/moduleReadiness";
+import { buildEstateHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { listAssets, listContacts } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
@@ -62,6 +63,15 @@ export default function EstateHubPage({ onNavigate }) {
       ),
     [bundle.contacts]
   );
+  const estateCommand = useMemo(
+    () =>
+      buildEstateHubCommand({
+        contacts: bundle.contacts,
+        assets: bundle.assets,
+        readiness,
+      }),
+    [bundle.assets, bundle.contacts, readiness]
+  );
 
   return (
     <div>
@@ -118,6 +128,100 @@ export default function EstateHubPage({ onNavigate }) {
             <div>Visible successor roles like trustee, executor, and attorney.</div>
             <div>Clear family continuity contacts for emergencies and handoff.</div>
             <div>Legal-document indexing once wills, trusts, and powers are uploaded.</div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Estate Command Center"
+          subtitle="The strongest current successor, legal, and handoff blockers across the household estate layer."
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{estateCommand.headline}</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {[
+                  { label: "Successors", value: estateCommand.metrics.successorContacts },
+                  { label: "Family", value: estateCommand.metrics.familyContacts },
+                  { label: "Legal Shells", value: estateCommand.metrics.legalAssets },
+                  { label: "Attention", value: estateCommand.metrics.attention },
+                ].map((metric) => (
+                  <span
+                    key={metric.label}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      color: "#334155",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {metric.label}: {metric.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ color: "#64748b", lineHeight: "1.7" }}>{estateCommand.summary}</div>
+
+            {estateCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {estateCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : item.urgency === "warning" ? "warning" : "good"} />
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 10px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#64748b",
+                            background: "#ffffff",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          {item.staleLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.blocker}</div>
+                    <div style={{ color: "#64748b", lineHeight: "1.7" }}>{item.consequence}</div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(item.route)}
+                        style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
+                      >
+                        {item.nextAction}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                Estate continuity currently looks steady enough that no major successor or legal-document blockers are standing out.
+              </div>
+            )}
           </div>
         </SectionCard>
       </div>

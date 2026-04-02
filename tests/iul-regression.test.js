@@ -4,6 +4,7 @@ import {
   buildPolicyIntelligence,
   buildPolicyComparisonAnalysis,
 } from "../src/lib/domain/intelligenceEngine.js";
+import { buildPolicyAdequacyReview } from "../src/lib/domain/insurance/insuranceIntelligence.js";
 import {
   getStructuredData,
   getStructuredStrategyRows,
@@ -320,6 +321,180 @@ runTest("Corebridge parser recognizes declared rate and net surrender terminolog
   assert.equal(statement.fields.cash_surrender_value.value, 76250);
   assert.equal(statement.fields.crediting_rate.value, 4.25);
   assert.equal(statement.fields.allocation_percent.value, 100);
+});
+
+runTest("statement parser extracts joint insured, payor, trust, and beneficiary share fields from labeled party sections", () => {
+  const statement = parseStatementDocument({
+    fileName: "party-detail-statement.pdf",
+    pages: [
+      [
+        "Annual Statement",
+        "Policy Number: VS1234567",
+        "Owner: Jordan Policyholder",
+        "Insured: Jordan Policyholder",
+        "Joint Insured: Casey Policyholder",
+        "Payor: Morgan Payor",
+        "Trust Name: Policyholder Family Trust",
+        "Primary Beneficiary: Avery Beneficiary",
+        "Primary Beneficiary Share: 75%",
+        "Contingent Beneficiary: Riley Beneficiary",
+        "Contingent Beneficiary Share: 25%",
+        "Statement Date: 12/31/2024",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(statement.fields.joint_insured_name.value, "Casey Policyholder");
+  assert.equal(statement.fields.payor_name.value, "Morgan Payor");
+  assert.equal(statement.fields.trust_name.value, "Policyholder Family Trust");
+  assert.equal(statement.fields.primary_beneficiary_share.value, 75);
+  assert.equal(statement.fields.contingent_beneficiary_share.value, 25);
+});
+
+runTest("statement parser extracts beneficiary schedule rows when names and shares are presented as table-style lines", () => {
+  const statement = parseStatementDocument({
+    fileName: "beneficiary-schedule-statement.pdf",
+    pages: [
+      [
+        "Beneficiary Designation Schedule",
+        "Type Name Share",
+        "Primary Avery Beneficiary 75%",
+        "Contingent Riley Beneficiary 25%",
+        "Statement Date: 12/31/2024",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(statement.fields.primary_beneficiary_name.value, "Avery Beneficiary");
+  assert.equal(statement.fields.primary_beneficiary_share.value, 75);
+  assert.equal(statement.fields.contingent_beneficiary_name.value, "Riley Beneficiary");
+  assert.equal(statement.fields.contingent_beneficiary_share.value, 25);
+  assert.equal(String(statement.fields.beneficiary_status.value).toLowerCase().includes("beneficiary designation"), true);
+});
+
+runTest("policy adequacy review surfaces richer party visibility when normalized policy carries new identity fields", () => {
+  const adequacy = buildPolicyAdequacyReview(
+    {
+      normalizedPolicy: {
+        policy_identity: {
+          owner_name: "Jordan Policyholder",
+          insured_name: "Jordan Policyholder",
+          joint_insured_name: "Casey Policyholder",
+          payor_name: "Morgan Payor",
+          trustee_name: "Taylor Trustee",
+          trust_name: "Policyholder Family Trust",
+          primary_beneficiary_name: "Avery Beneficiary",
+          primary_beneficiary_share: "75%",
+          contingent_beneficiary_name: "Riley Beneficiary",
+          contingent_beneficiary_share: "25%",
+          ownership_structure: "Irrevocable trust owned",
+        },
+        death_benefit: {
+          death_benefit: field(750000),
+        },
+        funding: {
+          planned_premium: field(12000),
+          minimum_premium: field(9000),
+        },
+      },
+      lifePolicy: {
+        identity: {
+          ownerName: "Jordan Policyholder",
+          insuredName: "Jordan Policyholder",
+          jointInsuredName: "Casey Policyholder",
+          payorName: "Morgan Payor",
+          trusteeName: "Taylor Trustee",
+          trustName: "Policyholder Family Trust",
+          primaryBeneficiaryName: "Avery Beneficiary",
+          primaryBeneficiaryShare: "75%",
+          contingentBeneficiaryName: "Riley Beneficiary",
+          contingentBeneficiaryShare: "25%",
+          ownershipStructure: "Irrevocable trust owned",
+        },
+      },
+      comparisonSummary: {
+        death_benefit: "$750,000",
+      },
+    },
+    {
+      mortgageCount: 1,
+      dependentPlanCount: 1,
+    }
+  );
+
+  assert.equal(adequacy.jointInsuredVisible, true);
+  assert.equal(adequacy.payorVisible, true);
+  assert.equal(adequacy.trustNameVisible, true);
+  assert.equal(adequacy.primaryBeneficiaryShare, "75%");
+  assert.equal(adequacy.contingentBeneficiaryShare, "25%");
+  assert.equal(adequacy.notes.some((note) => note.includes("Joint-insured visibility is present")), true);
+  assert.equal(adequacy.notes.some((note) => note.includes("Payor visibility is present")), true);
+  assert.equal(adequacy.notes.some((note) => note.includes("Trust-name visibility is present")), true);
+  assert.equal(adequacy.primaryBeneficiaryName, "Avery Beneficiary");
+  assert.equal(adequacy.contingentBeneficiaryName, "Riley Beneficiary");
+  assert.equal(adequacy.beneficiaryVisibility, "named");
+});
+
+runTest("illustration parser extracts trust-owned party layouts with trustee and ownership structure support", () => {
+  const illustration = parseIllustrationDocument({
+    fileName: "trust-owned-illustration.pdf",
+    pages: [
+      [
+        "Policy Detail",
+        "Owner: Cedar Family Irrevocable Trust",
+        "Trustee: Morgan Trustee",
+        "Trust Name: Cedar Family Irrevocable Trust",
+        "Ownership Structure: Irrevocable trust owned",
+        "Insured: Jordan Policyholder",
+        "Issue Date: 01/15/2018",
+      ].join("\n"),
+    ],
+  });
+
+  assert.equal(illustration.fields.owner_name.value, "Cedar Family Irrevocable Trust");
+  assert.equal(illustration.fields.trustee_name.value, "Morgan Trustee");
+  assert.equal(illustration.fields.trust_name.value, "Cedar Family Irrevocable Trust");
+  assert.equal(String(illustration.fields.ownership_structure.value).toLowerCase().includes("irrevocable"), true);
+});
+
+runTest("policy adequacy review infers rider-based protection purpose from visible rider support and household pressure", () => {
+  const adequacy = buildPolicyAdequacyReview(
+    {
+      normalizedPolicy: {
+        policy_identity: {
+          owner_name: "Jordan Policyholder",
+          insured_name: "Jordan Policyholder",
+          primary_beneficiary_name: "Avery Beneficiary",
+        },
+        death_benefit: {
+          death_benefit: field(600000),
+        },
+        funding: {
+          planned_premium: field(10000),
+          minimum_premium: field(9000),
+        },
+        riders: {
+          rider_summary: "Accelerated Benefit Rider; Waiver of Monthly Deduction Rider",
+          detected_riders: ["Accelerated Benefit Rider", "Waiver of Monthly Deduction Rider"],
+        },
+      },
+      comparisonSummary: {
+        death_benefit: "$600,000",
+      },
+    },
+    {
+      mortgageCount: 1,
+      dependentPlanCount: 1,
+    }
+  );
+
+  assert.equal(adequacy.livingBenefitsVisible, true);
+  assert.equal(adequacy.incomeProtectionVisible, true);
+  assert.equal(adequacy.loanProtectionPressure, true);
+  assert.equal(adequacy.protectionPurposeLabels.includes("family protection"), true);
+  assert.equal(adequacy.protectionPurposeLabels.includes("mortgage protection"), true);
+  assert.equal(adequacy.protectionPurposeLabels.includes("living benefits"), true);
+  assert.equal(adequacy.protectionPurposeLabels.includes("income protection"), true);
 });
 
 runTest("Symetra strategy parser preserves active strategy rows and structured provenance", () => {

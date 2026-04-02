@@ -38,6 +38,7 @@ import {
 import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listMortgageLoans } from "../lib/supabase/mortgageData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
+import { buildPropertyCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 
@@ -648,6 +649,31 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
     return prompts;
   }, [assetBundle?.portalLinks?.length, linkedHomeownersPolicies.length, linkedMortgages.length]);
+  const propertyCommandCenter = useMemo(
+    () =>
+      buildPropertyCommandCenter({
+        property,
+        propertyDocuments: bundle?.propertyDocuments || [],
+        propertyStackAnalytics,
+        propertyEquityPosition,
+        latestPropertyValuation,
+        valuationChangeSummary,
+        linkedMortgages,
+        linkedHomeownersPolicies,
+        assetBundle,
+      }),
+    [
+      assetBundle,
+      bundle?.propertyDocuments,
+      latestPropertyValuation,
+      linkedHomeownersPolicies,
+      linkedMortgages,
+      property,
+      propertyEquityPosition,
+      propertyStackAnalytics,
+      valuationChangeSummary,
+    ]
+  );
 
   const summaryItems = useMemo(() => {
     if (!property) return [];
@@ -1050,6 +1076,65 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               <ReportView report={propertyReviewReport} onPrint={handlePrintPropertyReport} />
             </div>
           ) : null}
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Property Command"
+              subtitle="The strongest blockers, the risk if they sit, and the next move to keep this property stack healthy."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <AIInsightPanel
+                  title="Continuity Command"
+                  summary={propertyCommandCenter.headline}
+                  bullets={[
+                    `${propertyCommandCenter.metrics.critical || 0} critical blocker${propertyCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                    `${propertyCommandCenter.metrics.warning || 0} warning item${propertyCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                    `${propertyCommandCenter.metrics.documents || 0} property document${propertyCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                    `${propertyCommandCenter.metrics.linkedMortgages || 0} mortgage link${propertyCommandCenter.metrics.linkedMortgages === 1 ? "" : "s"} and ${propertyCommandCenter.metrics.linkedHomeowners || 0} homeowners link${propertyCommandCenter.metrics.linkedHomeowners === 1 ? "" : "s"} are visible.`,
+                  ]}
+                />
+                {propertyCommandCenter.blockers.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {propertyCommandCenter.blockers.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "14px",
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                            <StatusBadge label={item.staleLabel} tone="info" />
+                          </div>
+                        </div>
+                        <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                          <strong>Blocker:</strong> {item.blocker}
+                        </div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          <strong>Consequence:</strong> {item.consequence}
+                        </div>
+                        <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                          Next action: {item.nextAction}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No active property blockers"
+                    description="This property currently looks relatively steady across valuation, evidence, linkage, and continuity."
+                  />
+                )}
+              </div>
+            </SectionCard>
+          </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
             <SectionCard title="Property Summary">

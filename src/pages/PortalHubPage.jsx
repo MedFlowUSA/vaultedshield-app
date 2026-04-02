@@ -5,6 +5,7 @@ import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import { summarizePortalModule } from "../lib/domain/platformIntelligence/moduleReadiness";
+import { buildPortalHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { getPortalHubBundle } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
@@ -102,6 +103,14 @@ export default function PortalHubPage({ onNavigate }) {
   }, [activeFilter, bundle.portals]);
 
   const portalRead = useMemo(() => summarizePortalModule(bundle), [bundle]);
+  const portalCommand = useMemo(
+    () =>
+      buildPortalHubCommand({
+        bundle,
+        portalRead,
+      }),
+    [bundle, portalRead]
+  );
 
   return (
     <div>
@@ -203,6 +212,100 @@ export default function PortalHubPage({ onNavigate }) {
                 {filter.label}
               </button>
             ))}
+          </div>
+        </SectionCard>
+      </div>
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Portal Command Center"
+          subtitle="The strongest current access, recovery, and verification blockers across the household portal layer."
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{portalCommand.headline}</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {[
+                  { label: "Portals", value: portalCommand.metrics.portals },
+                  { label: "Emergency", value: portalCommand.metrics.emergencyPortals },
+                  { label: "Missing Recovery", value: portalCommand.metrics.missingRecovery },
+                  { label: "Attention", value: portalCommand.metrics.attention },
+                ].map((metric) => (
+                  <span
+                    key={metric.label}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      color: "#334155",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {metric.label}: {metric.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ color: "#64748b", lineHeight: "1.7" }}>{portalCommand.summary}</div>
+
+            {portalCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {portalCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : item.urgency === "warning" ? "warning" : "good"} />
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 10px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#64748b",
+                            background: "#ffffff",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          {item.staleLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.blocker}</div>
+                    <div style={{ color: "#64748b", lineHeight: "1.7" }}>{item.consequence}</div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(item.route)}
+                        style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
+                      >
+                        {item.nextAction}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                Portal continuity currently looks steady enough that no major access or recovery blockers are standing out.
+              </div>
+            )}
           </div>
         </SectionCard>
       </div>

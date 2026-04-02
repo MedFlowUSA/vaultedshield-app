@@ -320,6 +320,7 @@ function buildPolicyStorageShape({
       values: normalizedPolicy?.values || {},
       funding: normalizedPolicy?.funding || {},
       death_benefit: normalizedPolicy?.death_benefit || {},
+      riders: normalizedPolicy?.riders || {},
     },
     analysis_summary: computedBasics,
   };

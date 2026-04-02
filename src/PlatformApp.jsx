@@ -1,52 +1,53 @@
-import { Component, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useState } from "react";
 import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
 import TopNav from "./components/layout/TopNav";
-import PricingPage from "./pages/PricingPage";
-import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
-import AuthLoginPage from "./pages/AuthLoginPage";
-import AuthSignupPage from "./pages/AuthSignupPage";
-import TermsOfServicePage from "./pages/TermsOfServicePage";
-import DashboardPage from "./pages/DashboardPage";
-import GuidanceCenterPage from "./pages/GuidanceCenterPage";
-import HouseholdGoalsDashboardPage from "./pages/HouseholdGoalsDashboardPage";
-import VaultPage from "./pages/VaultPage";
-import UploadCenterPage from "./pages/UploadCenterPage";
-import AssetsHomePage from "./pages/AssetsHomePage";
-import AssetDetailPage from "./pages/AssetDetailPage";
-import InsuranceHubPage from "./pages/InsuranceHubPage";
-import PolicyComparisonPage from "./pages/PolicyComparisonPage";
-import PolicyDetailPage from "./pages/PolicyDetailPage";
-import AutoInsuranceHubPage from "./pages/AutoInsuranceHubPage";
-import AutoPolicyDetailPage from "./pages/AutoPolicyDetailPage";
-import HealthInsuranceHubPage from "./pages/HealthInsuranceHubPage";
-import HealthPlanDetailPage from "./pages/HealthPlanDetailPage";
-import HomeownersHubPage from "./pages/HomeownersHubPage";
-import HomeownersPolicyDetailPage from "./pages/HomeownersPolicyDetailPage";
-import LifePolicyUploadPage from "./pages/LifePolicyUploadPage";
-import BankingHubPage from "./pages/BankingHubPage";
-import MortgageHubPage from "./pages/MortgageHubPage";
-import MortgageLoanDetailPage from "./pages/MortgageLoanDetailPage";
-import PropertyHubPage from "./pages/PropertyHubPage";
-import PropertyDetailPage from "./pages/PropertyDetailPage";
-import RetirementHubPage from "./pages/RetirementHubPage";
-import RetirementAccountDetailPage from "./pages/RetirementAccountDetailPage";
-import RetirementUploadPage from "./pages/RetirementUploadPage";
-import CollegePlanningPage from "./pages/CollegePlanningPage";
-import WarrantyHubPage from "./pages/WarrantyHubPage";
-import WarrantyDetailPage from "./pages/WarrantyDetailPage";
-import EstateHubPage from "./pages/EstateHubPage";
-import EmergencyModePage from "./pages/EmergencyModePage";
-import PortalHubPage from "./pages/PortalHubPage";
-import ReportsPage from "./pages/ReportsPage";
-import ContactsPage from "./pages/ContactsPage";
-import SettingsPage from "./pages/SettingsPage";
 import { hasTierAccess, useAccessPortal } from "./lib/auth/accessPortal";
 import { clearLegacyHouseholdReviewStorage } from "./lib/domain/platformIntelligence/reviewWorkflowState";
 import { PlatformShellDataProvider } from "./lib/intelligence/PlatformShellDataContext";
 import { getRouteByPath } from "./lib/navigation/routes";
 import { useHashRoute } from "./lib/navigation/useHashRoute";
 import useResponsiveLayout from "./lib/ui/useResponsiveLayout";
+
+const PricingPage = lazy(() => import("./pages/PricingPage"));
+const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage"));
+const AuthLoginPage = lazy(() => import("./pages/AuthLoginPage"));
+const AuthSignupPage = lazy(() => import("./pages/AuthSignupPage"));
+const TermsOfServicePage = lazy(() => import("./pages/TermsOfServicePage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const GuidanceCenterPage = lazy(() => import("./pages/GuidanceCenterPage"));
+const HouseholdGoalsDashboardPage = lazy(() => import("./pages/HouseholdGoalsDashboardPage"));
+const VaultPage = lazy(() => import("./pages/VaultPage"));
+const UploadCenterPage = lazy(() => import("./pages/UploadCenterPage"));
+const AssetsHomePage = lazy(() => import("./pages/AssetsHomePage"));
+const AssetDetailPage = lazy(() => import("./pages/AssetDetailPage"));
+const InsuranceHubPage = lazy(() => import("./pages/InsuranceHubPage"));
+const PolicyComparisonPage = lazy(() => import("./pages/PolicyComparisonPage"));
+const PolicyDetailPage = lazy(() => import("./pages/PolicyDetailPage"));
+const AutoInsuranceHubPage = lazy(() => import("./pages/AutoInsuranceHubPage"));
+const AutoPolicyDetailPage = lazy(() => import("./pages/AutoPolicyDetailPage"));
+const HealthInsuranceHubPage = lazy(() => import("./pages/HealthInsuranceHubPage"));
+const HealthPlanDetailPage = lazy(() => import("./pages/HealthPlanDetailPage"));
+const HomeownersHubPage = lazy(() => import("./pages/HomeownersHubPage"));
+const HomeownersPolicyDetailPage = lazy(() => import("./pages/HomeownersPolicyDetailPage"));
+const LifePolicyUploadPage = lazy(() => import("./pages/LifePolicyUploadPage"));
+const BankingHubPage = lazy(() => import("./pages/BankingHubPage"));
+const MortgageHubPage = lazy(() => import("./pages/MortgageHubPage"));
+const MortgageLoanDetailPage = lazy(() => import("./pages/MortgageLoanDetailPage"));
+const PropertyHubPage = lazy(() => import("./pages/PropertyHubPage"));
+const PropertyDetailPage = lazy(() => import("./pages/PropertyDetailPage"));
+const RetirementHubPage = lazy(() => import("./pages/RetirementHubPage"));
+const RetirementAccountDetailPage = lazy(() => import("./pages/RetirementAccountDetailPage"));
+const RetirementUploadPage = lazy(() => import("./pages/RetirementUploadPage"));
+const CollegePlanningPage = lazy(() => import("./pages/CollegePlanningPage"));
+const WarrantyHubPage = lazy(() => import("./pages/WarrantyHubPage"));
+const WarrantyDetailPage = lazy(() => import("./pages/WarrantyDetailPage"));
+const EstateHubPage = lazy(() => import("./pages/EstateHubPage"));
+const EmergencyModePage = lazy(() => import("./pages/EmergencyModePage"));
+const PortalHubPage = lazy(() => import("./pages/PortalHubPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
+const ContactsPage = lazy(() => import("./pages/ContactsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 const LEGACY_GLOBAL_STORAGE_KEYS = [
   "vaultedshield-results",
@@ -110,6 +111,31 @@ class RouteErrorBoundary extends Component {
 
     return this.props.children;
   }
+}
+
+function RouteLoadingFallback() {
+  return (
+    <div
+      style={{
+        padding: "24px",
+        borderRadius: "20px",
+        background: "#ffffff",
+        border: "1px solid #dbe4f0",
+        color: "#475569",
+        fontWeight: 700,
+      }}
+    >
+      Loading workspace...
+    </div>
+  );
+}
+
+function renderLazyRoute(pathname, navigate, accessPortal, returnPath) {
+  return (
+    <Suspense fallback={<RouteLoadingFallback />}>
+      {renderRoute(pathname, navigate, accessPortal, returnPath)}
+    </Suspense>
+  );
 }
 
 function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard") {
@@ -328,28 +354,32 @@ export default function PlatformApp() {
   if (!accessPortal.isAuthenticated && !resolvedIsAuthRoute && !isPublicRoute) {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-        <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={intendedPath} />
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={intendedPath} />
+        </Suspense>
       </div>
     );
   }
 
   if (resolvedIsAuthRoute || (!accessPortal.isAuthenticated && isPublicRoute)) {
-      return (
+    return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-        {renderRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
+        {renderLazyRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
       </div>
-      );
+    );
   }
 
   if (!hasRouteAccess) {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-        <PricingPage
-          onNavigate={navigate}
-          accessPortal={accessPortal}
-          lockedRouteTitle={route.title}
-          returnPath={resolvedPricingReturnPath}
-        />
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <PricingPage
+            onNavigate={navigate}
+            accessPortal={accessPortal}
+            lockedRouteTitle={route.title}
+            returnPath={resolvedPricingReturnPath}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -430,7 +460,7 @@ export default function PlatformApp() {
               }}
             >
               <RouteErrorBoundary resetKey={resolvedPathname}>
-                {renderRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
+                {renderLazyRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
               </RouteErrorBoundary>
             </div>
           </ContentContainer>

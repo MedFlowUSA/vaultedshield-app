@@ -31,6 +31,15 @@ import {
   summarizePortalModule,
   summarizeVaultModule,
 } from "../lib/domain/platformIntelligence/moduleReadiness";
+import {
+  buildDashboardCommandCenter,
+  buildEmergencyAccessCommand,
+  buildHousingContinuityCommand,
+} from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  buildHouseholdPriorityEngine,
+  buildHouseholdScorecard,
+} from "../lib/domain/platformIntelligence/householdOperatingSystem";
 
 function buttonStyle(primary = false) {
   return {
@@ -289,6 +298,38 @@ export default function ReportsPage({ onNavigate }) {
     () => buildHouseholdReviewDigest(queueItems, reviewDigestSnapshot),
     [queueItems, reviewDigestSnapshot]
   );
+  const commandCenter = useMemo(
+    () =>
+      buildDashboardCommandCenter({
+        queueItems,
+        topActions: [],
+        reviewDigest,
+        householdMap,
+      }),
+    [householdMap, queueItems, reviewDigest]
+  );
+  const housingCommandCenter = useMemo(
+    () => buildHousingContinuityCommand(bundle || {}),
+    [bundle]
+  );
+  const emergencyAccessCommand = useMemo(
+    () => buildEmergencyAccessCommand(bundle || {}),
+    [bundle]
+  );
+  const householdScorecard = useMemo(
+    () => buildHouseholdScorecard(householdMap),
+    [householdMap]
+  );
+  const householdPriorityEngine = useMemo(
+    () =>
+      buildHouseholdPriorityEngine({
+        householdMap,
+        commandCenter,
+        housingCommand: housingCommandCenter,
+        emergencyAccessCommand,
+      }),
+    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+  );
   const householdReport = useMemo(
     () =>
       buildHouseholdReviewReport({
@@ -459,7 +500,7 @@ export default function ReportsPage({ onNavigate }) {
               Reports and Exports
             </div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
-              No household analysis yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support trustworthy output.
+              No household analysis is visible yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support trustworthy output.
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -623,6 +664,294 @@ export default function ReportsPage({ onNavigate }) {
       <section
         style={{
           display: "grid",
+          gap: "18px",
+          padding: "26px 28px",
+          borderRadius: "24px",
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Housing Continuity Cluster</div>
+          <div style={{ color: "#475569", lineHeight: "1.8" }}>
+            Property, mortgage, and homeowners now stay in one report lane so the housing stack can be reviewed as a connected operating system instead of three separate modules.
+          </div>
+        </div>
+
+        {renderReportFactsGrid(housingCommandCenter.metrics, 4)}
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {housingCommandCenter.blockers.length > 0 ? (
+            housingCommandCenter.blockers.map((item) => (
+              <div
+                key={`report-housing-${item.id}`}
+                style={{
+                  padding: "18px 20px",
+                  borderRadius: "18px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "5px 9px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: item.urgencyMeta.accent,
+                        background: item.urgencyMeta.background,
+                        border: item.urgencyMeta.border,
+                      }}
+                    >
+                      {item.urgencyMeta.badge}
+                    </span>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "5px 9px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "#475569",
+                        background: "#ffffff",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      {item.staleLabel}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
+                <div>
+                  <button type="button" onClick={() => onNavigate?.(item.route)} style={buttonStyle(false)}>
+                    {item.nextAction}
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                color: "#475569",
+                lineHeight: "1.7",
+              }}
+            >
+              No major housing blockers are standing out in the current household evidence.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: "26px 28px",
+          borderRadius: "24px",
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Household Score and Priorities</div>
+          <div style={{ color: "#475569", lineHeight: "1.8" }}>
+            Reports now carry the same operating scorecard and ranked priorities as the dashboard, so exported review stays tied to what matters most right now.
+          </div>
+        </div>
+
+        {renderReportFactsGrid(
+          [
+            { label: "Household Score", value: householdScorecard.overallScore ?? "—" },
+            { label: "Status", value: householdScorecard.overallStatus || "Starter" },
+            { label: "Weakest Dimension", value: householdScorecard.weakestDimension?.label || "—" },
+            { label: "Strongest Dimension", value: householdScorecard.strongestDimension?.label || "—" },
+          ],
+          4
+        )}
+
+        {renderReportFactsGrid(
+          householdScorecard.dimensions.map((dimension) => ({
+            label: dimension.label,
+            value: `${dimension.score ?? "—"} · ${dimension.status}`,
+          })),
+          5
+        )}
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {householdPriorityEngine.priorities.map((item) => (
+            <div
+              key={`report-priority-${item.id}`}
+              style={{
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: "4px" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {item.source}
+                  </div>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "5px 9px",
+                      borderRadius: "999px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: item.urgencyMeta.accent,
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                    }}
+                  >
+                    {item.urgencyMeta.label}
+                  </span>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "5px 9px",
+                      borderRadius: "999px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "#475569",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {item.impactLabel}
+                  </span>
+                </div>
+              </div>
+              <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
+              <div>
+                <button type="button" onClick={() => onNavigate?.(item.route)} style={buttonStyle(false)}>
+                  {item.nextAction}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: "26px 28px",
+          borderRadius: "24px",
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Emergency Cash / Access</div>
+          <div style={{ color: "#475569", lineHeight: "1.8" }}>
+            Banking liquidity and portal recovery now stay in one report lane so emergency access risk is visible as a single operating system, not two separate module stories.
+          </div>
+        </div>
+
+        {renderReportFactsGrid(emergencyAccessCommand.metrics, 4)}
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {emergencyAccessCommand.blockers.length > 0 ? (
+            emergencyAccessCommand.blockers.map((item) => (
+              <div
+                key={`report-emergency-${item.id}`}
+                style={{
+                  padding: "18px 20px",
+                  borderRadius: "18px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "5px 9px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: item.urgencyMeta.accent,
+                        background: item.urgencyMeta.background,
+                        border: item.urgencyMeta.border,
+                      }}
+                    >
+                      {item.urgencyMeta.badge}
+                    </span>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "5px 9px",
+                        borderRadius: "999px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        color: "#475569",
+                        background: "#ffffff",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      {item.staleLabel}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
+                <div>
+                  <button type="button" onClick={() => onNavigate?.(item.route)} style={buttonStyle(false)}>
+                    {item.nextAction}
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                color: "#475569",
+                lineHeight: "1.7",
+              }}
+            >
+              No major emergency cash or access blockers are standing out in the current household evidence.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
           gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
           gap: "18px",
         }}
@@ -670,6 +999,101 @@ export default function ReportsPage({ onNavigate }) {
             </div>
           </button>
         ))}
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "18px",
+          padding: "26px 28px",
+          borderRadius: "24px",
+          background: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Continuity Command Center</div>
+          <div style={{ color: "#475569", lineHeight: "1.8" }}>
+            The same operating blockers that drive the dashboard now stay visible inside reports, so exports and decision reviews stay tied to current household reality.
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {renderReportFactsGrid(
+            [
+              { label: "Active", value: commandCenter.metrics.active },
+              { label: "Critical", value: commandCenter.metrics.critical },
+              { label: "Warning", value: commandCenter.metrics.warning },
+              { label: "Stalled", value: commandCenter.metrics.stalled },
+            ],
+            4
+          )}
+        </div>
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {commandCenter.blockers.map((item) => (
+            <div
+              key={`report-command-${item.id}`}
+              style={{
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "5px 9px",
+                      borderRadius: "999px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: item.urgencyMeta.accent,
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                    }}
+                  >
+                    {item.urgencyMeta.badge}
+                  </span>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "5px 9px",
+                      borderRadius: "999px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "#475569",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {item.staleLabel}
+                  </span>
+                </div>
+              </div>
+              <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
+              <div>
+                <button type="button" onClick={() => onNavigate?.(item.route)} style={buttonStyle(false)}>
+                  {item.nextAction}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section
@@ -737,7 +1161,7 @@ export default function ReportsPage({ onNavigate }) {
               </div>
               <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Cross-Module Household Read</div>
               <div style={{ color: "#475569", lineHeight: "1.8" }}>
-                A tighter operating summary for household planning, continuity review, and export-friendly leadership readout.
+            A tighter operating summary for household planning, continuity review, and export-friendly executive readout.
               </div>
               <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(true)}>
                 Print Executive Summary
@@ -811,7 +1235,7 @@ export default function ReportsPage({ onNavigate }) {
                     ))}
                   {moduleReadinessRows.filter((row) => row.status !== "Ready").length === 0 ? (
                     <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                      No major module watchpoints are currently outranking the others.
+                      No major module watchpoints are currently standing out above the others.
                     </div>
                   ) : null}
                 </div>
@@ -950,7 +1374,7 @@ export default function ReportsPage({ onNavigate }) {
       </section>
 
       {loadingStates.householdData || loadingStates.insurancePortfolio ? (
-        <div style={{ color: "#475569", fontSize: "14px" }}>Loading report-ready household data...</div>
+        <div style={{ color: "#475569", fontSize: "14px" }}>Loading report-ready household signals...</div>
       ) : null}
 
       {loadError ? (

@@ -42,5 +42,29 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
     plugins: [react(), propertyCompsDevProxy(env)],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("pdfjs-dist")) {
+              return "pdfjs";
+            }
+            if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
+              return "react-vendor";
+            }
+            if (id.includes("node_modules/@supabase")) {
+              return "supabase-vendor";
+            }
+            if (id.includes("node_modules/tesseract.js")) {
+              return "ocr-vendor";
+            }
+            if (id.includes("node_modules")) {
+              return "vendor";
+            }
+            return undefined;
+          },
+        },
+      },
+    },
   };
 })

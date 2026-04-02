@@ -3,6 +3,12 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import {
+  buildHouseholdOnboardingChecklist,
+  getHouseholdBlankState,
+} from "../lib/onboarding/isHouseholdBlank";
+import { buildHouseholdOnboardingMission } from "../lib/onboarding/onboardingMission";
+import { buildDemoHouseholdPreview } from "../lib/onboarding/demoHouseholdPreview";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import {
   GUIDE_FAQS,
@@ -33,6 +39,27 @@ export default function GuidanceCenterPage({ onNavigate }) {
   const latestAnswer = history[0] || null;
   const quickStartColumns = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
   const featureColumns = isMobile ? "1fr" : "repeat(auto-fit, minmax(240px, 1fr))";
+  const blankState = useMemo(
+    () => getHouseholdBlankState(intelligenceBundle || {}, savedPolicies || []),
+    [intelligenceBundle, savedPolicies]
+  );
+  const onboardingChecklist = useMemo(
+    () => buildHouseholdOnboardingChecklist(blankState, intelligenceBundle || {}, savedPolicies || []),
+    [blankState, intelligenceBundle, savedPolicies]
+  );
+  const onboardingProgressPercent = onboardingChecklist.length > 0
+    ? Math.round((onboardingChecklist.filter((item) => item.complete).length / onboardingChecklist.length) * 100)
+    : 0;
+  const onboardingMission = useMemo(
+    () =>
+      buildHouseholdOnboardingMission({
+        blankState,
+        checklist: onboardingChecklist,
+        progressPercent: onboardingProgressPercent,
+      }),
+    [blankState, onboardingChecklist, onboardingProgressPercent]
+  );
+  const demoHouseholdPreview = useMemo(() => buildDemoHouseholdPreview(), []);
 
   function handleAskGuide(rawQuestion) {
     const trimmed = String(rawQuestion || "").trim();
@@ -91,7 +118,50 @@ export default function GuidanceCenterPage({ onNavigate }) {
         title="Current Household Context"
         subtitle="Guidance is more useful when it reflects what the current household has already started."
       >
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
+        <div style={{ display: "grid", gap: "14px" }}>
+          <div
+            style={{
+              padding: "16px 18px",
+              borderRadius: "16px",
+              background: blankState.isBlank ? "#eff6ff" : "#f8fafc",
+              border: `1px solid ${blankState.isBlank ? "#bfdbfe" : "#e2e8f0"}`,
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: "12px", color: blankState.isBlank ? "#1d4ed8" : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  {onboardingMission.stageLabel}
+                </div>
+                <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>
+                  {onboardingMission.headline}
+                </div>
+              </div>
+              <div style={{ fontWeight: 800, color: "#0f172a" }}>{onboardingMission.completionSummary}</div>
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.75" }}>{onboardingMission.explanation}</div>
+            {onboardingMission.nextStep ? (
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.(onboardingMission.nextStep.route)}
+                  style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+                >
+                  Open {onboardingMission.nextStep.label}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/dashboard")}
+                  style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+                >
+                  Open Guided Dashboard
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
           <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Assets</div>
             <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0}</div>
@@ -109,7 +179,61 @@ export default function GuidanceCenterPage({ onNavigate }) {
             <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{intelligenceBundle?.portalReadiness?.portalCount ?? 0}</div>
           </div>
         </div>
+        </div>
       </SectionCard>
+
+      {blankState.isBlank ? (
+        <SectionCard
+          title="Sample Household Preview"
+          subtitle="This is a safe preview of what VaultedShield starts surfacing once real household records are added."
+        >
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 0.82fr) minmax(0, 1.18fr)", gap: "14px" }}>
+            <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "12px" }}>
+              <div>
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{demoHouseholdPreview.householdLabel}</div>
+                <div style={{ marginTop: "8px", fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{demoHouseholdPreview.score.overall}</div>
+                <div style={{ marginTop: "6px", color: "#1d4ed8", fontWeight: 700 }}>{demoHouseholdPreview.score.status}</div>
+              </div>
+              {demoHouseholdPreview.score.dimensions.map((item) => (
+                <div key={item.label} style={{ display: "grid", gap: "6px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "14px" }}>
+                    <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</span>
+                    <span style={{ color: "#1d4ed8", fontWeight: 800 }}>{item.value}</span>
+                  </div>
+                  <div style={{ height: "8px", borderRadius: "999px", background: "#dbeafe", overflow: "hidden" }}>
+                    <div style={{ width: `${item.value}%`, height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #38bdf8 0%, #2563eb 100%)" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gap: "14px" }}>
+              <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Sample top priorities</div>
+                {demoHouseholdPreview.priorities.map((item) => (
+                  <div key={item.label} style={{ display: "grid", gap: "4px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</span>
+                      <span style={{ color: "#1d4ed8", fontWeight: 800, fontSize: "12px" }}>{item.impact}</span>
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.nextAction}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Sample module read</div>
+                {demoHouseholdPreview.modules.map((item) => (
+                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", color: "#475569" }}>
+                    <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</span>
+                    <span style={{ color: "#1d4ed8", fontWeight: 800, fontSize: "12px" }}>{item.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         title="Ask VaultedShield Guide"

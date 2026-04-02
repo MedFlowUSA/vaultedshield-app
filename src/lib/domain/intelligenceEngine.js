@@ -2141,8 +2141,20 @@ export function buildPolicyReviewReport(policyBundle = {}) {
           { label: "Adequacy Status", value: displayReportValue(adequacyReview?.displayStatus) },
           { label: "Ownership Structure", value: displayReportValue(adequacyReview?.ownershipStructure) },
           { label: "Owner Visible", value: adequacyReview?.ownerVisible ? "Yes" : "Limited" },
+          {
+            label: "Joint Insured",
+            value: adequacyReview?.jointInsuredName || (adequacyReview?.jointInsuredVisible ? "Yes" : "Limited"),
+          },
           { label: "Insured Visible", value: adequacyReview?.insuredVisible ? "Yes" : "Limited" },
+          {
+            label: "Payor Visible",
+            value: adequacyReview?.payorName || (adequacyReview?.payorVisible ? "Yes" : "Limited"),
+          },
           { label: "Trustee Visible", value: adequacyReview?.trusteeVisible ? "Yes" : "Limited" },
+          {
+            label: "Trust Name",
+            value: adequacyReview?.trustName || (adequacyReview?.trustNameVisible ? "Yes" : "Limited"),
+          },
           { label: "Benefit Option", value: displayReportValue(adequacyReview?.benefitOption) },
           {
             label: "Rider Visibility",
@@ -2169,6 +2181,16 @@ export function buildPolicyReviewReport(policyBundle = {}) {
               adequacyReview?.contingentBeneficiaryName
                 ? [adequacyReview?.primaryBeneficiaryName, adequacyReview?.contingentBeneficiaryName].filter(Boolean).join(" / ")
                 : adequacyReview?.beneficiaryStatusLabel || displayReportValue(adequacyReview?.beneficiaryVisibility),
+          },
+          {
+            label: "Beneficiary Shares",
+            value:
+              [
+                adequacyReview?.primaryBeneficiaryShare ? `Primary ${adequacyReview.primaryBeneficiaryShare}` : "",
+                adequacyReview?.contingentBeneficiaryShare ? `Contingent ${adequacyReview.contingentBeneficiaryShare}` : "",
+              ]
+                .filter(Boolean)
+                .join(" / ") || "Limited",
           },
         ],
       },
@@ -3213,17 +3235,29 @@ export function buildPolicyIntelligence({ baseline, statements, legacyAnalytics,
     policy_number: fieldDisplay(baseline?.fields?.policy_number) || fieldDisplay(latestStatement?.fields?.policy_number),
     issue_date: fieldDisplay(baseline?.fields?.issue_date),
     insured_name: fieldDisplay(baseline?.fields?.insured_name) || fieldDisplay(latestStatement?.fields?.insured_name) || "",
+    joint_insured_name:
+      fieldDisplay(baseline?.fields?.joint_insured_name) || fieldDisplay(latestStatement?.fields?.joint_insured_name) || "",
     owner_name: fieldDisplay(baseline?.fields?.owner_name) || fieldDisplay(latestStatement?.fields?.owner_name) || "",
+    payor_name: fieldDisplay(baseline?.fields?.payor_name) || fieldDisplay(latestStatement?.fields?.payor_name) || "",
     trustee_name: fieldDisplay(baseline?.fields?.trustee_name) || fieldDisplay(latestStatement?.fields?.trustee_name) || "",
+    trust_name: fieldDisplay(baseline?.fields?.trust_name) || fieldDisplay(latestStatement?.fields?.trust_name) || "",
     ownership_structure:
       fieldDisplay(baseline?.fields?.ownership_structure) || fieldDisplay(latestStatement?.fields?.ownership_structure) || "",
     primary_beneficiary_name:
       fieldDisplay(baseline?.fields?.primary_beneficiary_name) ||
       fieldDisplay(latestStatement?.fields?.primary_beneficiary_name) ||
       "",
+    primary_beneficiary_share:
+      fieldDisplay(baseline?.fields?.primary_beneficiary_share) ||
+      fieldDisplay(latestStatement?.fields?.primary_beneficiary_share) ||
+      "",
     contingent_beneficiary_name:
       fieldDisplay(baseline?.fields?.contingent_beneficiary_name) ||
       fieldDisplay(latestStatement?.fields?.contingent_beneficiary_name) ||
+      "",
+    contingent_beneficiary_share:
+      fieldDisplay(baseline?.fields?.contingent_beneficiary_share) ||
+      fieldDisplay(latestStatement?.fields?.contingent_beneficiary_share) ||
       "",
     beneficiary_status:
       fieldDisplay(baseline?.fields?.beneficiary_status) ||

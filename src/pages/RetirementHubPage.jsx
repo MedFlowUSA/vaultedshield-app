@@ -14,6 +14,7 @@ import {
 import { summarizeRetirementHousehold } from "../lib/domain/retirement/retirementIntelligence";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
+import { buildRetirementHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
   createRetirementAssetWithAccount,
   listRetirementAccounts,
@@ -188,6 +189,15 @@ export default function RetirementHubPage({ onNavigate }) {
       }),
     [accounts, readinessSnapshot]
   );
+  const retirementHubCommand = useMemo(
+    () =>
+      buildRetirementHubCommand({
+        accounts,
+        readinessSnapshot,
+        retirementHouseholdRead,
+      }),
+    [accounts, readinessSnapshot, retirementHouseholdRead]
+  );
 
   async function refreshAccounts() {
     if (!householdState.context.householdId) return;
@@ -265,6 +275,61 @@ export default function RetirementHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Retirement Command Center"
+          subtitle="The strongest household retirement blockers, why they matter, and what to do next."
+        >
+          <div style={{ display: "grid", gap: "16px" }}>
+            <AIInsightPanel
+              title="Household Retirement Command"
+              summary={retirementHubCommand.headline}
+              bullets={[
+                `${retirementHubCommand.metrics.total || 0} retirement account${retirementHubCommand.metrics.total === 1 ? "" : "s"} are tracked.`,
+                `${retirementHubCommand.metrics.active || 0} account${retirementHubCommand.metrics.active === 1 ? "" : "s"} are active.`,
+                `${retirementHubCommand.metrics.attention || 0} command item${retirementHubCommand.metrics.attention === 1 ? "" : "s"} are surfaced as next moves.`,
+              ]}
+            />
+            {retirementHubCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {retirementHubCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                    </div>
+                    <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                      <strong>Blocker:</strong> {item.blocker}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      <strong>Consequence:</strong> {item.consequence}
+                    </div>
+                    <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                      Next action: {item.nextAction}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No active retirement blockers"
+                description="The retirement module currently reads as relatively stable at the household level."
+              />
+            )}
+          </div>
+        </SectionCard>
+      </div>
 
       <div
         style={{

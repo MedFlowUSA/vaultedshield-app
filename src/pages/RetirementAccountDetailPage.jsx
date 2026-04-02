@@ -11,6 +11,7 @@ import {
   listRetirementProviders,
 } from "../lib/domain/retirement";
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
+import { buildRetirementCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import {
@@ -275,6 +276,27 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
       }),
     [bundle?.retirementPositions, latestAnalytics, latestSnapshot]
   );
+  const retirementCommandCenter = useMemo(
+    () =>
+      buildRetirementCommandCenter({
+        retirementAccount,
+        retirementRead,
+        retirementDocuments: bundle?.retirementDocuments || [],
+        retirementSnapshots: bundle?.retirementSnapshots || [],
+        retirementAnalytics: bundle?.retirementAnalytics || [],
+        retirementPositions: bundle?.retirementPositions || [],
+        assetBundle,
+      }),
+    [
+      assetBundle,
+      bundle?.retirementAnalytics,
+      bundle?.retirementDocuments,
+      bundle?.retirementPositions,
+      bundle?.retirementSnapshots,
+      retirementAccount,
+      retirementRead,
+    ]
+  );
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -433,6 +455,65 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             {derivedFlags.map((flag) => (
               <StatusBadge key={flag.label} label={flag.label} tone={flag.tone} />
             ))}
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Retirement Command"
+              subtitle="The strongest blockers on this account, what they put at risk, and the best next move."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <AIInsightPanel
+                  title="Account Command"
+                  summary={retirementCommandCenter.headline}
+                  bullets={[
+                    `${retirementCommandCenter.metrics.critical || 0} critical blocker${retirementCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                    `${retirementCommandCenter.metrics.warning || 0} warning item${retirementCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                    `${retirementCommandCenter.metrics.documents || 0} retirement document${retirementCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                    `${retirementCommandCenter.metrics.snapshots || 0} snapshot${retirementCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${retirementCommandCenter.metrics.positions || 0} parsed position${retirementCommandCenter.metrics.positions === 1 ? "" : "s"} are visible.`,
+                  ]}
+                />
+                {retirementCommandCenter.blockers.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {retirementCommandCenter.blockers.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "14px",
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                            <StatusBadge label={item.staleLabel} tone="info" />
+                          </div>
+                        </div>
+                        <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                          <strong>Blocker:</strong> {item.blocker}
+                        </div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          <strong>Consequence:</strong> {item.consequence}
+                        </div>
+                        <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                          Next action: {item.nextAction}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No active retirement blockers"
+                    description="This retirement account currently looks relatively steady across statements, read quality, holdings, and continuity."
+                  />
+                )}
+              </div>
+            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>

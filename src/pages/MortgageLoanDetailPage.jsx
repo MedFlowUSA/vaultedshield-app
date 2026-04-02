@@ -26,6 +26,7 @@ import {
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
+import { buildMortgageCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const MORTGAGE_DOCUMENT_CLASSES = listMortgageDocumentClasses();
 const MORTGAGE_LENDERS = listMortgageLenders();
@@ -180,6 +181,27 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
         snapshots: bundle?.mortgageSnapshots || [],
       }),
     [bundle?.mortgageDocuments, bundle?.mortgageSnapshots, mortgageLoan, propertyLinks]
+  );
+  const mortgageCommandCenter = useMemo(
+    () =>
+      buildMortgageCommandCenter({
+        mortgageLoan,
+        mortgageReview,
+        mortgageDocuments: bundle?.mortgageDocuments || [],
+        mortgageSnapshots: bundle?.mortgageSnapshots || [],
+        mortgageAnalytics: bundle?.mortgageAnalytics || [],
+        propertyLinks,
+        assetBundle,
+      }),
+    [
+      assetBundle,
+      bundle?.mortgageAnalytics,
+      bundle?.mortgageDocuments,
+      bundle?.mortgageSnapshots,
+      mortgageLoan,
+      mortgageReview,
+      propertyLinks,
+    ]
   );
 
   const summaryItems = useMemo(() => {
@@ -358,6 +380,65 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={mortgageLoanType?.display_name || mortgageLoan.mortgage_loan_type_key} tone="info" />
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Mortgage Command"
+              subtitle="The strongest loan blockers, why they matter, and what to do next on this mortgage."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <AIInsightPanel
+                  title="Debt Command"
+                  summary={mortgageCommandCenter.headline}
+                  bullets={[
+                    `${mortgageCommandCenter.metrics.critical || 0} critical blocker${mortgageCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                    `${mortgageCommandCenter.metrics.warning || 0} warning item${mortgageCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                    `${mortgageCommandCenter.metrics.documents || 0} mortgage document${mortgageCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                    `${mortgageCommandCenter.metrics.snapshots || 0} snapshot${mortgageCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${mortgageCommandCenter.metrics.analytics || 0} analytic${mortgageCommandCenter.metrics.analytics === 1 ? "" : "s"} are visible.`,
+                  ]}
+                />
+                {mortgageCommandCenter.blockers.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {mortgageCommandCenter.blockers.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "14px",
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                            <StatusBadge label={item.staleLabel} tone="info" />
+                          </div>
+                        </div>
+                        <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                          <strong>Blocker:</strong> {item.blocker}
+                        </div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          <strong>Consequence:</strong> {item.consequence}
+                        </div>
+                        <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                          Next action: {item.nextAction}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No active mortgage blockers"
+                    description="This mortgage currently looks relatively steady across evidence, linkage, debt review, and continuity."
+                  />
+                )}
+              </div>
+            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>

@@ -1374,6 +1374,8 @@ export function answerHouseholdQuestion({
   queueItems = [],
   intelligence = null,
   bundle = {},
+  scorecard = null,
+  priorityEngine = null,
 } = {}) {
   const classification = classifyHouseholdQuestion(questionText);
   const safeMap = householdMap || buildHouseholdRiskContinuityMap(bundle, intelligence, []);
@@ -1397,14 +1399,14 @@ export function answerHouseholdQuestion({
 
   switch (classification.intent) {
     case "priority_review": {
-      const firstItem = activeQueue[0];
+      const firstItem = priorityEngine?.priorities?.[0] || activeQueue[0];
       answerText = firstItem
-        ? `${firstItem.label} is the strongest first review target right now because it is still active in the queue and directly limits cleaner household continuity.`
+        ? `${firstItem.title || firstItem.label} is the strongest first review target right now because it is carrying the highest household impact and directly limits a cleaner operating picture.`
         : "The household does not currently show an active priority queue item that clearly outranks the rest.";
       evidencePoints = [
-        summarizeHouseholdEvidencePoint("Top queue item", firstItem?.label || "None"),
-        summarizeHouseholdEvidencePoint("Workflow status", firstItem?.workflow_label || "—"),
-        summarizeHouseholdEvidencePoint("Why it matters", firstItem?.summary || "No active review reason is visible."),
+        summarizeHouseholdEvidencePoint("Top priority", firstItem?.title || firstItem?.label || "None"),
+        summarizeHouseholdEvidencePoint("Impact", firstItem?.impactLabel || firstItem?.workflow_label || "—"),
+        summarizeHouseholdEvidencePoint("Why it matters", firstItem?.blocker || firstItem?.summary || "No active review reason is visible."),
       ];
       confidenceLabel = firstItem ? "strong" : "limited";
       break;
@@ -1426,6 +1428,8 @@ export function answerHouseholdQuestion({
       break;
     }
     case "continuity_status": {
+      const weakestDimension = scorecard?.weakestDimension || null;
+      const strongestDimension = scorecard?.strongestDimension || null;
       answerText =
         safeMap.overall_status === "Strong"
           ? "Household continuity is reading as strong because the visible protection, document, and access layers are supporting each other reasonably well."
@@ -1434,10 +1438,14 @@ export function answerHouseholdQuestion({
             : safeMap.overall_status === "Weak"
               ? "Household continuity is only partially supported right now because several visible gaps are still reducing confidence."
               : "Household continuity is at risk because multiple support layers remain too thin to treat the full record as dependable.";
+      if (weakestDimension && strongestDimension) {
+        answerText = `${answerText} ${strongestDimension.label} is currently strongest, while ${weakestDimension.label.toLowerCase()} is the clearest drag on the household score.`;
+      }
       evidencePoints = [
         summarizeHouseholdEvidencePoint("Readiness", `${safeMap.overall_score || 0} (${safeMap.overall_status || "—"})`),
+        summarizeHouseholdEvidencePoint("Weakest dimension", weakestDimension?.label ? `${weakestDimension.label} (${weakestDimension.score})` : "—"),
+        summarizeHouseholdEvidencePoint("Strongest dimension", strongestDimension?.label ? `${strongestDimension.label} (${strongestDimension.score})` : "—"),
         summarizeHouseholdEvidencePoint("Top gap", safeMap.visibility_gaps?.[0] || "No major gap surfaced"),
-        summarizeHouseholdEvidencePoint("Top strength", safeMap.strength_signals?.[0] || "No major strength surfaced"),
       ];
       confidenceLabel = "strong";
       break;
@@ -1500,12 +1508,16 @@ export function answerHouseholdQuestion({
       break;
     }
     default: {
-      answerText = `${safeMap.bottom_line} ${safeDigest.summary}`.trim();
+      const topPriority = priorityEngine?.priorities?.[0] || null;
+      const weakestDimension = scorecard?.weakestDimension || null;
+      answerText = topPriority
+        ? `${safeMap.bottom_line} ${topPriority.title} should be addressed first. ${topPriority.impactLabel}.`
+        : `${safeMap.bottom_line} ${safeDigest.summary}`.trim();
       evidencePoints = [
         summarizeHouseholdEvidencePoint("Readiness", `${safeMap.overall_score || 0} (${safeMap.overall_status || "—"})`),
+        summarizeHouseholdEvidencePoint("Top priority", topPriority?.title || "None"),
+        summarizeHouseholdEvidencePoint("Weakest dimension", weakestDimension?.label ? `${weakestDimension.label} (${weakestDimension.score})` : "—"),
         summarizeHouseholdEvidencePoint("Active queue", activeQueue.length),
-        summarizeHouseholdEvidencePoint("Reopened since review", safeDigest.reopened_count),
-        summarizeHouseholdEvidencePoint("Top focus area", safeMap.focus_areas?.[0]?.title || "—"),
         summarizeHouseholdEvidencePoint("Cross-asset flags", dependencySignals.dependency_flags?.length || 0),
       ];
       confidenceLabel = "moderate";

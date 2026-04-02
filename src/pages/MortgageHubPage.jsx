@@ -17,6 +17,7 @@ import {
   listMortgageLoans,
 } from "../lib/supabase/mortgageData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { buildMortgageHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const MORTGAGE_LOAN_TYPES = listMortgageLoanTypes();
 const MORTGAGE_LENDERS = listMortgageLenders();
@@ -106,6 +107,14 @@ export default function MortgageHubPage({ onNavigate }) {
     () => summarizeMortgageHousehold(mortgageLoans),
     [mortgageLoans]
   );
+  const mortgageHubCommand = useMemo(
+    () =>
+      buildMortgageHubCommand({
+        mortgageLoans,
+        householdMortgageSummary,
+      }),
+    [householdMortgageSummary, mortgageLoans]
+  );
 
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
@@ -172,6 +181,61 @@ export default function MortgageHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Mortgage Command Center"
+          subtitle="The strongest debt blockers, what they put at risk, and the next move to keep household financing steady."
+        >
+          <div style={{ display: "grid", gap: "16px" }}>
+            <AIInsightPanel
+              title="Household Mortgage Command"
+              summary={mortgageHubCommand.headline}
+              bullets={[
+                `${mortgageHubCommand.metrics.total || 0} mortgage loan${mortgageHubCommand.metrics.total === 1 ? "" : "s"} are tracked.`,
+                `${mortgageHubCommand.metrics.active || 0} loan${mortgageHubCommand.metrics.active === 1 ? "" : "s"} are active or current.`,
+                `${mortgageHubCommand.metrics.attention || 0} command item${mortgageHubCommand.metrics.attention === 1 ? "" : "s"} are surfaced as next moves.`,
+              ]}
+            />
+            {mortgageHubCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {mortgageHubCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                    </div>
+                    <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                      <strong>Blocker:</strong> {item.blocker}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      <strong>Consequence:</strong> {item.consequence}
+                    </div>
+                    <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                      Next action: {item.nextAction}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No active mortgage blockers"
+                description="The mortgage module currently reads as relatively steady at the household level."
+              />
+            )}
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Mortgage Loans" subtitle="Live household mortgage records linked into the broader platform asset layer.">

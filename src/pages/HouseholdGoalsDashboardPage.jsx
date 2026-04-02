@@ -537,7 +537,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
     if (activeCollegePlan) {
       lines.push(`${activeCollegePlan.childLabel} college planning is ${activeCollegePlan.readinessStatus.toLowerCase()} at ${activeCollegePlan.readinessScore}/100.`);
     } else {
-      lines.push("No college savings plan has been saved yet.");
+      lines.push("No college plan is visible yet in the current household view.");
     }
 
     if (propertySummary.propertyCount > 0) {
@@ -553,13 +553,13 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
     if (mortgageSummary.totalLoans > 0) {
       lines.push(mortgageSummary.headline);
     } else {
-      lines.push("No household mortgage loans are currently visible in the dashboard.");
+      lines.push("No household mortgage loans are visible yet in the current planning view.");
     }
 
     if (insuranceSummary?.headline) {
       lines.push(insuranceSummary.headline);
     } else if (insuranceGaps.summary.protectionFlags.length === 0) {
-      lines.push("No obvious insurance protection gaps were detected from the policies currently visible here.");
+      lines.push("No obvious insurance protection gaps are standing out from the policies currently visible here.");
     } else {
       const protectionMessages = [];
       if (insuranceGaps.life.status !== "covered") protectionMessages.push("life coverage needs review");
@@ -579,7 +579,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
       <PageHeader
         eyebrow="Household Goals"
         title="Household Goals Dashboard"
-        description="One planning surface for retirement readiness, college savings, and property equity visibility across the household."
+        description="One household planning surface for retirement readiness, college funding, property equity visibility, mortgage review, and protection signals."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
@@ -628,7 +628,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
             : "Retirement goal has not been saved yet.",
           activeCollegePlan
             ? `${activeCollegePlan.childLabel} projected college savings: ${formatCurrency(activeCollegePlan.projectedSavings)}.`
-            : "No active college plan is available yet.",
+            : "No college plan is visible yet.",
           collegePlans.length > 0
             ? `College planning status: ${collegeHouseholdRead.status}.`
             : "College planning has not been set up yet.",
@@ -637,7 +637,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
             : "Property equity is not in view yet.",
           mortgageSummary.totalLoans > 0
             ? `Mortgage read: ${mortgageSummary.headline}`
-            : "No household mortgage loans are visible yet.",
+            : "No mortgage loans are visible yet.",
           insuranceGaps.summary.protectionFlags.length > 0
             ? `Protection review flags: ${insuranceGaps.summary.protectionFlags.join(", ")}.`
             : "No obvious insurance protection gaps were detected from the current household data.",
@@ -646,7 +646,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
 
       <SectionCard title="Protection & Insurance" subtitle="A simple household protection health check based on visible policy and property data.">
         {insuranceLoading ? (
-          <div style={{ color: "#64748b" }}>Loading insurance visibility...</div>
+          <div style={{ color: "#64748b" }}>Loading household protection signals...</div>
         ) : insuranceError ? (
           <EmptyState title="Insurance visibility is limited" description={insuranceError} />
         ) : (
@@ -719,6 +719,32 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                     <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Beneficiary Limited</div>
                     <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
                       {insuranceSummary.metrics?.beneficiaryLimitedPolicies || 0}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Joint Insured</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.jointInsuredVisiblePolicies || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Payor Visible</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.payorVisiblePolicies || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Trust Name Visible</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.trustNameVisiblePolicies || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Beneficiary Shares</div>
+                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
+                      {insuranceSummary.metrics?.beneficiaryShareVisiblePolicies || 0}
                     </div>
                   </div>
                 </div>
@@ -919,7 +945,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
 
         <SectionCard title="Property Equity Snapshot" subtitle="Current equity visibility across linked household properties.">
           {propertyLoading ? (
-            <div style={{ color: "#64748b" }}>Loading property equity snapshot...</div>
+            <div style={{ color: "#64748b" }}>Loading household property equity visibility...</div>
           ) : propertyError ? (
             <EmptyState title="Property snapshot unavailable" description={propertyError} />
           ) : propertyBundles.length === 0 ? (
@@ -977,7 +1003,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
 
         <SectionCard title="Mortgage Readiness" subtitle="Debt review, payoff visibility, and refinance readiness across household mortgage loans.">
           {mortgageLoading ? (
-            <div style={{ color: "#64748b" }}>Loading mortgage readiness...</div>
+            <div style={{ color: "#64748b" }}>Loading household mortgage readiness...</div>
           ) : mortgageError ? (
             <EmptyState title="Mortgage readiness is limited" description={mortgageError} />
           ) : mortgageSummary.totalLoans === 0 ? (
@@ -1063,7 +1089,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               ))}
             </div>
           ) : (
-            <EmptyState title="No immediate planning flags" description="The current retirement, college, property, and visible insurance signals do not show an obvious needs-attention queue yet." />
+            <EmptyState title="No immediate planning flags" description="Current retirement, college, property, mortgage, and visible insurance signals do not show an obvious household priority queue yet." />
           )}
         </SectionCard>
 

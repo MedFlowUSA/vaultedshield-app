@@ -17,6 +17,7 @@ import {
 } from "../lib/domain/intelligenceEngine";
 import {
   analyzePolicyBasics,
+  buildPolicyAdequacyReview,
   buildProtectionComparisonNarrative,
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
@@ -45,6 +46,11 @@ function formatDate(value) {
 
 function displayNullable(value) {
   return value === null || value === undefined || value === "" ? "—" : value;
+}
+
+function displayVisibleValue(flag, value) {
+  if (value) return value;
+  return flag ? "Visible" : "Limited";
 }
 
 function getTone(label) {
@@ -582,15 +588,24 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
       [...insuranceRows]
         .map((row) => {
           const basicAnalysis = analyzePolicyBasics({ comparisonSummary: row });
+          const adequacyReview = buildPolicyAdequacyReview(
+            {
+              comparisonSummary: row,
+              basics: basicAnalysis,
+            },
+            { totalPolicies: insuranceRows.length }
+          );
           return {
             ...row,
             ranking: buildVaultedPolicyRank(row),
             interpretation: buildPolicyListInterpretation(row),
             basicAnalysis,
+            adequacyReview,
             gapAnalysis: detectInsuranceGaps(
               {
                 comparisonSummary: row,
                 basics: basicAnalysis,
+                adequacyReview,
               },
               { totalPolicies: insuranceRows.length }
             ),
@@ -1024,6 +1039,67 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                     </div>
                   ))}
                 </div>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {basePolicy?.adequacyReview || comparisonPolicy?.adequacyReview ? (
+            <SectionCard
+              title="Policy Parties"
+              subtitle="This layer compares owner, trust, payor, and beneficiary visibility so side-by-side review is not limited to values and charges."
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                {[basePolicy, comparisonPolicy].map((policy, index) => {
+                  const adequacyReview = policy?.adequacyReview || {};
+                  const beneficiaryNames =
+                    adequacyReview.primaryBeneficiaryName || adequacyReview.contingentBeneficiaryName
+                      ? [adequacyReview.primaryBeneficiaryName, adequacyReview.contingentBeneficiaryName]
+                          .filter(Boolean)
+                          .join(" / ")
+                      : displayNullable(adequacyReview.beneficiaryVisibility);
+                  const beneficiaryShares =
+                    [
+                      adequacyReview.primaryBeneficiaryShare ? `Primary ${adequacyReview.primaryBeneficiaryShare}` : "",
+                      adequacyReview.contingentBeneficiaryShare ? `Contingent ${adequacyReview.contingentBeneficiaryShare}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" / ") || "Limited";
+
+                  return (
+                    <div
+                      key={policy.policy_id || index}
+                      style={{
+                        padding: "16px",
+                        borderRadius: "16px",
+                        background: "#f8fafc",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                        display: "grid",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{policy.product || "Unnamed policy"}</div>
+                        <StatusBadge
+                          label={adequacyReview.displayStatus || "Needs Review"}
+                          tone={adequacyReview.adequacyStatus === "more_supported" ? "good" : "warning"}
+                        />
+                      </div>
+                      <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                        {adequacyReview.headline || "Party visibility is still limited in the current extracted read."}
+                      </div>
+                      <div style={{ display: "grid", gap: "8px", color: "#0f172a", fontSize: "14px" }}>
+                        <div><strong>Owner:</strong> {displayVisibleValue(adequacyReview.ownerVisible, adequacyReview.ownerName)}</div>
+                        <div><strong>Insured:</strong> {displayVisibleValue(adequacyReview.insuredVisible, adequacyReview.insuredName)}</div>
+                        <div><strong>Joint insured:</strong> {displayVisibleValue(adequacyReview.jointInsuredVisible, adequacyReview.jointInsuredName)}</div>
+                        <div><strong>Payor:</strong> {displayVisibleValue(adequacyReview.payorVisible, adequacyReview.payorName)}</div>
+                        <div><strong>Trustee:</strong> {displayVisibleValue(adequacyReview.trusteeVisible, adequacyReview.trusteeName)}</div>
+                        <div><strong>Trust name:</strong> {displayVisibleValue(adequacyReview.trustNameVisible, adequacyReview.trustName)}</div>
+                        <div><strong>Beneficiaries:</strong> {beneficiaryNames}</div>
+                        <div><strong>Beneficiary shares:</strong> {beneficiaryShares}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </SectionCard>
           ) : null}

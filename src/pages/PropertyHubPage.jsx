@@ -14,6 +14,7 @@ import {
   createPropertyWithDependencies,
   listProperties,
 } from "../lib/supabase/propertyData";
+import { buildPropertyHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const PROPERTY_TYPES = listPropertyTypes();
 
@@ -95,6 +96,7 @@ export default function PropertyHubPage({ onNavigate }) {
       { label: "Active", value: activeCount, helper: `${properties.length - activeCount} non-active records` },
     ];
   }, [properties]);
+  const propertyHubCommand = useMemo(() => buildPropertyHubCommand(properties), [properties]);
 
   async function handleCreateProperty(event) {
     event.preventDefault();
@@ -161,6 +163,61 @@ export default function PropertyHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Property Command Center"
+          subtitle="The strongest module-level blockers and what to review next across household property records."
+        >
+          <div style={{ display: "grid", gap: "16px" }}>
+            <AIInsightPanel
+              title="Module Readiness"
+              summary={propertyHubCommand.headline}
+              bullets={[
+                `${propertyHubCommand.metrics.total || 0} property record${propertyHubCommand.metrics.total === 1 ? "" : "s"} are currently tracked.`,
+                `${propertyHubCommand.metrics.assetLinked || 0} record${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"} are already linked into the shared asset layer.`,
+                `${propertyHubCommand.metrics.attention || 0} review item${propertyHubCommand.metrics.attention === 1 ? "" : "s"} are surfaced as next moves.`,
+              ]}
+            />
+            {propertyHubCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {propertyHubCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                    </div>
+                    <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                      <strong>Blocker:</strong> {item.blocker}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      <strong>Consequence:</strong> {item.consequence}
+                    </div>
+                    <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                      Next action: {item.nextAction}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No active property command items"
+                description="Create the first property or open a property detail page to start building a stronger continuity picture."
+              />
+            )}
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Properties" subtitle="Live household property records linked into the broader platform asset layer.">

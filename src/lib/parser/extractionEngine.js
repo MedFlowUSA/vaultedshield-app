@@ -270,6 +270,269 @@ function normalizeText(value) {
   return value.replace(/\s+/g, " ").replace(/^[:\-]+/, "").trim();
 }
 
+function normalizeFreeText(value) {
+  return String(value || "").replace(/\s+/g, " ").replace(/^[\s:,\-]+/, "").trim();
+}
+
+function looksLikeBeneficiaryHeaderValue(value) {
+  const normalized = normalizeFreeText(value).toLowerCase();
+  if (!normalized) return false;
+  return /^(designation|designation schedule|information|schedule|record|allocation)$/.test(normalized);
+}
+
+function buildDerivedTextField({
+  normalizedKey,
+  rawLabel,
+  rawValue,
+  pageNumber,
+  method,
+  carrierHint,
+  documentType,
+  confidenceScore,
+  evidence,
+  sourcePageType = "",
+  sourcePriority = 0,
+}) {
+  const cleaned = normalizeFreeText(rawValue);
+  if (!cleaned) return null;
+  return buildDerivedField({
+    normalizedKey,
+    rawLabel,
+    rawValue: cleaned,
+    type: "text",
+    pageNumber,
+    method,
+    carrierHint,
+    documentType,
+    confidenceScore,
+    evidence,
+    sourcePageType,
+    sourcePriority,
+  });
+}
+
+function extractNamedPartyFallback(pages, normalizedKey, labels = [], { carrierName = "", documentType = "" } = {}) {
+  const labelPattern = labels.map((label) => escapeRegExp(label)).join("|");
+  if (!labelPattern) return null;
+
+  for (let pageIndex = 0; pageIndex < Math.min(pages.length, 6); pageIndex += 1) {
+    const pageText = pages[pageIndex];
+    const sourcePageType = getPageSourceType(carrierName, documentType, pageText);
+    const patterns = [
+      new RegExp(`(?:${labelPattern})\\s*[:\\-]\\s*([^\\n\\r]{2,80})`, "i"),
+      new RegExp(`(?:${labelPattern})\\s{2,}([^\\n\\r]{2,80})`, "i"),
+    ];
+
+    for (const regex of patterns) {
+      const match = pageText.match(regex);
+      if (!match) continue;
+      const candidate = normalizeFreeText(match[1]);
+      if (!candidate || /^(yes|no|n\/a|none|same as insured)$/i.test(candidate)) continue;
+      if (/[$%]/.test(candidate)) continue;
+      return buildDerivedTextField({
+        normalizedKey,
+        rawLabel: labels[0],
+        rawValue: candidate,
+        pageNumber: pageIndex + 1,
+        method: "section_based_inference",
+        carrierHint: carrierName,
+        documentType,
+        confidenceScore: 0.82,
+        evidence: ["matched labeled party line fallback"],
+        sourcePageType,
+        sourcePriority: getSourcePriority(carrierName, normalizedKey, sourcePageType),
+      });
+    }
+  }
+
+  return null;
+}
+
+function extractBeneficiaryShareFallback(pages, normalizedKey, labels = [], { carrierName = "", documentType = "" } = {}) {
+  const labelPattern = labels.map((label) => escapeRegExp(label)).join("|");
+  if (!labelPattern) return null;
+
+  for (let pageIndex = 0; pageIndex < Math.min(pages.length, 6); pageIndex += 1) {
+    const pageText = pages[pageIndex];
+    const sourcePageType = getPageSourceType(carrierName, documentType, pageText);
+    const patterns = [
+      new RegExp(`(?:${labelPattern})[^\\n\\r%]{0,60}?(\\d{1,3}(?:\\.\\d+)?)\\s*%`, "i"),
+      new RegExp(`(?:${labelPattern})\\s*[:\\-]\\s*(\\d{1,3}(?:\\.\\d+)?)\\s*%`, "i"),
+    ];
+
+    for (const regex of patterns) {
+      const match = pageText.match(regex);
+      if (!match) continue;
+      return buildDerivedField({
+        normalizedKey,
+        rawLabel: labels[0],
+        rawValue: `${match[1]}%`,
+        type: "percent",
+        pageNumber: pageIndex + 1,
+        method: "section_based_inference",
+        carrierHint: carrierName,
+        documentType,
+        confidenceScore: 0.8,
+        evidence: ["matched beneficiary share fallback"],
+        sourcePageType,
+        sourcePriority: getSourcePriority(carrierName, normalizedKey, sourcePageType),
+      });
+    }
+  }
+
+  return null;
+}
+
+function extractBeneficiaryScheduleFallbacks(pages, { carrierName = "", documentType = "" } = {}) {
+  const derivedFields = {};
+  const roleConfigs = [
+    {
+      role: "primary",
+      rolePattern: "(?:primary|first)",
+      nameKey: "primary_beneficiary_name",
+      shareKey: "primary_beneficiary_share",
+    },
+    {
+      role: "contingent",
+      rolePattern: "(?:contingent|secondary|alternate|successor)",
+      nameKey: "contingent_beneficiary_name",
+      shareKey: "contingent_beneficiary_share",
+    },
+  ];
+
+  for (let pageIndex = 0; pageIndex < Math.min(pages.length, 8); pageIndex += 1) {
+    const pageText = String(pages[pageIndex] || "");
+    if (!/\bbeneficiar(?:y|ies)\b/i.test(pageText)) continue;
+
+    const sourcePageType = getPageSourceType(carrierName, documentType, pageText);
+    const lines = splitLines(pageText);
+    let scheduleDetected = /beneficiary (?:designation|information|schedule|record|distribution|allocation)/i.test(pageText);
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (!scheduleDetected && /\bbeneficiar(?:y|ies)\b/i.test(line)) {
+        scheduleDetected = true;
+        continue;
+      }
+      if (!scheduleDetected) continue;
+
+      roleConfigs.forEach(({ role, rolePattern, nameKey, shareKey }) => {
+        const rowRegex = new RegExp(
+          `^${rolePattern}\\s+(?:beneficiar(?:y|ies)\\s+)?(.+?)\\s+(\\d{1,3}(?:\\.\\d+)?)\\s*%$`,
+          "i"
+        );
+        const rowMatch = line.match(rowRegex);
+        if (rowMatch) {
+          if (!derivedFields[nameKey]) {
+            derivedFields[nameKey] = buildDerivedTextField({
+              normalizedKey: nameKey,
+              rawLabel: `${role} beneficiary`,
+              rawValue: rowMatch[1],
+              pageNumber: pageIndex + 1,
+              method: "section_based_inference",
+              carrierHint: carrierName,
+              documentType,
+              confidenceScore: 0.8,
+              evidence: ["matched beneficiary schedule row"],
+              sourcePageType,
+              sourcePriority: getSourcePriority(carrierName, nameKey, sourcePageType),
+            });
+          }
+          if (!derivedFields[shareKey]) {
+            derivedFields[shareKey] = buildDerivedField({
+              normalizedKey: shareKey,
+              rawLabel: `${role} beneficiary share`,
+              rawValue: `${rowMatch[2]}%`,
+              type: "percent",
+              pageNumber: pageIndex + 1,
+              method: "section_based_inference",
+              carrierHint: carrierName,
+              documentType,
+              confidenceScore: 0.8,
+              evidence: ["matched beneficiary schedule row"],
+              sourcePageType,
+              sourcePriority: getSourcePriority(carrierName, shareKey, sourcePageType),
+            });
+          }
+        }
+      });
+    }
+
+    if (Object.keys(derivedFields).length > 0) {
+      if (!derivedFields.beneficiary_status) {
+        derivedFields.beneficiary_status = buildDerivedTextField({
+          normalizedKey: "beneficiary_status",
+          rawLabel: "beneficiary status",
+          rawValue: "Beneficiary designation visible",
+          pageNumber: pageIndex + 1,
+          method: "section_based_inference",
+          carrierHint: carrierName,
+          documentType,
+          confidenceScore: 0.72,
+          evidence: ["matched beneficiary schedule section"],
+          sourcePageType,
+          sourcePriority: getSourcePriority(carrierName, "beneficiary_status", sourcePageType),
+        });
+      }
+      break;
+    }
+  }
+
+  return derivedFields;
+}
+
+function applyDerivedPartyFieldFallbacks(fieldMap, pages, carrierName, documentType) {
+  const nextFields = { ...fieldMap };
+  const fallbackConfigs = [
+    { key: "joint_insured_name", labels: ["joint insured", "co-insured", "additional insured", "second insured"] },
+    { key: "payor_name", labels: ["payor", "payer", "premium payor", "premium payer", "payor name"] },
+    { key: "trust_name", labels: ["trust name", "owner trust", "trust owner name"] },
+  ];
+
+  fallbackConfigs.forEach(({ key, labels }) => {
+    if (!nextFields[key] || nextFields[key].missing) {
+      const derived = extractNamedPartyFallback(pages, key, labels, { carrierName, documentType });
+      if (derived) nextFields[key] = derived;
+    }
+  });
+
+  if (!nextFields.primary_beneficiary_share || nextFields.primary_beneficiary_share.missing) {
+    const derived = extractBeneficiaryShareFallback(
+      pages,
+      "primary_beneficiary_share",
+      ["primary beneficiary", "primary beneficiary name", "primary beneficiary share"],
+      { carrierName, documentType }
+    );
+    if (derived) nextFields.primary_beneficiary_share = derived;
+  }
+
+  if (!nextFields.contingent_beneficiary_share || nextFields.contingent_beneficiary_share.missing) {
+    const derived = extractBeneficiaryShareFallback(
+      pages,
+      "contingent_beneficiary_share",
+      ["contingent beneficiary", "secondary beneficiary", "alternate beneficiary", "contingent beneficiary share"],
+      { carrierName, documentType }
+    );
+    if (derived) nextFields.contingent_beneficiary_share = derived;
+  }
+
+  const scheduleFallbacks = extractBeneficiaryScheduleFallbacks(pages, { carrierName, documentType });
+  Object.entries(scheduleFallbacks).forEach(([key, derivedField]) => {
+    const existingField = nextFields[key];
+    const shouldReplaceHeaderLikeValue =
+      /beneficiary_name|beneficiary_status/.test(key) &&
+      existingField &&
+      !existingField.missing &&
+      looksLikeBeneficiaryHeaderValue(existingField.value ?? existingField.display_value);
+
+    if (((!existingField || existingField.missing) || shouldReplaceHeaderLikeValue) && derivedField) {
+      nextFields[key] = derivedField;
+    }
+  });
+
+  return nextFields;
+}
+
 function cleanNumericToken(value, type) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -3864,11 +4127,16 @@ export function parseIllustrationDocument({ pages, fileName }) {
     "policy_number",
     "issue_date",
     "owner_name",
+    "joint_insured_name",
     "insured_name",
+    "payor_name",
     "trustee_name",
+    "trust_name",
     "ownership_structure",
     "primary_beneficiary_name",
+    "primary_beneficiary_share",
     "contingent_beneficiary_name",
+    "contingent_beneficiary_share",
     "beneficiary_status",
     "death_benefit",
     "initial_face_amount",
@@ -3933,7 +4201,12 @@ export function parseIllustrationDocument({ pages, fileName }) {
     documentType: classification.document_type,
     carrierName: carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : "",
   });
-  const mergedFields = mergeCarrierSpecificFields(finalFields, carrierSpecific.extractedFields || {});
+  const mergedFields = applyDerivedPartyFieldFallbacks(
+    mergeCarrierSpecificFields(finalFields, carrierSpecific.extractedFields || {}),
+    pages,
+    carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : "",
+    classification.document_type
+  );
   const fieldsWithProvenance = attachProvenanceToFields(mergedFields, fileName);
   const illustrationProjection = carrierSpecific.illustrationProjection?.row_count
     ? carrierSpecific.illustrationProjection
@@ -3989,11 +4262,16 @@ export function parseIllustrationDocument({ pages, fileName }) {
       policyNumber: "policy_number",
       issueDate: "issue_date",
       ownerName: "owner_name",
+      jointInsuredName: "joint_insured_name",
       insuredName: "insured_name",
+      payorName: "payor_name",
       trusteeName: "trustee_name",
+      trustName: "trust_name",
       ownershipStructure: "ownership_structure",
       primaryBeneficiaryName: "primary_beneficiary_name",
+      primaryBeneficiaryShare: "primary_beneficiary_share",
       contingentBeneficiaryName: "contingent_beneficiary_name",
+      contingentBeneficiaryShare: "contingent_beneficiary_share",
       beneficiaryStatus: "beneficiary_status",
       deathBenefit: "death_benefit",
       initialFaceAmount: "initial_face_amount",
@@ -4026,11 +4304,16 @@ export function parseStatementDocument({ pages, fileName }) {
     "statement_date",
     "policy_year",
     "owner_name",
+    "joint_insured_name",
     "insured_name",
+    "payor_name",
     "trustee_name",
+    "trust_name",
     "ownership_structure",
     "primary_beneficiary_name",
+    "primary_beneficiary_share",
     "contingent_beneficiary_name",
+    "contingent_beneficiary_share",
     "beneficiary_status",
     "insured_age",
     "death_benefit",
@@ -4108,7 +4391,12 @@ export function parseStatementDocument({ pages, fileName }) {
     documentType: classification.document_type,
     carrierName: carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : "",
   });
-  const mergedFields = mergeCarrierSpecificFields(finalFields, carrierSpecific.extractedFields || {});
+  const mergedFields = applyDerivedPartyFieldFallbacks(
+    mergeCarrierSpecificFields(finalFields, carrierSpecific.extractedFields || {}),
+    pages,
+    carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : "",
+    classification.document_type
+  );
   const fieldsWithProvenance = attachProvenanceToFields(mergedFields, fileName);
   const parserDebug = buildParserDebug({
     pages,
@@ -4160,11 +4448,16 @@ export function parseStatementDocument({ pages, fileName }) {
       policyNumber: "policy_number",
       statementDate: "statement_date",
       ownerName: "owner_name",
+      jointInsuredName: "joint_insured_name",
       insuredName: "insured_name",
+      payorName: "payor_name",
       trusteeName: "trustee_name",
+      trustName: "trust_name",
       ownershipStructure: "ownership_structure",
       primaryBeneficiaryName: "primary_beneficiary_name",
+      primaryBeneficiaryShare: "primary_beneficiary_share",
       contingentBeneficiaryName: "contingent_beneficiary_name",
+      contingentBeneficiaryShare: "contingent_beneficiary_share",
       beneficiaryStatus: "beneficiary_status",
       deathBenefit: "death_benefit",
       minimumDeathBenefit: "minimum_death_benefit",

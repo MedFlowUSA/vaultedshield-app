@@ -25,6 +25,7 @@ import {
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
+import { buildHomeownersCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const HOMEOWNERS_DOCUMENT_CLASSES = listHomeownersDocumentClasses();
 const HOMEOWNERS_CARRIERS = listHomeownersCarriers();
@@ -169,6 +170,25 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   const linkageStatus = getHomeownersLinkageStatus({
     linkedProperties: propertyLinks,
   });
+  const homeownersCommandCenter = useMemo(
+    () =>
+      buildHomeownersCommandCenter({
+        homeownersPolicy,
+        homeownersDocuments: bundle?.homeownersDocuments || [],
+        homeownersSnapshots: bundle?.homeownersSnapshots || [],
+        homeownersAnalytics: bundle?.homeownersAnalytics || [],
+        propertyLinks,
+        assetBundle,
+      }),
+    [
+      assetBundle,
+      bundle?.homeownersAnalytics,
+      bundle?.homeownersDocuments,
+      bundle?.homeownersSnapshots,
+      homeownersPolicy,
+      propertyLinks,
+    ]
+  );
 
   const summaryItems = useMemo(() => {
     if (!homeownersPolicy) return [];
@@ -345,6 +365,65 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={homeownersPolicyType?.display_name || homeownersPolicy.homeowners_policy_type_key} tone="info" />
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Homeowners Command"
+              subtitle="The strongest protection blockers, why they matter, and what to do next on this policy."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <AIInsightPanel
+                  title="Coverage Command"
+                  summary={homeownersCommandCenter.headline}
+                  bullets={[
+                    `${homeownersCommandCenter.metrics.critical || 0} critical blocker${homeownersCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                    `${homeownersCommandCenter.metrics.warning || 0} warning item${homeownersCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                    `${homeownersCommandCenter.metrics.documents || 0} homeowners document${homeownersCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                    `${homeownersCommandCenter.metrics.snapshots || 0} snapshot${homeownersCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${homeownersCommandCenter.metrics.analytics || 0} analytic${homeownersCommandCenter.metrics.analytics === 1 ? "" : "s"} are visible.`,
+                  ]}
+                />
+                {homeownersCommandCenter.blockers.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {homeownersCommandCenter.blockers.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "14px",
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                            <StatusBadge label={item.staleLabel} tone="info" />
+                          </div>
+                        </div>
+                        <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                          <strong>Blocker:</strong> {item.blocker}
+                        </div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                          <strong>Consequence:</strong> {item.consequence}
+                        </div>
+                        <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                          Next action: {item.nextAction}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No active homeowners blockers"
+                    description="This homeowners policy currently looks relatively steady across evidence, linkage, renewal, and continuity."
+                  />
+                )}
+              </div>
+            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>

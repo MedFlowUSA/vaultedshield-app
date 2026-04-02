@@ -6,6 +6,7 @@ import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeHomeownersModule } from "../lib/domain/platformIntelligence/moduleReadiness";
+import { buildHomeownersHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
   getHomeownersPolicyType,
   listHomeownersCarriers,
@@ -94,6 +95,14 @@ export default function HomeownersHubPage({ onNavigate }) {
   }, [policies]);
 
   const homeownersRead = useMemo(() => summarizeHomeownersModule(policies), [policies]);
+  const homeownersHubCommand = useMemo(
+    () =>
+      buildHomeownersHubCommand({
+        policies,
+        homeownersRead,
+      }),
+    [homeownersRead, policies]
+  );
 
   async function handleCreatePolicy(event) {
     event.preventDefault();
@@ -141,6 +150,61 @@ export default function HomeownersHubPage({ onNavigate }) {
       />
 
       <SummaryPanel items={summaryItems} />
+
+      <div style={{ marginTop: "24px" }}>
+        <SectionCard
+          title="Homeowners Command Center"
+          subtitle="The strongest property-protection blockers, why they matter, and what to do next."
+        >
+          <div style={{ display: "grid", gap: "16px" }}>
+            <AIInsightPanel
+              title="Property Protection Command"
+              summary={homeownersHubCommand.headline}
+              bullets={[
+                `${homeownersHubCommand.metrics.total || 0} homeowners polic${homeownersHubCommand.metrics.total === 1 ? "y is" : "ies are"} tracked.`,
+                `${homeownersHubCommand.metrics.active || 0} polic${homeownersHubCommand.metrics.active === 1 ? "y is" : "ies are"} active.`,
+                `${homeownersHubCommand.metrics.attention || 0} command item${homeownersHubCommand.metrics.attention === 1 ? "" : "s"} are surfaced as next moves.`,
+              ]}
+            />
+            {homeownersHubCommand.rows.length > 0 ? (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {homeownersHubCommand.rows.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "16px",
+                      borderRadius: "14px",
+                      background: item.urgencyMeta.background,
+                      border: item.urgencyMeta.border,
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                      <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                    </div>
+                    <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                      <strong>Blocker:</strong> {item.blocker}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      <strong>Consequence:</strong> {item.consequence}
+                    </div>
+                    <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                      Next action: {item.nextAction}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No active homeowners blockers"
+                description="The homeowners module currently reads as relatively steady at the household level."
+              />
+            )}
+          </div>
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Property Protection Readiness">

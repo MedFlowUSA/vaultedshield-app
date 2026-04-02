@@ -446,15 +446,33 @@ export const PARSER_DICTIONARY = {
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "policy schedule"],
     },
+    joint_insured_name: {
+      type: "text",
+      aliases: ["joint insured", "co-insured", "additional insured", "second insured"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy summary", "policy schedule", "insured information"],
+    },
     insured_name: {
       type: "text",
       aliases: ["insured", "insured name", "primary insured"],
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "policy schedule"],
     },
+    payor_name: {
+      type: "text",
+      aliases: ["payor", "payer", "premium payor", "premium payer", "payor name"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy summary", "ownership", "premium information"],
+    },
     trustee_name: {
       type: "text",
       aliases: ["trustee", "current trustee", "trustee name", "acting trustee"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["policy detail", "policy summary", "ownership", "trust information"],
+    },
+    trust_name: {
+      type: "text",
+      aliases: ["trust name", "owner trust", "trust", "trust owner name"],
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "ownership", "trust information"],
     },
@@ -470,11 +488,23 @@ export const PARSER_DICTIONARY = {
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "beneficiary information", "beneficiary designation"],
     },
+    primary_beneficiary_share: {
+      type: "percent",
+      aliases: ["primary beneficiary share", "primary beneficiary %", "primary share", "beneficiary percent", "primary allocation", "share of proceeds"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["beneficiary information", "beneficiary designation", "beneficiary schedule", "beneficiary allocation"],
+    },
     contingent_beneficiary_name: {
       type: "text",
       aliases: ["contingent beneficiary", "contingent beneficiary name", "secondary beneficiary", "alternate beneficiary"],
       documentTypes: ["illustration", "annual_statement"],
       preferredMarkers: ["policy detail", "policy summary", "beneficiary information", "beneficiary designation"],
+    },
+    contingent_beneficiary_share: {
+      type: "percent",
+      aliases: ["contingent beneficiary share", "contingent beneficiary %", "secondary beneficiary %", "alternate beneficiary %", "contingent allocation", "share of proceeds"],
+      documentTypes: ["illustration", "annual_statement"],
+      preferredMarkers: ["beneficiary information", "beneficiary designation", "beneficiary schedule", "beneficiary allocation"],
     },
     beneficiary_status: {
       type: "text",

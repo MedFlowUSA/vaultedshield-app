@@ -20,6 +20,11 @@ import {
   buildHouseholdOnboardingChecklist,
   getHouseholdBlankState,
 } from "../lib/onboarding/isHouseholdBlank";
+import { buildHouseholdOnboardingMission } from "../lib/onboarding/onboardingMission";
+import {
+  answerDemoHouseholdQuestion,
+  buildDemoHouseholdPreview,
+} from "../lib/onboarding/demoHouseholdPreview";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 import {
   buildModuleReadinessOverview,
@@ -29,6 +34,15 @@ import {
   summarizePortalModule,
   summarizeVaultModule,
 } from "../lib/domain/platformIntelligence/moduleReadiness";
+import {
+  buildDashboardCommandCenter,
+  buildEmergencyAccessCommand,
+  buildHousingContinuityCommand,
+} from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  buildHouseholdPriorityEngine,
+  buildHouseholdScorecard,
+} from "../lib/domain/platformIntelligence/householdOperatingSystem";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
@@ -572,6 +586,8 @@ export default function DashboardPage({ onNavigate }) {
   const [showHouseholdReport, setShowHouseholdReport] = useState(false);
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantHistory, setAssistantHistory] = useState([]);
+  const [demoAssistantQuestion, setDemoAssistantQuestion] = useState("");
+  const [demoAssistantHistory, setDemoAssistantHistory] = useState([]);
   const savedPolicyCount = savedPolicies.length;
   const loadError = errors.householdData || "";
   const policyCompareError = errors.insurancePortfolio || "";
@@ -701,6 +717,38 @@ export default function DashboardPage({ onNavigate }) {
     () => buildHouseholdReviewDigest(queueItems || [], reviewDigestSnapshot),
     [queueItems, reviewDigestSnapshot]
   );
+  const commandCenter = useMemo(
+    () =>
+      buildDashboardCommandCenter({
+        queueItems,
+        topActions,
+        reviewDigest,
+        householdMap,
+      }),
+    [householdMap, queueItems, reviewDigest, topActions]
+  );
+  const housingCommandCenter = useMemo(
+    () => buildHousingContinuityCommand(intelligenceBundle || {}),
+    [intelligenceBundle]
+  );
+  const emergencyAccessCommand = useMemo(
+    () => buildEmergencyAccessCommand(intelligenceBundle || {}),
+    [intelligenceBundle]
+  );
+  const householdScorecard = useMemo(
+    () => buildHouseholdScorecard(householdMap),
+    [householdMap]
+  );
+  const householdPriorityEngine = useMemo(
+    () =>
+      buildHouseholdPriorityEngine({
+        householdMap,
+        commandCenter,
+        housingCommand: housingCommandCenter,
+        emergencyAccessCommand,
+      }),
+    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+  );
   const householdReviewReport = useMemo(
     () =>
       showHouseholdReport
@@ -725,7 +773,7 @@ export default function DashboardPage({ onNavigate }) {
             ? weakPolicyRows.length > 0 || missingStatementCount > 0
               ? "Policies are visible, but some still need stronger statement or charge support."
               : "Comparison, continuity, and protection reads are available."
-            : "No saved policy set is visible yet.",
+            : "No saved insurance policy set is visible yet.",
         watchpoint:
           savedPolicyCount > 0
             ? weakPolicyRows.length > 0
@@ -835,6 +883,8 @@ export default function DashboardPage({ onNavigate }) {
       queueItems,
       intelligence,
       bundle: intelligenceBundle || {},
+      scorecard: householdScorecard,
+      priorityEngine: householdPriorityEngine,
     });
 
     setAssistantHistory((current) => [
@@ -849,6 +899,7 @@ export default function DashboardPage({ onNavigate }) {
   }
 
   const starterPrompts = [
+    "Am I doing okay financially?",
     "What should I review first?",
     "What changed since last review?",
     "Why is household readiness rated this way?",
@@ -857,6 +908,7 @@ export default function DashboardPage({ onNavigate }) {
     "What parts of my household are under-supported?",
     "How strong is the insurance side right now?",
     "Are portal and access records in good shape?",
+    "What is hurting my household score most?",
   ];
 
   const blankHousehold = useMemo(
@@ -871,6 +923,16 @@ export default function DashboardPage({ onNavigate }) {
   const onboardingProgressPercent = onboardingChecklist.length > 0
     ? Math.round((onboardingCompletedCount / onboardingChecklist.length) * 100)
     : 0;
+  const onboardingMission = useMemo(
+    () =>
+      buildHouseholdOnboardingMission({
+        blankState: blankHousehold,
+        checklist: onboardingChecklist,
+        progressPercent: onboardingProgressPercent,
+      }),
+    [blankHousehold, onboardingChecklist, onboardingProgressPercent]
+  );
+  const demoHouseholdPreview = useMemo(() => buildDemoHouseholdPreview(), []);
   const onboardingQuickActions = [
     {
       id: "add_property",
@@ -908,6 +970,21 @@ export default function DashboardPage({ onNavigate }) {
     blankHousehold.isBlank &&
     !householdState.error &&
     !loadError;
+
+  function handleAskDemoHousehold(questionText) {
+    const trimmed = String(questionText || "").trim();
+    if (!trimmed) return;
+    const response = answerDemoHouseholdQuestion(trimmed, demoHouseholdPreview);
+    setDemoAssistantHistory((current) => [
+      ...current,
+      {
+        id: `${Date.now()}-${current.length}`,
+        question: trimmed,
+        response,
+      },
+    ]);
+    setDemoAssistantQuestion("");
+  }
 
   if (showGuidedOnboarding) {
     return (
@@ -953,6 +1030,23 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             <div style={{ display: "grid", gap: "10px", maxWidth: "860px" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  width: "fit-content",
+                  padding: "6px 10px",
+                  borderRadius: "999px",
+                  background: "rgba(56,189,248,0.14)",
+                  color: "#bae6fd",
+                  fontSize: "11px",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                {onboardingMission.stageLabel}
+              </div>
               <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
                 Guided Setup
               </div>
@@ -964,6 +1058,63 @@ export default function DashboardPage({ onNavigate }) {
               </div>
               <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
                 VaultedShield becomes more useful as you add household members, properties, insurance, retirement accounts, documents, and key contacts. This setup progress tracks what you&apos;ve actually added without creating fake intelligence.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "16px",
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "linear-gradient(135deg, rgba(56,189,248,0.12) 0%, rgba(96,165,250,0.06) 100%)",
+                border: "1px solid rgba(125,211,252,0.18)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: "12px", color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                    {onboardingMission.urgency}
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: isMobile ? "24px" : "28px", fontWeight: 800, color: "#f8fafc" }}>
+                    {onboardingMission.headline}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "8px 12px",
+                    borderRadius: "999px",
+                    background: "rgba(15,23,42,0.42)",
+                    color: "#e2e8f0",
+                    fontWeight: 700,
+                    fontSize: "13px",
+                  }}
+                >
+                  {onboardingMission.completionSummary}
+                </div>
+              </div>
+              <div style={{ color: "#dbeafe", lineHeight: "1.8", fontSize: "15px" }}>
+                {onboardingMission.explanation}
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                {onboardingMission.nextStep ? (
+                  <button
+                    type="button"
+                    onClick={() => onboardingMission.nextStep.route && onNavigate?.(onboardingMission.nextStep.route)}
+                    style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+                  >
+                    Open {onboardingMission.nextStep.label}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/guidance")}
+                  style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+                >
+                  Open Guided Setup Help
+                </button>
               </div>
             </div>
 
@@ -1056,14 +1207,16 @@ export default function DashboardPage({ onNavigate }) {
                 gap: "12px",
               }}
             >
-              <div style={{ fontSize: "20px", fontWeight: 700 }}>No household analysis yet</div>
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>What unlocks after your next step</div>
               <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
-                Add your first asset or document to begin analysis. VaultedShield will start generating insights once real household data is added.
+                The platform starts producing much more useful signals once a few real household records are connected.
               </div>
               <ul style={{ margin: "4px 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#94a3b8" }}>
-                <li style={{ lineHeight: "1.7" }}>No readiness score is shown until meaningful household records exist.</li>
-                <li style={{ lineHeight: "1.7" }}>No review queue or alerts are created for a truly blank household.</li>
-                <li style={{ lineHeight: "1.7" }}>Your setup progress is separate from household continuity or emergency readiness.</li>
+                {onboardingMission.preview.map((item) => (
+                  <li key={item} style={{ lineHeight: "1.7" }}>
+                    {item}
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -1090,6 +1243,246 @@ export default function DashboardPage({ onNavigate }) {
                 </button>
               </div>
             </div>
+          </section>
+
+          <section
+            style={{
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              display: "grid",
+              gap: "18px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px", maxWidth: "820px" }}>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+                Demo Preview
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 800 }}>What a built household looks like</div>
+              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                This is a sample preview so you can see the kind of score, priorities, and module guidance VaultedShield starts generating once real household records are connected.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 0.95fr) minmax(0, 1.05fr)",
+                gap: "18px",
+              }}
+            >
+              <div
+                style={{
+                  padding: "18px 20px",
+                  borderRadius: "18px",
+                  background: "rgba(15,23,42,0.32)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  display: "grid",
+                  gap: "16px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                    {demoHouseholdPreview.householdLabel}
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "32px", fontWeight: 800, color: "#f8fafc" }}>
+                    {demoHouseholdPreview.score.overall}
+                  </div>
+                  <div style={{ marginTop: "6px", color: "#cbd5e1", fontWeight: 700 }}>
+                    {demoHouseholdPreview.score.status}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {demoHouseholdPreview.score.dimensions.map((item) => (
+                    <div key={item.label} style={{ display: "grid", gap: "6px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "14px" }}>
+                        <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{item.label}</span>
+                        <span style={{ color: "#93c5fd", fontWeight: 800 }}>{item.value}</span>
+                      </div>
+                      <div style={{ height: "8px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: `${item.value}%`,
+                            height: "100%",
+                            borderRadius: "999px",
+                            background: "linear-gradient(90deg, #38bdf8 0%, #60a5fa 100%)",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: "18px" }}>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "rgba(15,23,42,0.32)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    display: "grid",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ fontSize: "16px", fontWeight: 800 }}>Top priorities</div>
+                  <div style={{ display: "grid", gap: "10px" }}>
+                    {demoHouseholdPreview.priorities.map((item) => (
+                      <div
+                        key={item.label}
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "16px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.04)",
+                          display: "grid",
+                          gap: "6px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 700, color: "#f8fafc" }}>{item.label}</div>
+                          <span style={{ color: "#93c5fd", fontSize: "12px", fontWeight: 800 }}>{item.impact}</span>
+                        </div>
+                        <div style={{ color: "#cbd5e1", lineHeight: "1.7" }}>{item.reason}</div>
+                        <div style={{ color: "#94a3b8", fontSize: "14px", lineHeight: "1.7" }}>
+                          <span style={{ color: "#e2e8f0", fontWeight: 700 }}>Next:</span> {item.nextAction}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "rgba(15,23,42,0.32)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ fontSize: "16px", fontWeight: 800 }}>Module command read</div>
+                  {demoHouseholdPreview.modules.map((item) => (
+                    <div key={item.label} style={{ display: "grid", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                        <span style={{ color: "#f8fafc", fontWeight: 700 }}>{item.label}</span>
+                        <span style={{ color: "#93c5fd", fontWeight: 800, fontSize: "12px" }}>{item.status}</span>
+                      </div>
+                      <div style={{ color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{item.note}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            style={{
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              display: "grid",
+              gap: "16px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+                Demo Advisor
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 800 }}>Ask what this system will help with</div>
+              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                These answers use the sample household preview above, so you can see how VaultedShield starts thinking once a few real records exist.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {[
+                "What would improve my score fastest?",
+                "What should I do first?",
+                "Why do documents matter here?",
+                "How does emergency access fit in?",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => handleAskDemoHousehold(prompt)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(125,211,252,0.22)",
+                    background: "rgba(56,189,248,0.1)",
+                    color: "#dbeafe",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: "12px",
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr auto", gap: "10px" }}>
+              <input
+                value={demoAssistantQuestion}
+                onChange={(event) => setDemoAssistantQuestion(event.target.value)}
+                placeholder="Ask how VaultedShield would guide a built household"
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(15,23,42,0.42)",
+                  color: "#f8fafc",
+                  minWidth: 0,
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAskDemoHousehold(demoAssistantQuestion);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => handleAskDemoHousehold(demoAssistantQuestion)}
+                style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+              >
+                Ask Demo Advisor
+              </button>
+            </div>
+
+            {demoAssistantHistory.length > 0 ? (
+              <div
+                style={{
+                  padding: "18px 20px",
+                  borderRadius: "18px",
+                  background: "rgba(15,23,42,0.32)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Demo answer
+                </div>
+                <div style={{ fontWeight: 800, color: "#f8fafc" }}>
+                  {demoAssistantHistory[demoAssistantHistory.length - 1].question}
+                </div>
+                <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                  {demoAssistantHistory[demoAssistantHistory.length - 1].response.answer_text}
+                </div>
+                <ul style={{ margin: "4px 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#94a3b8" }}>
+                  {demoAssistantHistory[demoAssistantHistory.length - 1].response.evidence_points.map((item) => (
+                    <li key={item} style={{ lineHeight: "1.7" }}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
 
           {import.meta.env.DEV ? (
@@ -1203,6 +1596,141 @@ export default function DashboardPage({ onNavigate }) {
             <button type="button" onClick={handlePrintHouseholdReport} style={buttonStyle(true)}>
               Print Household Report
             </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: "28px",
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "1.1fr 0.9fr",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                padding: "18px 20px",
+                borderRadius: "20px",
+                background: "rgba(15,23,42,0.42)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Household Score</div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#cbd5e1",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  {displayValue(householdScorecard.overallStatus)}
+                </div>
+              </div>
+              <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdScorecard.summary}</div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                {householdScorecard.dimensions.map((dimension) => (
+                  <div
+                    key={dimension.key}
+                    style={{
+                      padding: "14px",
+                      borderRadius: "16px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                      {dimension.label}
+                    </div>
+                    <div style={{ fontSize: "24px", fontWeight: 800, letterSpacing: "-0.03em" }}>
+                      {displayValue(dimension.score)}
+                    </div>
+                    <div style={{ fontSize: "12px", color: dimension.tone === "ready" ? "#86efac" : dimension.tone === "warning" ? "#fdba74" : "#fca5a5", fontWeight: 700 }}>
+                      {dimension.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "18px 20px",
+                borderRadius: "20px",
+                background: "rgba(15,23,42,0.42)",
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>What Needs Attention First</div>
+                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
+                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
+              </div>
+              <div style={{ display: "grid", gap: "10px" }}>
+                {householdPriorityEngine.priorities.map((item, index) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                      display: "grid",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                      <div style={{ display: "grid", gap: "4px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                          Priority {index + 1} · {item.source}
+                        </div>
+                        <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.title}</div>
+                      </div>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: item.urgencyMeta.accent,
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                        }}
+                      >
+                        {item.urgencyMeta.label}
+                      </span>
+                    </div>
+                    <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                    <div style={{ color: "#93c5fd", fontSize: "13px", lineHeight: "1.6" }}>{item.impactLabel}</div>
+                    <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
+                    <div>
+                      <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                        {item.nextAction}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1432,9 +1960,30 @@ export default function DashboardPage({ onNavigate }) {
           }}
         >
           <div>
-            <div style={{ fontSize: "20px", fontWeight: 700 }}>Ask About This Household</div>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Ask VaultedShield</div>
             <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-              Ask for a household-level read on priorities, continuity, changes since review, document strength, insurance support, or access readiness.
+              Ask for a plain-English read on household score, priorities, continuity, changes since review, insurance strength, or access readiness.
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "16px 18px",
+              borderRadius: "18px",
+              background: "rgba(15,23,42,0.42)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+              Advisor Brief
+            </div>
+            <div style={{ color: "#f8fafc", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
+            <div style={{ color: "#cbd5e1", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
+            <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
+              Household score: {householdScorecard.overallScore ?? "--"} ({householdScorecard.overallStatus}). Weakest dimension:{" "}
+              {householdScorecard.weakestDimension?.label || "—"}.
             </div>
           </div>
 
@@ -1464,7 +2013,7 @@ export default function DashboardPage({ onNavigate }) {
             <input
               value={assistantQuestion}
               onChange={(event) => setAssistantQuestion(event.target.value)}
-              placeholder="Ask a household review question"
+              placeholder="Ask VaultedShield what matters most"
               style={{
                 padding: "12px 14px",
                 borderRadius: "12px",
@@ -1790,6 +2339,292 @@ export default function DashboardPage({ onNavigate }) {
                 border: "1px solid rgba(255,255,255,0.05)",
               }}
             >
+              <div style={{ display: "grid", gap: "12px", marginBottom: "18px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Command Center</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {[
+                      { label: "Active", value: commandCenter.metrics.active },
+                      { label: "Critical", value: commandCenter.metrics.critical },
+                      { label: "Warning", value: commandCenter.metrics.warning },
+                      { label: "Stalled", value: commandCenter.metrics.stalled },
+                    ].map((metric) => (
+                      <span
+                        key={`command-${metric.label}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        {metric.label}: {metric.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{commandCenter.headline}</div>
+                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{commandCenter.summary}</div>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {commandCenter.blockers.map((item) => (
+                    <div
+                      key={`command-center-${item.id}`}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.05)",
+                        display: "grid",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.title}</div>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "5px 9px",
+                              borderRadius: "999px",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color: item.urgencyMeta.accent,
+                              background: item.urgencyMeta.background,
+                              border: item.urgencyMeta.border,
+                            }}
+                          >
+                            {item.urgencyMeta.badge}
+                          </span>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "5px 9px",
+                              borderRadius: "999px",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color: "#cbd5e1",
+                              background: "rgba(148,163,184,0.12)",
+                            }}
+                          >
+                            {item.staleLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                      <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
+                      <div>
+                        <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                          {item.nextAction}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: "18px",
+                  paddingTop: "18px",
+                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                  display: "grid",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Housing Continuity</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {housingCommandCenter.metrics.map((metric) => (
+                      <span
+                        key={`housing-${metric.label}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        {metric.label}: {metric.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{housingCommandCenter.headline}</div>
+                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{housingCommandCenter.summary}</div>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {housingCommandCenter.blockers.length > 0 ? (
+                    housingCommandCenter.blockers.map((item) => (
+                      <div
+                        key={`housing-center-${item.id}`}
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "16px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                          display: "grid",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 9px",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                color: item.urgencyMeta.accent,
+                                background: item.urgencyMeta.background,
+                                border: item.urgencyMeta.border,
+                              }}
+                            >
+                              {item.urgencyMeta.badge}
+                            </span>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 9px",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                color: "#cbd5e1",
+                                background: "rgba(148,163,184,0.12)",
+                              }}
+                            >
+                              {item.staleLabel}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                        <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
+                        <div>
+                          <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                            {item.nextAction}
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
+                      No major housing blockers are standing out across the current property, mortgage, and homeowners stack.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginTop: "18px",
+                  paddingTop: "18px",
+                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                  display: "grid",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Emergency Cash / Access</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {emergencyAccessCommand.metrics.map((metric) => (
+                      <span
+                        key={`emergency-${metric.label}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        {metric.label}: {metric.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{emergencyAccessCommand.headline}</div>
+                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{emergencyAccessCommand.summary}</div>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {emergencyAccessCommand.blockers.length > 0 ? (
+                    emergencyAccessCommand.blockers.map((item) => (
+                      <div
+                        key={`emergency-center-${item.id}`}
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "16px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                          display: "grid",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.title}</div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 9px",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                color: item.urgencyMeta.accent,
+                                background: item.urgencyMeta.background,
+                                border: item.urgencyMeta.border,
+                              }}
+                            >
+                              {item.urgencyMeta.badge}
+                            </span>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 9px",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                color: "#cbd5e1",
+                                background: "rgba(148,163,184,0.12)",
+                              }}
+                            >
+                              {item.staleLabel}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                        <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
+                        <div>
+                          <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                            {item.nextAction}
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
+                      No major emergency cash or access blockers are standing out across liquidity and portal continuity.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1905,6 +2740,7 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                   </div>
                 ))}
+              </div>
               </div>
               {reviewedQueueItems.length > 0 ? (
                 <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
