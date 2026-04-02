@@ -19,6 +19,13 @@ function formatDaysStalled(days) {
   return `Stalled ${days} days`;
 }
 
+function metricListFromObject(metrics = {}) {
+  return Object.entries(metrics).map(([label, value]) => ({
+    label,
+    value,
+  }));
+}
+
 export function getCommandUrgencyMeta(level = "warning") {
   if (level === "critical") {
     return {
@@ -1562,12 +1569,12 @@ export function buildHousingContinuityCommand(bundle = {}) {
         ? "Property, mortgage, and homeowners signals are now being read together as one operating cluster."
         : "The housing cluster currently looks comparatively stable across property, debt, protection, and continuity.",
     blockers: sorted.slice(0, 5),
-    metrics: {
-      properties: Number(propertyStack.propertyCount || propertyStackAnalytics.length || 0),
-      critical: sorted.filter((item) => item.urgency === "critical").length,
-      warning: sorted.filter((item) => item.urgency === "warning").length,
-      strongStacks: strongStacks.length || (strongContinuityEverywhere ? propertyStackAnalytics.length : 0),
-    },
+    metrics: metricListFromObject({
+      Properties: Number(propertyStack.propertyCount || propertyStackAnalytics.length || 0),
+      Critical: sorted.filter((item) => item.urgency === "critical").length,
+      Warning: sorted.filter((item) => item.urgency === "warning").length,
+      StrongStacks: strongStacks.length || (strongContinuityEverywhere ? propertyStackAnalytics.length : 0),
+    }),
   };
 }
 

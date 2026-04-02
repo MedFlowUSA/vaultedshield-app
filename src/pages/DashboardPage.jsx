@@ -242,6 +242,14 @@ function getReadableModuleStatus(scoreLikeValue, goodThreshold = 3, moderateThre
   return "Weak";
 }
 
+function normalizeMetricList(metrics) {
+  if (Array.isArray(metrics)) return metrics;
+  if (metrics && typeof metrics === "object") {
+    return Object.entries(metrics).map(([label, value]) => ({ label, value }));
+  }
+  return [];
+}
+
 function buildAiIntroModuleCards({
   savedPolicyCount = 0,
   assetCounts = {},
@@ -2307,7 +2315,7 @@ export default function DashboardPage({ onNavigate }) {
                     </button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
-                    {area.metrics.map((metric) => (
+                    {normalizeMetricList(area.metrics).map((metric) => (
                       <div key={`${area.key}-${metric.label}`}>
                         <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
                           {metric.label}
@@ -2440,7 +2448,7 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                   <div style={{ fontSize: "16px", fontWeight: 700 }}>Housing Continuity</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {housingCommandCenter.metrics.map((metric) => (
+                    {normalizeMetricList(housingCommandCenter.metrics).map((metric) => (
                       <span
                         key={`housing-${metric.label}`}
                         style={{
@@ -2538,7 +2546,7 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                   <div style={{ fontSize: "16px", fontWeight: 700 }}>Emergency Cash / Access</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {emergencyAccessCommand.metrics.map((metric) => (
+                    {normalizeMetricList(emergencyAccessCommand.metrics).map((metric) => (
                       <span
                         key={`emergency-${metric.label}`}
                         style={{
