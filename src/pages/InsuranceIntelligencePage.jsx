@@ -1436,7 +1436,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                   <div style={{ fontSize: "12px", color: "#94a3b8" }}>Missing fields: {(policy.missing_fields || []).length || 0}</div>
                   <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.65" }}>{policy.interpretation.bottom_line_summary}</div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px 12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px 12px" }}>
                   {comparisonTableColumns.map((column) => (
                     <div key={`${policy.policy_id || policy.product}-${column.label}`} style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1453,7 +1453,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", color: "#0f172a" }}>
+            <table style={{ width: "100%", minWidth: isMobile ? "920px" : "1020px", borderCollapse: "collapse", textAlign: "left", color: "#0f172a" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(15, 23, 42, 0.10)" }}>
                 <th style={{ padding: "0 0 14px 0", fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Policy</th>

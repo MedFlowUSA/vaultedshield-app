@@ -8,6 +8,7 @@ import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeContactsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { createContact, listContacts } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const CONTACT_TYPES = [
   "family",
@@ -21,6 +22,7 @@ const CONTACT_TYPES = [
 ];
 
 export default function ContactsPage() {
+  const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -87,6 +89,8 @@ export default function ContactsPage() {
   }
 
   const contactRead = summarizeContactsModule(contacts);
+  const topRailLayout = isTablet ? "1fr" : "1.35fr 1fr";
+  const contentRailLayout = isTablet ? "1fr" : "1fr 1.25fr";
 
   return (
     <div>
@@ -104,7 +108,7 @@ export default function ContactsPage() {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topRailLayout, gap: "18px" }}>
         <SectionCard title="Directory Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -132,7 +136,7 @@ export default function ContactsPage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1.25fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: contentRailLayout, gap: "18px" }}>
         <SectionCard title="Add Contact" subtitle="Minimal create flow for the household continuity directory.">
           <form onSubmit={handleCreateContact} style={{ display: "grid", gap: "12px" }}>
             <input

@@ -14,6 +14,7 @@ import {
 } from "../lib/supabase/platformData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { buildAssetCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
 const ACCESS_STATUS = ["active", "limited", "locked", "unknown"];
@@ -31,6 +32,7 @@ function formatDate(value) {
 }
 
 export default function AssetDetailPage({ assetId, onNavigate }) {
+  const { isMobile, isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug } = usePlatformShellData();
   const [bundle, setBundle] = useState({
     asset: null,
@@ -254,6 +256,9 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     updatedAt: formatDate(document.created_at),
   }));
   const commandCenter = useMemo(() => buildAssetCommandCenter(bundle), [bundle]);
+  const dualRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
+  const splitLayout = isTablet ? "1fr" : "1fr 1fr";
+  const portalLayout = isTablet ? "1fr" : "1.1fr 1fr";
 
   return (
     <div>
@@ -390,7 +395,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </div>
       </SectionCard>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualRailLayout, gap: "18px" }}>
         <SectionCard title="Asset Summary">
           {bundle.asset ? (
             <div style={{ display: "grid", gap: "10px", color: "#475569" }}>
@@ -424,7 +429,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualRailLayout, gap: "18px" }}>
         <SectionCard title="Documents">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
@@ -444,13 +449,13 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: splitLayout, gap: "18px" }}>
         <SectionCard title="Alerts">
           {bundle.alerts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {bundle.alerts.map((alert) => (
                 <div key={alert.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#fff7ed", border: "1px solid #fdba74" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 700, color: "#9a3412" }}>{alert.title}</div>
                     <StatusBadge label={alert.severity} tone={alert.severity === "urgent" ? "alert" : alert.severity === "warning" ? "warning" : "info"} />
                   </div>
@@ -480,7 +485,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: portalLayout, gap: "18px" }}>
         <SectionCard title="Linked Portals">
           {bundle.portalLinks.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
@@ -492,7 +497,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
                       <div style={{ fontWeight: 700, color: "#0f172a" }}>{portal.portal_name || "Linked portal"}</div>
                       <StatusBadge label={portal.access_status || "unknown"} tone={portal.access_status === "active" ? "good" : portal.access_status === "limited" ? "warning" : "info"} />
                     </div>
-                    <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
+                    <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7", overflowWrap: "anywhere" }}>
                       <div><strong>Institution:</strong> {portal.institution_name || "Limited visibility"}</div>
                       <div><strong>URL:</strong> {portal.portal_url || "Limited visibility"}</div>
                       <div><strong>Username Hint:</strong> {portal.username_hint || "Limited visibility"}</div>

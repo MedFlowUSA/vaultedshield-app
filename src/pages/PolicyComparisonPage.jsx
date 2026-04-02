@@ -21,6 +21,7 @@ import {
   buildProtectionComparisonNarrative,
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
   const numeric = Number(value);
@@ -446,7 +447,7 @@ function renderReportSection(section) {
       ) : null}
 
       {section.kind === "side_by_side" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
           {(section.panels || []).map((panel) => (
             <div
               key={panel.title}
@@ -480,6 +481,7 @@ function renderReportSection(section) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
+  const { isTablet } = useResponsiveLayout();
   if (!report) return null;
 
   return (
@@ -576,6 +578,7 @@ function PolicyCard({ title, policy, onOpen }) {
 }
 
 export default function PolicyComparisonPage({ policyId, comparePolicyId = "", onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const [statementBundles, setStatementBundles] = useState({});
   const [activeEvidenceId, setActiveEvidenceId] = useState("");
   const [showComparisonReport, setShowComparisonReport] = useState(false);
@@ -949,7 +952,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   {protectionComparison.summary}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                   {[basePolicy, comparisonPolicy].map((policy, index) => (
                     <div
                       key={policy.policy_id || index}
@@ -990,7 +993,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                   {protectionComparison.items.map((item) => (
                     <div
                       key={item.label}
@@ -1022,7 +1025,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                           }
                         />
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
                         <div>
                           <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                             Current Policy
@@ -1048,7 +1051,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
               title="Policy Parties"
               subtitle="This layer compares owner, trust, payor, and beneficiary visibility so side-by-side review is not limited to values and charges."
             >
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                 {[basePolicy, comparisonPolicy].map((policy, index) => {
                   const adequacyReview = policy?.adequacyReview || {};
                   const beneficiaryNames =
@@ -1154,7 +1157,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   {comparisonAnalysis.summary}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
                   <div
                     style={{
                       padding: "16px",
@@ -1202,7 +1205,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                   {comparisonAnalysis.analysis_items.map((item) => (
                     <button
                       key={item.id}
@@ -1267,7 +1270,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   {trendDeltaAnalysis.summary}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                   {trendDeltaAnalysis.items.map((item) => (
                     <button
                       key={item.id}
@@ -1333,7 +1336,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                 >
                   {activeEvidence.summary || "Evidence details are shown below."}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: "16px" }}>
                   {activeEvidence.rows.map((row) => (
                     <div
                       key={row.label}
@@ -1359,7 +1362,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             </SectionCard>
           ) : null}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: "18px" }}>
             <PolicyCard
               title="Current Policy"
               policy={basePolicy}

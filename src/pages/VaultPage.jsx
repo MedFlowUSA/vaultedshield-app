@@ -8,8 +8,10 @@ import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeVaultModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { listHouseholdDocuments } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 export default function VaultPage() {
+  const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [documents, setDocuments] = useState([]);
   const [loadError, setLoadError] = useState("");
@@ -54,6 +56,8 @@ export default function VaultPage() {
       : "Unknown",
   }));
   const vaultRead = useMemo(() => summarizeVaultModule(documents), [documents]);
+  const topRailLayout = isTablet ? "1fr" : "1.35fr 1fr";
+  const contentRailLayout = isTablet ? "1fr" : "1.4fr 1fr";
 
   return (
     <div>
@@ -72,7 +76,7 @@ export default function VaultPage() {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topRailLayout, gap: "18px" }}>
         <SectionCard title="Vault Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -97,7 +101,7 @@ export default function VaultPage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: contentRailLayout, gap: "18px" }}>
         <SectionCard title="Household Document Register" subtitle="Generic platform documents linked to household assets.">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />

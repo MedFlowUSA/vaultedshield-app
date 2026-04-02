@@ -8,6 +8,7 @@ import { summarizePortalModule } from "../lib/domain/platformIntelligence/module
 import { buildPortalHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { getPortalHubBundle } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -36,6 +37,7 @@ function getPortalTone(accessStatus) {
 }
 
 export default function PortalHubPage({ onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [bundle, setBundle] = useState({
     household: null,
@@ -111,6 +113,8 @@ export default function PortalHubPage({ onNavigate }) {
       }),
     [bundle, portalRead]
   );
+  const topSplitLayout = isTablet ? "1fr" : "1.3fr 1fr";
+  const metricsLayout = isTablet ? "1fr" : "1fr 1fr";
 
   return (
     <div>
@@ -170,7 +174,7 @@ export default function PortalHubPage({ onNavigate }) {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topSplitLayout, gap: "18px" }}>
         <SectionCard title="Portal Continuity Summary">
           <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
             <div>
@@ -310,7 +314,7 @@ export default function PortalHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "18px", display: "grid", gridTemplateColumns: metricsLayout, gap: "18px" }}>
         <SectionCard title="Continuity Watchlist">
           {portalRead.notes.length > 0 ? (
             <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>

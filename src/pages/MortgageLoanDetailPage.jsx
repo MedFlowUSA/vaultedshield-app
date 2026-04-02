@@ -27,6 +27,7 @@ import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataConte
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildMortgageCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MORTGAGE_DOCUMENT_CLASSES = listMortgageDocumentClasses();
 const MORTGAGE_LENDERS = listMortgageLenders();
@@ -53,6 +54,7 @@ function getStatusTone(status) {
 }
 
 export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
@@ -214,6 +216,10 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       { label: "Review Status", value: mortgageReview.readinessStatus || "unknown", helper: mortgageReview.metrics?.documentSupport || "limited support" },
     ];
   }, [bundle, mortgageLoan, mortgageLoanType, mortgageReview]);
+  const detailRailLayout = isTablet ? "1fr" : "1.2fr 1fr";
+  const propertyRailLayout = isTablet ? "1fr" : "1.1fr 1fr";
+  const documentRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
+  const dualLayout = isTablet ? "1fr" : "1fr 1fr";
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -441,7 +447,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: detailRailLayout, gap: "18px" }}>
             <SectionCard title="Mortgage Loan Summary">
               <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Loan Name:</strong> {mortgageLoan.loan_name || linkedAsset?.asset_name || "Limited visibility"}</div>
@@ -473,7 +479,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: propertyRailLayout, gap: "18px" }}>
             <SectionCard
               title="Mortgage Review Signals"
               subtitle="A practical first-pass debt review based on loan timing, document support, payoff readiness, and property linkage."
@@ -657,7 +663,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
             <SectionCard title="Mortgage Documents">
               {bundle.mortgageDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -744,7 +750,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
             <SectionCard title="Mortgage Snapshots">
               {bundle.mortgageSnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -782,7 +788,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
             <SectionCard title="Linked Portals">
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>

@@ -12,6 +12,7 @@ import StatusBadge from "../components/shared/StatusBadge";
 import { buildHouseholdIntelligence } from "../lib/domain/platformIntelligence";
 import { createAssetTask, getEmergencyModeBundle, updateHousehold } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatDate(value) {
   if (!value) return "Unknown";
@@ -25,6 +26,7 @@ function formatDate(value) {
 }
 
 export default function EmergencyModePage() {
+  const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [bundle, setBundle] = useState({
     household: null,
@@ -178,6 +180,10 @@ export default function EmergencyModePage() {
     status: document.processing_status || "uploaded",
     updatedAt: formatDate(document.created_at),
   }));
+  const summaryRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
+  const dualLayout = isTablet ? "1fr" : "1fr 1fr";
+  const documentRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
+  const notesRailLayout = isTablet ? "1fr" : "1.1fr 1fr";
 
   return (
     <div>
@@ -202,7 +208,7 @@ export default function EmergencyModePage() {
         ]}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
         <SectionCard title="Emergency Readiness Summary">
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
             <StatusBadge
@@ -241,7 +247,7 @@ export default function EmergencyModePage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
         <SectionCard title="Document Completeness">
           <AIInsightPanel
             title={intelligence.document_completeness.score_label}
@@ -263,7 +269,7 @@ export default function EmergencyModePage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
         <SectionCard title="Key Contacts">
           {prioritizedContacts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
@@ -316,7 +322,7 @@ export default function EmergencyModePage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
         <SectionCard title="Key Documents">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
@@ -353,7 +359,7 @@ export default function EmergencyModePage() {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: notesRailLayout, gap: "18px" }}>
         <SectionCard title="Emergency Notes">
           <div style={{ display: "grid", gap: "12px" }}>
             <textarea

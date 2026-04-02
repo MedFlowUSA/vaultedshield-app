@@ -1,4 +1,5 @@
 import { useState } from "react";
+import AccessValuePreview from "../components/auth/AccessValuePreview";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 
@@ -48,51 +49,58 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
   }
 
   return (
-    <div style={{ maxWidth: "640px", margin: "64px auto", padding: "0 20px", display: "grid", gap: "22px" }}>
+    <div style={{ maxWidth: "1180px", margin: "64px auto", padding: "0 20px", display: "grid", gap: "22px" }}>
       <PageHeader
         eyebrow="VaultedShield Access"
         title="Login"
-        description="Securely enter the platform and continue working inside your existing VaultedShield access tier."
+        description="Securely enter the platform and continue working inside your existing VaultedShield access tier. Even before login, you can preview how VaultedShield prioritizes the next best move."
       />
-      <SectionCard
-        title="Account Login"
-        subtitle="Enter the platform and continue where you left off without needing a storage reset."
-      >
-        <div style={{ display: "grid", gap: "12px" }}>
-          <input
-            value={form.email}
-            onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-            placeholder="Email address"
-            style={inputStyle()}
-          />
-          <input
-            value={form.password}
-            onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-            placeholder="Password"
-            type="password"
-            style={inputStyle()}
-          />
-          <button
-            onClick={handleEnterPlatform}
-            disabled={entering}
-            style={{
-              ...actionStyle(true),
-              cursor: entering ? "progress" : "pointer",
-              opacity: entering ? 0.8 : 1,
-            }}
-          >
-            {entering ? "Opening Workspace..." : "Enter Platform"}
-          </button>
-          <button onClick={() => onNavigate("/signup")} style={actionStyle(false)}>
-            Create Account
-          </button>
-          <button onClick={handleFreeAccess} style={actionStyle(false)}>
-            Continue With Free Access
-          </button>
-          {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
-          {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
-        </div>
-      </SectionCard>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
+        <SectionCard
+          title="Account Login"
+          subtitle="Enter the platform and continue where you left off without needing a storage reset."
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <input
+              value={form.email}
+              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              placeholder="Email address"
+              style={inputStyle()}
+            />
+            <input
+              value={form.password}
+              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+              placeholder="Password"
+              type="password"
+              style={inputStyle()}
+            />
+            <button
+              onClick={handleEnterPlatform}
+              disabled={entering}
+              style={{
+                ...actionStyle(true),
+                cursor: entering ? "progress" : "pointer",
+                opacity: entering ? 0.8 : 1,
+              }}
+            >
+              {entering ? "Opening Workspace..." : "Enter Platform"}
+            </button>
+            <button onClick={() => onNavigate("/signup")} style={actionStyle(false)}>
+              Create Account
+            </button>
+            <button onClick={handleFreeAccess} style={actionStyle(false)}>
+              Continue With Free Access
+            </button>
+            {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
+            {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
+          </div>
+        </SectionCard>
+
+        <AccessValuePreview
+          title="See the value before you sign in"
+          subtitle="VaultedShield works best when it tells you what matters first. This preview shows the score, priorities, and advisor flow new households grow into."
+        />
+      </div>
     </div>
   );
 }

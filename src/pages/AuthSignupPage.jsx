@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AccessValuePreview from "../components/auth/AccessValuePreview";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import { ACCESS_TIERS } from "../lib/auth/accessPortal";
@@ -57,10 +58,11 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
       <PageHeader
         eyebrow="Household Setup"
         title="Create Platform Access"
-        description="Start free, then move into deeper review and continuity tiers as household usage grows."
+        description="Start free, then move into deeper review and continuity tiers as household usage grows. Before you create the account, you can preview the score, priorities, and advisor guidance the platform is built around."
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "0.92fr 1.08fr", gap: "18px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
+        <div style={{ display: "grid", gap: "18px" }}>
         <SectionCard title="Create Account" subtitle="This access layer is local for now, but it is structured to evolve into full authentication and billing later.">
           <div style={{ display: "grid", gap: "12px" }}>
             <input
@@ -141,6 +143,12 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             })}
           </div>
         </SectionCard>
+        </div>
+
+        <AccessValuePreview
+          title="What your household workspace grows into"
+          subtitle="This sample shows how VaultedShield turns documents, access records, and asset intelligence into priorities you can act on."
+        />
       </div>
     </div>
   );

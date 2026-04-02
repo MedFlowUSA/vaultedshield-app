@@ -7,6 +7,7 @@ import NotesPanel from "../components/shared/NotesPanel";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 export default function ModulePageShell({
   eyebrow,
@@ -19,6 +20,10 @@ export default function ModulePageShell({
   insight,
   documents,
 }) {
+  const { isTablet } = useResponsiveLayout();
+  const topRailLayout = isTablet ? "1fr" : "2fr 1fr";
+  const documentRailLayout = isTablet ? "1fr" : "1.4fr 1fr";
+
   return (
     <div>
       <PageHeader
@@ -37,11 +42,13 @@ export default function ModulePageShell({
             <input
               placeholder="Search records, notes, institutions"
               style={{
-                minWidth: "260px",
+                minWidth: 0,
+                width: "100%",
                 borderRadius: "10px",
                 border: "1px solid #cbd5e1",
                 padding: "10px 12px",
                 background: "#ffffff",
+                flex: "1 1 260px",
               }}
             />
             <button
@@ -66,7 +73,7 @@ export default function ModulePageShell({
         style={{
           marginTop: "24px",
           display: "grid",
-          gridTemplateColumns: "2fr 1fr",
+          gridTemplateColumns: topRailLayout,
           gap: "18px",
           alignItems: "start",
         }}
@@ -100,7 +107,7 @@ export default function ModulePageShell({
         style={{
           marginTop: "24px",
           display: "grid",
-          gridTemplateColumns: "1.4fr 1fr",
+          gridTemplateColumns: documentRailLayout,
           gap: "18px",
           alignItems: "start",
         }}

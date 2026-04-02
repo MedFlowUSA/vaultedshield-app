@@ -36,6 +36,7 @@ import {
   getVaultedPolicyStatements,
   rehydrateVaultedPolicyBundle,
 } from "../lib/supabase/vaultedPolicies";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function actionButtonStyle(primary = false) {
   return {
@@ -264,7 +265,7 @@ function renderReportFactsGrid(items = [], columns = 3) {
   );
 }
 
-function renderReportSection(section) {
+function renderReportSection(section, isTablet = false) {
   if (!section) return null;
 
   return (
@@ -364,7 +365,7 @@ function renderReportSection(section) {
       ) : null}
 
       {section.kind === "side_by_side" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
           {(section.panels || []).map((panel) => (
             <div
               key={panel.title}
@@ -399,6 +400,7 @@ function renderReportSection(section) {
 
 function ReportView({ title, subtitle, report, onPrint }) {
   if (!report) return null;
+  const { isTablet } = useResponsiveLayout();
 
   return (
     <SectionCard title={title} subtitle={subtitle} accent="#bfdbfe">
@@ -427,13 +429,14 @@ function ReportView({ title, subtitle, report, onPrint }) {
             Print Report
           </button>
         </div>
-        {report.sections.map((section) => renderReportSection(section))}
+        {report.sections.map((section) => renderReportSection(section, isTablet))}
       </div>
     </SectionCard>
   );
 }
 
 export default function PolicyDetailPage({ policyId, onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
   const [bundle, setBundle] = useState({
@@ -1143,7 +1146,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           ) : null}
 
           {!showUnifiedIulReader ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px", alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
             <SectionCard
               title="Cost of Insurance"
               subtitle="Current COI visibility and source confidence from vaulted policy intelligence."
@@ -1260,7 +1263,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           ) : null}
 
           {!showUnifiedIulReader ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px", alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
             <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
             <SectionCard title="Charge Breakdown" subtitle="Visible charge components from the current vaulted analytics bundle.">
               <div style={{ display: "grid", gap: "10px" }}>
@@ -2225,11 +2228,11 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   border: "1px solid rgba(148, 163, 184, 0.18)",
                 }}
               >
-                <div style={{ minWidth: "1060px", display: "grid", gap: "10px" }}>
+                <div style={{ minWidth: isTablet ? "920px" : "1060px", display: "grid", gap: "10px" }}>
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "140px 150px 170px 140px 130px 140px 140px",
+                      gridTemplateColumns: isTablet ? "130px 140px 160px 130px 120px 130px 130px" : "140px 150px 170px 140px 130px 140px 140px",
                       gap: "12px",
                       padding: "0 8px 10px 8px",
                       borderBottom: "1px solid #dbe3f1",
@@ -2257,7 +2260,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                       key={`${statement.id || statement.statement_date || index}`}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "140px 150px 170px 140px 130px 140px 140px",
+                        gridTemplateColumns: isTablet ? "130px 140px 160px 130px 120px 130px 130px" : "140px 150px 170px 140px 130px 140px 140px",
                         gap: "12px",
                         padding: "14px 8px",
                         borderTop: index === 0 ? "none" : "1px solid rgba(226, 232, 240, 0.8)",
