@@ -179,6 +179,193 @@ function formatScoreValue(value) {
   return `${Math.round(Number(value))}/100`;
 }
 
+function clampScore(value) {
+  if (!Number.isFinite(Number(value))) return 50;
+  return Math.max(0, Math.min(100, Math.round(Number(value))));
+}
+
+function scoreBand(score) {
+  if (score >= 80) return "strong";
+  if (score >= 62) return "watch";
+  return "risk";
+}
+
+function toneFromBand(band) {
+  if (band === "strong") return "confirmed";
+  if (band === "watch") return "review";
+  return "missing";
+}
+
+function buildIulAtAGlance(results, evidenceAudit, pressureSummary) {
+  const iulV2 = results.iulV2 || {};
+  const illustration = iulV2.illustrationComparison || {};
+  const funding = iulV2.fundingAnalysis || {};
+  const charges = iulV2.chargeAnalysis || {};
+  const strategy = iulV2.strategyAnalysis || {};
+  const risk = iulV2.riskAnalysis || {};
+  const optimization = results.optimization || null;
+
+  const currentPositionScore =
+    illustration.status === "ahead"
+      ? 88
+      : illustration.status === "on_track"
+        ? 76
+        : illustration.status === "behind"
+          ? 38
+          : 54;
+
+  const fundingScore =
+    funding.status === "sufficient"
+      ? 84
+      : funding.status === "aggressive"
+        ? 64
+        : funding.status === "underfunded"
+          ? 34
+          : 52;
+
+  const chargeScore =
+    charges.chargeDragLevel === "low"
+      ? 86
+      : charges.chargeDragLevel === "moderate"
+        ? 58
+        : charges.chargeDragLevel === "high"
+          ? 30
+          : 50;
+
+  const strategyScore =
+    !strategy.strategiesVisible
+      ? 42
+      : strategy.concentrationLevel === "diversified"
+        ? 82
+        : strategy.concentrationLevel === "moderate"
+          ? 66
+          : strategy.concentrationLevel === "concentrated"
+            ? 48
+            : 56;
+
+  const confidenceScore = clampScore(evidenceAudit?.evidenceScore ?? 50);
+  const riskScore =
+    risk.overallRisk === "low"
+      ? 84
+      : risk.overallRisk === "moderate"
+        ? 56
+        : risk.overallRisk === "high"
+          ? 28
+          : optimization?.overallStatus === "healthy"
+            ? 78
+            : optimization?.overallStatus === "watch"
+              ? 58
+              : optimization?.overallStatus === "at_risk"
+                ? 32
+                : 50;
+
+  const overallScore = clampScore(
+    currentPositionScore * 0.24 +
+      fundingScore * 0.2 +
+      chargeScore * 0.18 +
+      strategyScore * 0.12 +
+      riskScore * 0.12 +
+      confidenceScore * 0.14
+  );
+  const overallBand = scoreBand(overallScore);
+
+  const headline =
+    overallBand === "strong"
+      ? "This IUL looks reasonably healthy from the visible packet, with no major red flags dominating the current read."
+      : overallBand === "watch"
+        ? "This IUL looks workable but mixed, which means at least one major lever needs a closer annual review."
+        : "This IUL needs a closer review before you trust the current path, because pressure or missing support is too meaningful to ignore.";
+
+  const meaning =
+    overallBand === "strong"
+      ? "In plain English: the policy appears to be holding up fairly well based on the statement and illustration support currently visible."
+      : overallBand === "watch"
+        ? "In plain English: the policy is not failing from the visible file, but it is not clean enough to leave on autopilot."
+        : "In plain English: the visible file suggests enough pressure or enough uncertainty that this policy should not be treated as comfortably on track.";
+
+  const cards = [
+    {
+      title: "Current Position",
+      score: currentPositionScore,
+      band: scoreBand(currentPositionScore),
+      summary:
+        illustration.status === "ahead"
+          ? "Actual values are ahead of the visible illustration checkpoint."
+          : illustration.status === "on_track"
+            ? "Actual values are broadly tracking the visible illustration checkpoint."
+            : illustration.status === "behind"
+              ? "Actual values appear to be lagging the visible illustration checkpoint."
+              : "Current position is still only partly supported by the visible packet.",
+    },
+    {
+      title: "Funding Pace",
+      score: fundingScore,
+      band: scoreBand(fundingScore),
+      summary:
+        funding.status === "sufficient"
+          ? "Visible premium pace looks close to the target shown in the file."
+          : funding.status === "aggressive"
+            ? "Visible premium pace is stronger than the baseline target and should be confirmed as intentional."
+            : funding.status === "underfunded"
+              ? "Visible premium pace looks light versus the target shown in the file."
+              : "Funding pace is still hard to call because target or premium support is incomplete.",
+    },
+    {
+      title: "Cost Pressure",
+      score: chargeScore,
+      band: scoreBand(chargeScore),
+      summary:
+        charges.chargeDragLevel === "low"
+          ? "Visible charges look manageable relative to visible funding."
+          : charges.chargeDragLevel === "moderate"
+            ? "Visible charges are meaningful enough that they deserve regular review."
+            : charges.chargeDragLevel === "high"
+              ? "Visible charges look heavy enough to materially slow policy progress."
+              : "Charge pressure is still partly hidden because the current packet is incomplete.",
+    },
+    {
+      title: "Strategy Mix",
+      score: strategyScore,
+      band: scoreBand(strategyScore),
+      summary:
+        !strategy.strategiesVisible
+          ? "The current packet does not clearly show how money is allocated."
+          : strategy.concentrationLevel === "diversified"
+            ? "The visible strategy mix looks reasonably spread out."
+            : strategy.concentrationLevel === "moderate"
+              ? "The visible strategy mix is usable but not especially balanced."
+              : strategy.concentrationLevel === "concentrated"
+                ? "The visible strategy mix looks concentrated in one main sleeve."
+                : "Strategy visibility exists, but the current mix still needs review.",
+    },
+    {
+      title: "Confidence",
+      score: confidenceScore,
+      band: scoreBand(confidenceScore),
+      summary:
+        confidenceScore >= 80
+          ? "The visible packet is strong enough to support a dependable read."
+          : confidenceScore >= 62
+            ? "The visible packet is usable, but some parts of the read still depend on partial support."
+            : "The visible packet is still too thin for a fully confident judgment.",
+    },
+  ];
+
+  const nextAction =
+    pressureSummary?.checklist?.[0] ||
+    results.nextSteps?.[0] ||
+    "Keep adding clean annual statements and allocation pages so the policy read becomes more dependable.";
+
+  return {
+    overallScore,
+    overallBand,
+    headline,
+    meaning,
+    nextAction,
+    cards,
+  };
+}
+
 function buildEvidenceAudit(results, sections, warnings) {
   const statementResults = Array.isArray(results.statementResults) ? results.statementResults : [];
   const comparison = results.normalizedAnalytics?.comparison_summary || {};
@@ -1115,6 +1302,8 @@ export function buildIulReaderModel(results) {
     ]),
   ].filter((table) => table.rows.length > 0);
 
+  const plainEnglishScorecard = buildIulAtAGlance(results, evidenceAudit, pressureSummary);
+
   return {
     sections,
     confirmed,
@@ -1125,6 +1314,7 @@ export function buildIulReaderModel(results) {
     latestStatement,
     benchmarks: benchmarkView.benchmarks,
     laymanSummary: benchmarkView.laymanSummary,
+    plainEnglishScorecard,
     projectionSummary: benchmarkView.projectionSummary,
     projectionView,
     classification,

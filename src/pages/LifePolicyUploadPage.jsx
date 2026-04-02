@@ -71,6 +71,22 @@ function getQualityBadgeStyle(level) {
   return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
 }
 
+function getPacketQualityTone(level) {
+  if (level === "good") {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #86efac" };
+  }
+  if (level === "poor") {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+  return { background: "#ffedd5", color: "#9a3412", border: "1px solid #fdba74" };
+}
+
+function formatPacketQualityLabel(level) {
+  if (level === "good") return "Reader Ready";
+  if (level === "poor") return "Needs Better Evidence";
+  return "Usable With Review";
+}
+
 function buildSessionFileName(label, pageCount) {
   return `${label.toLowerCase().replace(/\s+/g, "-")}-scan-${pageCount}-page${pageCount === 1 ? "" : "s"}.jpg`;
 }
@@ -89,6 +105,39 @@ function flattenDiagnostics(items, key) {
   return ensureArray(items).reduce((all, item) => {
     return [...all, ...ensureArray(item?.[key])];
   }, []);
+}
+
+function buildReaderReadinessSummary(documentDiagnostics) {
+  const illustration = documentDiagnostics?.illustration || null;
+  const statements = Array.isArray(documentDiagnostics?.statements) ? documentDiagnostics.statements : [];
+  const allQualities = [illustration?.packetQuality, ...statements.map((item) => item?.packetQuality)].filter(Boolean);
+
+  if (!illustration && statements.length === 0) return null;
+
+  const poorCount = allQualities.filter((item) => item.level === "poor").length;
+  const fairCount = allQualities.filter((item) => item.level === "fair").length;
+  const warningCount = allQualities.reduce((sum, item) => sum + Number(item.warningCount || 0), 0);
+  const status = poorCount > 0 ? "poor" : fairCount > 0 ? "fair" : "good";
+
+  return {
+    status,
+    headline:
+      status === "good"
+        ? "The current upload packet looks reader-ready."
+        : status === "fair"
+          ? "The insurance reader can continue, but some pages still need review."
+          : "The insurance reader needs stronger upload evidence before trusting the read.",
+    bullets: [
+      illustration?.packetQuality ? `Initial policy file: ${formatPacketQualityLabel(illustration.packetQuality.level)}.` : null,
+      statements.length > 0
+        ? poorCount > 0
+          ? `${poorCount} packet${poorCount === 1 ? "" : "s"} still need stronger evidence.`
+          : `${statements.length} statement packet${statements.length === 1 ? "" : "s"} prepared for review.`
+        : "No annual statement packet is attached yet.",
+      warningCount > 0 ? `${warningCount} extraction warning${warningCount === 1 ? "" : "s"} are still active.` : null,
+    ].filter(Boolean),
+    nextSteps: [...new Set(allQualities.flatMap((item) => item.nextSteps || []).filter(Boolean))].slice(0, 4),
+  };
 }
 
 function safeDevLog(label, payload) {
@@ -697,6 +746,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     ],
     [illustrationFile, illustrationScan.hasPages, illustrationScan.pages.length, statementFiles, statementScan.hasPages, statementScan.pages.length]
   );
+  const readerReadiness = useMemo(
+    () => buildReaderReadinessSummary(documentDiagnostics),
+    [documentDiagnostics]
+  );
 
   function handleIllustrationFileChange(event) {
     const file = event.target.files?.[0] || null;
@@ -1027,6 +1080,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           extractionWarnings: statement.extractionMeta?.extraction_warnings || [],
           pageCount: statement.extractionMeta?.page_count || statement.pages?.length || 0,
           pageOcr: statement.extractionMeta?.page_ocr || [],
+          packetQuality,
         });
       }
 
@@ -1038,6 +1092,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           extractionWarnings: illustrationExtraction.extractionWarnings,
           pageCount: illustrationExtraction.pageCount || illustrationExtraction.pages.length,
           pageOcr: illustrationExtraction.pageOcr || [],
+          packetQuality: baselinePacketQuality,
         },
         statements: statementDiagnostics,
       });
@@ -1389,6 +1444,40 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         {error ? <div style={{ marginTop: "14px", color: "#991b1b" }}>{error}</div> : null}
         {qualityNotice ? <div style={{ marginTop: "14px", color: "#92400e" }}>{qualityNotice}</div> : null}
 
+        {readerReadiness ? (
+          <div
+            style={{
+              marginTop: "16px",
+              padding: "14px 16px",
+              borderRadius: "14px",
+              border: getPacketQualityTone(readerReadiness.status).border,
+              background: getPacketQualityTone(readerReadiness.status).background,
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontWeight: 800, color: getPacketQualityTone(readerReadiness.status).color }}>
+              Insurance Reader Readiness
+            </div>
+            <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{readerReadiness.headline}</div>
+            {readerReadiness.bullets.length > 0 ? (
+              <div style={{ display: "grid", gap: "6px", color: "#475569" }}>
+                {readerReadiness.bullets.map((item) => (
+                  <div key={item}>{item}</div>
+                ))}
+              </div>
+            ) : null}
+            {readerReadiness.nextSteps.length > 0 ? (
+              <div style={{ display: "grid", gap: "6px", color: "#475569" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a" }}>Best next uploads</div>
+                {readerReadiness.nextSteps.map((item) => (
+                  <div key={item}>{item}</div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {!hasBaselineInput ? (
           <div style={{ marginTop: "14px", color: "#475569" }}>
             Upload the initial illustration or policy document before analysis can run.
@@ -1420,6 +1509,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
                   ? ` | OCR ${getConfidenceLabel(documentDiagnostics.illustration.ocrConfidence)}`
                   : ""}
                 {documentDiagnostics.illustration.pageCount ? ` | ${documentDiagnostics.illustration.pageCount} page${documentDiagnostics.illustration.pageCount === 1 ? "" : "s"}` : ""}
+                {documentDiagnostics.illustration.packetQuality ? ` | ${formatPacketQualityLabel(documentDiagnostics.illustration.packetQuality.level)}` : ""}
               </div>
             ) : null}
             {documentDiagnostics.statements.map((item) => (
@@ -1427,6 +1517,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
                 <strong>Statement:</strong> {item.fileName} | {item.sourceType}
                 {item.sourceType === "image" ? ` | OCR ${getConfidenceLabel(item.ocrConfidence)}` : ""}
                 {item.pageCount ? ` | ${item.pageCount} page${item.pageCount === 1 ? "" : "s"}` : ""}
+                {item.packetQuality ? ` | ${formatPacketQualityLabel(item.packetQuality.level)}` : ""}
               </div>
             ))}
             {flattenDiagnostics(

@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 function ReaderStatusBadge({ status, children }) {
   const tone =
     status === "confirmed"
@@ -101,6 +103,29 @@ function renderReaderTable(table) {
 }
 
 export function IulReaderPanel({ reader, results }) {
+  const trustSectionRef = useRef(null);
+  const policyReadSectionRef = useRef(null);
+  const prioritiesSectionRef = useRef(null);
+  const unifiedLeversSectionRef = useRef(null);
+  const performanceSectionRef = useRef(null);
+
+  function scrollToReaderSection(target) {
+    const lookup = {
+      confidence: trustSectionRef,
+      current_position: policyReadSectionRef,
+      funding_pace: unifiedLeversSectionRef,
+      cost_pressure: unifiedLeversSectionRef,
+      strategy_mix: unifiedLeversSectionRef,
+      next_action: prioritiesSectionRef,
+      benchmarks: performanceSectionRef,
+    };
+
+    const ref = lookup[target];
+    if (ref?.current?.scrollIntoView) {
+      ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   return (
     <div
       style={{
@@ -142,9 +167,134 @@ export function IulReaderPanel({ reader, results }) {
       </div>
 
       <div style={{ marginTop: "20px", display: "grid", gap: "18px", alignItems: "start" }}>
+        {reader.plainEnglishScorecard ? (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(147, 197, 253, 0.28)",
+              borderRadius: "18px",
+              padding: "20px",
+              display: "grid",
+              gap: "16px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0, maxWidth: "760px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  IUL At A Glance
+                </div>
+                <h3 style={{ margin: "8px 0 0 0" }}>One plain-English window for the parts that matter most</h3>
+                <p style={{ margin: "10px 0 0 0", color: "#475569", lineHeight: "1.7" }}>
+                  {reader.plainEnglishScorecard.headline}
+                </p>
+                <p style={{ margin: "10px 0 0 0", color: "#475569", lineHeight: "1.7" }}>
+                  {reader.plainEnglishScorecard.meaning}
+                </p>
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
+                  Tap a score to jump to the deeper section behind it.
+                </div>
+              </div>
+              <div
+                style={{
+                  minWidth: "150px",
+                  padding: "16px 18px",
+                  borderRadius: "16px",
+                  background: "#ffffff",
+                  border: "1px solid #dbeafe",
+                  display: "grid",
+                  gap: "6px",
+                  justifyItems: "start",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Overall Score
+                </div>
+                <div style={{ fontSize: "34px", fontWeight: 800, color: "#0f172a" }}>
+                  {reader.plainEnglishScorecard.overallScore}/100
+                </div>
+                <ReaderStatusBadge status={reader.plainEnglishScorecard.overallBand === "strong" ? "confirmed" : reader.plainEnglishScorecard.overallBand === "watch" ? "review" : "missing"}>
+                  {reader.plainEnglishScorecard.overallBand === "strong" ? "Strong" : reader.plainEnglishScorecard.overallBand === "watch" ? "Needs Review" : "At Risk"}
+                </ReaderStatusBadge>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+              {reader.plainEnglishScorecard.cards.map((card) => {
+                const tone = FocusTone(card.band);
+                return (
+                  <div
+                    key={card.title}
+                    type="button"
+                    onClick={() => scrollToReaderSection(
+                      card.title === "Current Position"
+                        ? "current_position"
+                        : card.title === "Funding Pace"
+                          ? "funding_pace"
+                          : card.title === "Cost Pressure"
+                            ? "cost_pressure"
+                            : card.title === "Strategy Mix"
+                              ? "strategy_mix"
+                              : "confidence"
+                    )}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: tone.background,
+                      color: tone.color,
+                      border: `1px solid ${tone.border}`,
+                      display: "grid",
+                      gap: "8px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "baseline" }}>
+                      <div style={{ fontSize: "12px", opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {card.title}
+                      </div>
+                      <div style={{ fontSize: "20px", fontWeight: 800 }}>
+                        {card.score}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "13px", lineHeight: "1.7" }}>{card.summary}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => scrollToReaderSection("next_action")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  scrollToReaderSection("next_action");
+                }
+              }}
+              style={{
+                padding: "14px 16px",
+                borderRadius: "16px",
+                background: "#ffffff",
+                border: "1px solid #dbeafe",
+                color: "#0f172a",
+                display: "grid",
+                gap: "8px",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                Best Next Move
+              </div>
+              <div style={{ lineHeight: "1.7", fontWeight: 600 }}>{reader.plainEnglishScorecard.nextAction}</div>
+            </div>
+          </div>
+        ) : null}
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "16px", alignItems: "start" }}>
           {reader.evidenceAudit ? (
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+            <div ref={trustSectionRef} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0, scrollMarginTop: "96px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Trust Read</div>
@@ -194,7 +344,7 @@ export function IulReaderPanel({ reader, results }) {
             </div>
           ) : null}
 
-          <div style={{ background: "#f8fbff", border: "1px solid #dbe7ff", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+          <div ref={policyReadSectionRef} style={{ background: "#f8fbff", border: "1px solid #dbe7ff", borderRadius: "16px", padding: "18px", minWidth: 0, scrollMarginTop: "96px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Policy Read</div>
@@ -235,7 +385,7 @@ export function IulReaderPanel({ reader, results }) {
           </div>
         </div>
 
-        <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
+        <div ref={prioritiesSectionRef} style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "16px", padding: "18px", minWidth: 0, scrollMarginTop: "96px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>What Matters Now</div>
@@ -288,7 +438,7 @@ export function IulReaderPanel({ reader, results }) {
 
         <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
           {reader.unifiedCards?.length > 0 ? (
-            <div style={{ marginBottom: "18px", display: "grid", gap: "14px" }}>
+            <div ref={unifiedLeversSectionRef} style={{ marginBottom: "18px", display: "grid", gap: "14px", scrollMarginTop: "96px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Unified IUL Read</div>
@@ -330,7 +480,7 @@ export function IulReaderPanel({ reader, results }) {
             </div>
           ) : null}
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+          <div ref={performanceSectionRef} style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline", scrollMarginTop: "96px" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Policy Performance</div>
               <h3 style={{ margin: "8px 0 0 0" }}>Benchmarks And Projection Support</h3>

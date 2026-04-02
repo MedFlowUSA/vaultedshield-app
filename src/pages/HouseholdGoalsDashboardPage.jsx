@@ -584,6 +584,20 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
               type="button"
+              onClick={() => onNavigate?.("/retirement")}
+              style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Open Retirement Hub
+            </button>
+            <button
+              type="button"
               onClick={() => onNavigate?.("/retirement/upload")}
               style={{
                 padding: "10px 14px",
@@ -902,9 +916,71 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                 <div><strong>Income Gap:</strong> {formatCurrency(retirementReadiness.estimatedIncomeGapMonthly)}/month</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{retirementReadiness.explanation}</div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/retirement")}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Retirement Hub
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/retirement/upload")}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Update Retirement Goal
+                </button>
+              </div>
             </div>
           ) : (
-            <EmptyState title="No retirement goal saved" description="Set a retirement goal to activate a household readiness view." />
+            <div style={{ display: "grid", gap: "14px" }}>
+              <EmptyState title="No retirement goal saved" description="Set a retirement goal to activate a household readiness view." />
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/retirement")}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Retirement Hub
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.("/retirement/upload")}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Set Retirement Goal
+                </button>
+              </div>
+            </div>
           )}
         </SectionCard>
 

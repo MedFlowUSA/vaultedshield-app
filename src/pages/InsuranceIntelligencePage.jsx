@@ -73,6 +73,17 @@ function getGapTone(hasGap, confidence = 0) {
   return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
 }
 
+function getPortfolioPriorityTone(label = "") {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("critical") || normalized.includes("at risk")) {
+    return { background: "rgba(254, 226, 226, 0.88)", border: "1px solid rgba(248, 113, 113, 0.28)", color: "#991b1b" };
+  }
+  if (normalized.includes("moderate") || normalized.includes("review")) {
+    return { background: "rgba(254, 243, 199, 0.88)", border: "1px solid rgba(245, 158, 11, 0.24)", color: "#92400e" };
+  }
+  return { background: "rgba(239, 246, 255, 0.92)", border: "1px solid rgba(147, 197, 253, 0.26)", color: "#1d4ed8" };
+}
+
 function buildChargeSummaryPreview(row) {
   return {
     total_coi: row.total_coi ?? null,
@@ -559,6 +570,36 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       metrics: {},
     };
   }, [gapPolicies.length, householdInsuranceSummary, rankedPolicies, totalCoverage]);
+  const insurancePortfolioStatus =
+    rankedPolicies.length === 0
+      ? "Awaiting first upload"
+      : atRiskPolicies.length > 0
+        ? "Needs review"
+        : "Stable comparison";
+  const portfolioPriorityTone = getPortfolioPriorityTone(portfolioBrief.priority_label);
+  const insuranceAdvisorBrief = useMemo(() => {
+    if (rankedPolicies.length === 0) {
+      return {
+        eyebrow: "Start Here",
+        headline: "Upload one baseline life policy to unlock plain-English insurance review.",
+        narrative:
+          "The insurance workspace becomes most useful after one policy illustration or statement packet is saved. That first upload activates ranking, continuity review, charge visibility, and household protection reads.",
+        nextAction: "Open Upload Workspace",
+        route: "/insurance/life/upload",
+      };
+    }
+
+    const topPriority = portfolioBrief.priority_policies?.[0] || null;
+    return {
+      eyebrow: "Advisor Brief",
+      headline: portfolioBrief.summary,
+      narrative:
+        topPriority?.reviewReason ||
+        "The portfolio is strongest where statement freshness, charge visibility, and policy identity are complete, and weakest where evidence is still partial.",
+      nextAction: topPriority ? "Review top flagged policy" : "Open Upload Workspace",
+      route: topPriority?.policy_id ? `/insurance/${topPriority.policy_id}` : "/insurance/life/upload",
+    };
+  }, [portfolioBrief, rankedPolicies]);
 
   const rankingHighlights = useMemo(() => {
     return rankedPolicies.map((policy) => {
@@ -729,40 +770,102 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     <div style={{ display: "grid", gap: "24px" }}>
       <section
         style={{
-          display: "flex",
-          alignItems: isMobile ? "stretch" : "flex-start",
-          justifyContent: "space-between",
-          gap: "16px",
-          flexWrap: "wrap",
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.18fr) minmax(320px, 0.82fr)",
+          gap: "18px",
           padding: isMobile ? "22px 16px" : "28px 30px",
           borderRadius: sectionRadius,
           background: "#ffffff",
           border: "1px solid rgba(15, 23, 42, 0.08)",
         }}
       >
-        <div style={{ fontSize: isMobile ? "24px" : "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
-          Insurance Intelligence
+        <div style={{ display: "grid", gap: "14px", minWidth: 0 }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+              {insuranceAdvisorBrief.eyebrow}
+            </div>
+            <div style={{ fontSize: isMobile ? "24px" : "30px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a", lineHeight: "1.15" }}>
+              Insurance Intelligence
+            </div>
+            <div style={{ fontSize: isMobile ? "20px" : "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>
+              {insuranceAdvisorBrief.headline}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "860px" }}>
+              {insuranceAdvisorBrief.narrative}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onNavigate?.(insuranceAdvisorBrief.route)}
+              style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+            >
+              {insuranceAdvisorBrief.nextAction}
+            </button>
+            <button
+              type="button"
+              onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+            >
+              Compare Policies
+            </button>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-          <button
-            type="button"
-            onClick={() => setShowPortfolioReport((current) => !current)}
-            style={{ ...reportButtonStyle(showPortfolioReport, false), width: isMobile ? "100%" : "auto" }}
+        <div
+          style={{
+            display: "grid",
+            gap: "12px",
+            alignContent: "start",
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              padding: "16px 18px",
+              borderRadius: "18px",
+              background: portfolioPriorityTone.background,
+              border: portfolioPriorityTone.border,
+              display: "grid",
+              gap: "8px",
+            }}
           >
-            {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
-          </button>
-          <button type="button" onClick={handlePrintPortfolioReport} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-            Print Report
-          </button>
-          <button
-            onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
-          >
-            Compare Policies
-          </button>
-          <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
-            Open Upload Workspace
-          </button>
+            <div style={{ fontSize: "12px", color: portfolioPriorityTone.color, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+              {portfolioBrief.priority_label || "Portfolio Read"}
+            </div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+              {portfolioBrief.priority_policies?.[0]?.product || `${rankedPolicies.length} visible policies`}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>
+              {portfolioBrief.priority_policies?.[0]?.reviewReason || portfolioBrief.summary}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+            <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Portfolio Status</div>
+              <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{insurancePortfolioStatus}</div>
+            </div>
+            <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Weakest Area</div>
+              <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{portfolioDepth.cards?.[0]?.title || "Evidence quality"}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setShowPortfolioReport((current) => !current)}
+              style={{ ...reportButtonStyle(showPortfolioReport, false), width: isMobile ? "100%" : "auto" }}
+            >
+              {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
+            </button>
+            <button type="button" onClick={handlePrintPortfolioReport} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+              Print Report
+            </button>
+            <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+              Open Upload Workspace
+            </button>
+          </div>
         </div>
       </section>
 

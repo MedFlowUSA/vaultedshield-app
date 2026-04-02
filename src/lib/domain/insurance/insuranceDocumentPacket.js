@@ -70,10 +70,61 @@ export function normalizeExtractionInput(packet) {
 
 export function classifyPacketQuality(packet) {
   const normalized = normalizeExtractionInput(packet);
+  const warnings = ensureArray(normalized.metadata?.extractionWarnings).filter(Boolean);
+  const pageOcr = ensureArray(normalized.metadata?.pageOcr);
+  const ocrConfidence =
+    normalized.metadata?.ocrConfidence === null || normalized.metadata?.ocrConfidence === undefined
+      ? null
+      : Number(normalized.metadata.ocrConfidence);
+  const poorPages = pageOcr.filter((page) => page?.quality_level === "poor").length;
+  const fairPages = pageOcr.filter((page) => page?.quality_level === "fair").length;
+  const lowConfidenceScan = normalized.source === "scan" && ocrConfidence !== null && ocrConfidence < 70;
+  const textLength = normalized.text.trim().length;
+  const needsStrongerEvidence =
+    normalized.pageCount <= 0 ||
+    textLength < LOW_QUALITY_TEXT_THRESHOLD ||
+    poorPages > 0 ||
+    lowConfidenceScan;
+
+  let level = "good";
+  if (needsStrongerEvidence) {
+    level = "poor";
+  } else if (fairPages > 0 || warnings.length > 0 || (normalized.source === "scan" && ocrConfidence !== null && ocrConfidence < 82)) {
+    level = "fair";
+  }
+
+  const reasons = [];
+  if (normalized.pageCount === 0) reasons.push("No readable pages are in the packet yet.");
+  if (textLength < LOW_QUALITY_TEXT_THRESHOLD) reasons.push("Very little readable text was recovered from the packet.");
+  if (poorPages > 0) reasons.push(`${poorPages} scanned page${poorPages === 1 ? "" : "s"} look poor for OCR.`);
+  if (lowConfidenceScan) reasons.push("OCR confidence is low for the current scan packet.");
+  if (warnings.length > 0) reasons.push(`${warnings.length} extraction warning${warnings.length === 1 ? "" : "s"} were detected.`);
+
+  const nextSteps = [];
+  if (normalized.pageCount === 0 || textLength < LOW_QUALITY_TEXT_THRESHOLD) {
+    nextSteps.push("Upload a cleaner PDF or rescan the core policy pages.");
+  }
+  if (poorPages > 0 || fairPages > 0 || lowConfidenceScan) {
+    nextSteps.push("Retake dark, angled, or cropped scan pages in brighter light.");
+  }
+  if (warnings.length > 0) {
+    nextSteps.push("Include the page with the policy summary, face amount, premium, or statement activity table.");
+  }
+  if (nextSteps.length === 0) {
+    nextSteps.push("This packet looks usable for the insurance reader.");
+  }
+
   return {
     isEmpty: normalized.pageCount === 0,
     isLowQuality: normalized.metadata.flags.includes("low_quality_document"),
-    textLength: normalized.text.trim().length,
+    textLength,
+    level,
+    reasons,
+    nextSteps,
+    warningCount: warnings.length,
+    poorPages,
+    fairPages,
+    ocrConfidence,
   };
 }
 

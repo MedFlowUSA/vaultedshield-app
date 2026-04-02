@@ -656,7 +656,7 @@ function normalizeInteger(value) {
 }
 
 function normalizePolicyNumber(value) {
-  const match = value.match(/(\d[\d-]{5,})/);
+  const match = value.match(/([A-Z0-9][A-Z0-9-]{5,})/i);
   if (!match) return null;
   return {
     value: match[1],
@@ -725,7 +725,7 @@ function passesFieldSpecificValidation(normalizedKey, rawValue, normalized) {
   if (!normalized) return false;
 
   if (normalizedKey === "policy_number") {
-    return /^\d[\d-]{5,}$/.test(String(normalized.value));
+    return /^[A-Z0-9][A-Z0-9-]{5,}$/i.test(String(normalized.value));
   }
 
   if (normalizedKey === "product_name" || normalizedKey === "payment_mode" || normalizedKey === "policy_type") {
@@ -1006,11 +1006,16 @@ function uniqueStrings(values) {
 
 function classifyFgPageType(pageText, documentType) {
   const lower = pageText.toLowerCase();
+  const hasMonthlyActivityColumns =
+    /(date\s+premium paid\s+interest rate\s+expense charges\s+cost of insurance)/i.test(pageText) ||
+    /(date\s+premium(?:s)?\s+(?:credited )?interest\s+(?:policy|account) value)/i.test(pageText) ||
+    /(date\s+premium paid\s+monthly deduction\s+cost of insurance)/i.test(pageText);
+  const hasMonthlyActivityTotals =
+    (lower.includes("ending account value") && lower.includes("cost of insurance") && lower.includes("premium paid")) ||
+    (lower.includes("monthly deduction") && lower.includes("premium paid") && lower.includes("account value")) ||
+    (lower.includes("expense charges") && lower.includes("policy value") && lower.includes("interest credited"));
 
-  if (
-    /date\s+premium paid\s+interest rate\s+expense charges\s+cost of insurance/i.test(pageText) ||
-    (lower.includes("ending account value") && lower.includes("cost of insurance") && lower.includes("premium paid"))
-  ) {
+  if (hasMonthlyActivityColumns || hasMonthlyActivityTotals) {
     return "monthly_activity_table";
   }
 
@@ -1562,6 +1567,137 @@ function extractFgStatementDateInfo(pages, fileName, documentType, carrierName) 
 
 function extractFgStatementDateField(pages, fileName, documentType, carrierName) {
   return extractFgStatementDateInfo(pages, fileName, documentType, carrierName)?.chosenField || null;
+}
+
+function extractGenericLabeledDateField({
+  pages,
+  normalizedKey,
+  documentType,
+  carrierName,
+  allowedPageRoles,
+  patterns,
+  defaultConfidenceScore,
+  evidenceLabel,
+}) {
+  for (let pageIndex = 0; pageIndex < Math.min(pages.length, 5); pageIndex += 1) {
+    const pageText = pages[pageIndex];
+    const pageRole = getPageSourceType(carrierName, documentType, pageText);
+    if (allowedPageRoles?.length && !allowedPageRoles.includes(pageRole)) continue;
+
+    for (const pattern of patterns) {
+      const match = pageText.match(pattern.regex);
+      if (!match) continue;
+
+      return buildDerivedField({
+        normalizedKey,
+        rawLabel: pattern.label,
+        rawValue: match[1],
+        type: "date",
+        pageNumber: pageIndex + 1,
+        method: "generic_label_same_line",
+        carrierHint: carrierName,
+        documentType,
+        confidenceScore: pattern.confidenceScore ?? defaultConfidenceScore,
+        evidence: [evidenceLabel, `page classified as ${pageRole}`],
+        sourcePageType: pageRole,
+        sourcePriority: getSourcePriority(carrierName, normalizedKey, pageRole),
+      });
+    }
+  }
+
+  return null;
+}
+
+function extractGenericIssueDateField(pages, documentType, carrierName) {
+  if (resolveExtractionDocumentType(documentType) !== "illustration") {
+    return null;
+  }
+
+  return extractGenericLabeledDateField({
+    pages,
+    normalizedKey: "issue_date",
+    documentType,
+    carrierName,
+    allowedPageRoles: ["policy_information", "strategy_menu", "unknown"],
+    defaultConfidenceScore: 0.8,
+    evidenceLabel: "matched generic issue-date pattern",
+    patterns: [
+      { regex: /Issue Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Issue Date", confidenceScore: 0.9 },
+      { regex: /Policy Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Policy Date", confidenceScore: 0.88 },
+      { regex: /Contract Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Contract Date", confidenceScore: 0.86 },
+      { regex: /Date of Issue\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Date of Issue", confidenceScore: 0.9 },
+    ],
+  });
+}
+
+function extractGenericStatementDateField(pages, fileName, documentType, carrierName) {
+  if (resolveExtractionDocumentType(documentType) !== "annual_statement") {
+    return inferStatementDateFromFilename(fileName);
+  }
+
+  const labeledField = extractGenericLabeledDateField({
+    pages,
+    normalizedKey: "statement_date",
+    documentType,
+    carrierName,
+    allowedPageRoles: ["statement_summary", "monthly_activity_table", "segment_detail", "unknown"],
+    defaultConfidenceScore: 0.76,
+    evidenceLabel: "matched generic statement-date pattern",
+    patterns: [
+      { regex: /Statement Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Period Ending", confidenceScore: 0.9 },
+      { regex: /Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Period Ending", confidenceScore: 0.88 },
+      { regex: /Year Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Year Ending", confidenceScore: 0.88 },
+      { regex: /As of Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "As of Date", confidenceScore: 0.84 },
+      { regex: /Statement Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Date", confidenceScore: 0.84 },
+      { regex: /Statement Through\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Through", confidenceScore: 0.82 },
+    ],
+  });
+
+  if (labeledField) {
+    return labeledField;
+  }
+
+  return inferStatementDateFromFilename(fileName);
+}
+
+function extractGenericPolicyNumberField(pages, documentType, carrierName) {
+  const patterns = [
+    { regex: /Policy Number\s*:?\s*([A-Z0-9-]{6,})/i, label: "Policy Number", confidenceScore: 0.9 },
+    { regex: /Policy No\.?\s*:?\s*([A-Z0-9-]{6,})/i, label: "Policy No.", confidenceScore: 0.88 },
+    { regex: /Contract Number\s*:?\s*([A-Z0-9-]{6,})/i, label: "Contract Number", confidenceScore: 0.86 },
+    { regex: /Contract No\.?\s*:?\s*([A-Z0-9-]{6,})/i, label: "Contract No.", confidenceScore: 0.84 },
+    { regex: /Certificate Number\s*:?\s*([A-Z0-9-]{6,})/i, label: "Certificate Number", confidenceScore: 0.82 },
+  ];
+
+  for (let pageIndex = 0; pageIndex < Math.min(pages.length, 5); pageIndex += 1) {
+    const pageText = pages[pageIndex];
+    const pageRole = getPageSourceType(carrierName, documentType, pageText);
+    if (!["policy_information", "statement_summary", "monthly_activity_table", "unknown", "generic"].includes(pageRole)) {
+      continue;
+    }
+
+    for (const pattern of patterns) {
+      const match = pageText.match(pattern.regex);
+      if (!match) continue;
+
+      return buildDerivedField({
+        normalizedKey: "policy_number",
+        rawLabel: pattern.label,
+        rawValue: match[1],
+        type: "policyNumber",
+        pageNumber: pageIndex + 1,
+        method: "generic_label_same_line",
+        carrierHint: carrierName,
+        documentType,
+        confidenceScore: pattern.confidenceScore,
+        evidence: ["matched generic policy-number pattern", `page classified as ${pageRole}`],
+        sourcePageType: pageRole,
+        sourcePriority: getSourcePriority(carrierName, "policy_number", pageRole),
+      });
+    }
+  }
+
+  return null;
 }
 
 function extractFgIllustrationPremiumField(pages, normalizedKey, documentType, carrierName) {
@@ -2210,7 +2346,7 @@ function directStructuredExtraction(normalizedKey, text, documentType, carrierNa
   const patterns = {
     illustration: {
       policy_number: {
-        regex: /Policy Number:\s+(\d[\d-]+)/i,
+        regex: /(?:Policy Number|Policy No\.?|Contract Number|Contract No\.?)\s*:?\s*([A-Z0-9-]{6,})/i,
         type: "policyNumber",
         label: "Policy Number:",
         method: "exact_label_next_line",
@@ -2261,7 +2397,7 @@ function directStructuredExtraction(normalizedKey, text, documentType, carrierNa
         method: "exact_label_same_line",
       },
       policy_number: {
-        regex: /Policy Number:\s+(\d[\d-]+)/i,
+        regex: /(?:Policy Number|Policy No\.?|Contract Number|Contract No\.?|Certificate Number)\s*:?\s*([A-Z0-9-]{6,})/i,
         type: "policyNumber",
         label: "Policy Number:",
         method: "exact_label_next_line",
@@ -4195,6 +4331,26 @@ export function parseIllustrationDocument({ pages, fileName }) {
       )
       ? applyDocumentLevelGenericFallback(genericFields)
       : fields;
+  if (finalFields.issue_date?.missing) {
+    const inferredIssueDate = extractGenericIssueDateField(
+      pages,
+      classification.document_type,
+      carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : ""
+    );
+    if (inferredIssueDate) {
+      finalFields.issue_date = inferredIssueDate;
+    }
+  }
+  if (finalFields.policy_number?.missing) {
+    const inferredPolicyNumber = extractGenericPolicyNumberField(
+      pages,
+      classification.document_type,
+      carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : ""
+    );
+    if (inferredPolicyNumber) {
+      finalFields.policy_number = inferredPolicyNumber;
+    }
+  }
   const carrierSpecific = parseCarrierSpecificDocument({
     pages,
     fileName,
@@ -4380,9 +4536,24 @@ export function parseStatementDocument({ pages, fileName }) {
       ? applyDocumentLevelGenericFallback(genericFields)
       : fields;
   if (finalFields.statement_date?.missing) {
-    const inferredStatementDate = inferStatementDateFromFilename(fileName);
+    const inferredStatementDate = extractGenericStatementDateField(
+      pages,
+      fileName,
+      classification.document_type,
+      carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : ""
+    );
     if (inferredStatementDate) {
       finalFields.statement_date = inferredStatementDate;
+    }
+  }
+  if (finalFields.policy_number?.missing) {
+    const inferredPolicyNumber = extractGenericPolicyNumberField(
+      pages,
+      classification.document_type,
+      carrierDetection.confidence !== "low" ? carrierDetection.carrier_name : ""
+    );
+    if (inferredPolicyNumber) {
+      finalFields.policy_number = inferredPolicyNumber;
     }
   }
   const carrierSpecific = parseCarrierSpecificDocument({

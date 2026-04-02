@@ -234,6 +234,252 @@ function reportActionButtonStyle(active = false, primary = false) {
   };
 }
 
+function clampScore(value) {
+  if (!Number.isFinite(Number(value))) return 50;
+  return Math.max(0, Math.min(100, Math.round(Number(value))));
+}
+
+function scoreBand(score) {
+  if (score >= 80) return "good";
+  if (score >= 62) return "warning";
+  return "alert";
+}
+
+function buildGeneralLifeScorecard({
+  lifePolicy,
+  ranking,
+  policyInterpretation,
+  policyAiSummary,
+  basicPolicyAnalysis,
+  adequacyReview,
+  comparisonRow,
+  gapAnalysis,
+}) {
+  const continuityScore = clampScore((ranking?.score ?? 5) * 10);
+  const adequacyScore =
+    adequacyReview?.status === "strong"
+      ? 84
+      : adequacyReview?.status === "moderate"
+        ? 64
+        : adequacyReview?.status === "weak"
+          ? 36
+          : basicPolicyAnalysis?.protection_confidence >= 0.75
+            ? 76
+            : basicPolicyAnalysis?.protection_confidence >= 0.5
+              ? 58
+              : 44;
+  const beneficiaryScore =
+    basicPolicyAnalysis?.beneficiary_visibility === "named"
+      ? 84
+      : basicPolicyAnalysis?.beneficiary_visibility === "mentioned"
+        ? 62
+        : 38;
+  const fundingScore =
+    basicPolicyAnalysis?.funding_pattern === "adequate" || basicPolicyAnalysis?.funding_pattern === "overfunded"
+      ? 78
+      : basicPolicyAnalysis?.funding_pattern === "underfunded"
+        ? 36
+        : 54;
+  const evidenceScore =
+    comparisonRow?.latest_statement_date
+      ? continuityScore
+      : lifePolicy?.meta?.statementCount > 0
+        ? 62
+        : 42;
+
+  const overallScore = clampScore(
+    continuityScore * 0.28 +
+      adequacyScore * 0.24 +
+      beneficiaryScore * 0.16 +
+      fundingScore * 0.14 +
+      evidenceScore * 0.18
+  );
+
+  const nextAction =
+    gapAnalysis?.recommendations?.[0] ||
+    adequacyReview?.notes?.[0] ||
+    policyInterpretation?.review_items?.[0] ||
+    "Upload the next clean statement or beneficiary-support page so the policy read becomes more complete.";
+
+  return {
+    overallScore,
+    overallTone: scoreBand(overallScore),
+    headline:
+      overallScore >= 80
+        ? "This life policy looks reasonably well-supported from the current packet."
+        : overallScore >= 62
+          ? "This life policy looks usable but still needs review in at least one important area."
+          : "This life policy still needs closer review before you rely on the current read.",
+    plainEnglish:
+      overallScore >= 80
+        ? "In plain English: the visible policy structure, support, and continuity look fairly solid."
+        : overallScore >= 62
+          ? "In plain English: the policy is understandable, but there are still enough gaps that it should not be treated as self-explanatory."
+          : "In plain English: the current file does not yet make this policy feel comfortably clear or fully supported.",
+    nextAction,
+    cards: [
+      {
+        title: "Continuity",
+        score: continuityScore,
+        tone: scoreBand(continuityScore),
+        summary: comparisonRow?.latest_statement_date
+          ? `The visible statement trail supports a continuity score of ${ranking?.score ?? "?"}/10.`
+          : "Statement continuity is still thin, so the current read depends more heavily on the baseline packet.",
+      },
+      {
+        title: "Coverage Fit",
+        score: adequacyScore,
+        tone: scoreBand(adequacyScore),
+        summary: adequacyReview?.headline || policyAiSummary?.summary || "Coverage-fit support is still forming from the current packet.",
+      },
+      {
+        title: "Beneficiary Clarity",
+        score: beneficiaryScore,
+        tone: scoreBand(beneficiaryScore),
+        summary:
+          basicPolicyAnalysis?.beneficiary_visibility === "named"
+            ? "Beneficiary support is visible enough to make the intended protection path more believable."
+            : basicPolicyAnalysis?.beneficiary_visibility === "mentioned"
+              ? "Beneficiary support is present, but still not fully named or cleanly structured."
+              : "Beneficiary support is still too limited to make family-protection intent feel complete.",
+      },
+      {
+        title: "Funding / Premium",
+        score: fundingScore,
+        tone: scoreBand(fundingScore),
+        summary:
+          basicPolicyAnalysis?.funding_pattern === "adequate" || basicPolicyAnalysis?.funding_pattern === "overfunded"
+            ? "Visible premium structure looks reasonably supportive."
+            : basicPolicyAnalysis?.funding_pattern === "underfunded"
+              ? "Visible premium support looks light relative to what the policy may need."
+              : "Funding structure is still only partly visible from the current packet.",
+      },
+      {
+        title: "Evidence Strength",
+        score: evidenceScore,
+        tone: scoreBand(evidenceScore),
+        summary:
+          comparisonRow?.latest_statement_date
+            ? "A current statement is visible, which materially improves trust in the read."
+            : "This read still needs stronger statement or support-page evidence to feel dependable.",
+      },
+    ],
+  };
+}
+
+function buildPolicyAssistantPromptExperience(policyType = "unknown", prompts = []) {
+  const safePrompts = Array.isArray(prompts) ? prompts : [];
+  const typeSpecific = safePrompts.filter(
+    (item) => !["policy_health", "policy_type", "what_to_review_first", "data_completeness", "policy_optimization"].includes(item.id)
+  );
+  const universal = safePrompts.filter((item) =>
+    ["policy_health", "policy_type", "what_to_review_first", "data_completeness", "policy_optimization"].includes(item.id)
+  );
+
+  const copy = {
+    iul: {
+      title: "Best questions for this IUL",
+      summary: "Start with performance, charges, funding, and lapse pressure before moving into the deeper technical sections.",
+    },
+    ul: {
+      title: "Best questions for this UL policy",
+      summary: "Start with performance, charges, funding strength, and visible loan or lapse pressure.",
+    },
+    whole_life: {
+      title: "Best questions for this whole life policy",
+      summary: "Start with whole-life stability, dividend visibility, and whether loan activity is creating pressure.",
+    },
+    term: {
+      title: "Best questions for this term policy",
+      summary: "Start with expiration, conversion visibility, and the real coverage structure before reading anything else.",
+    },
+    final_expense: {
+      title: "Best questions for this final expense policy",
+      summary: "Start with permanence, waiting-period visibility, and whether the structure really fits final-expense needs.",
+    },
+    unknown: {
+      title: "Best questions for this policy",
+      summary: "Start with the clearest review questions first, then use the broader prompts if you still need context.",
+    },
+  };
+
+  const resolved = copy[policyType] || copy.unknown;
+
+  return {
+    title: resolved.title,
+    summary: resolved.summary,
+    primaryPrompts: [...typeSpecific.slice(0, 3), ...universal.filter((item) => item.id === "what_to_review_first").slice(0, 1)].slice(0, 4),
+    secondaryPrompts: universal.filter((item) => item.id !== "what_to_review_first"),
+  };
+}
+
+function buildPolicyAdvisorBrief({
+  policyType = "unknown",
+  scorecard = null,
+  interpretation = null,
+  insightSummary = null,
+  basicPolicyAnalysis = null,
+}) {
+  const score = scorecard?.overallScore ?? null;
+  const scoreLabel = score === null ? "still forming" : score >= 80 ? "strong" : score >= 62 ? "mixed" : "fragile";
+
+  const byType = {
+    whole_life: {
+      eyebrow: "Whole Life Advisor Brief",
+      title: "Read this like a stability and structure review.",
+      summary:
+        "For whole life, the first questions are whether cash value behavior looks steady, dividends are visible enough to trust, and loan activity is creating pressure.",
+    },
+    term: {
+      eyebrow: "Term Policy Advisor Brief",
+      title: "Read this like an expiration and conversion review.",
+      summary:
+        "For term coverage, the first things that matter are when coverage ends, whether conversion is visible, and whether the current term structure still fits the household need.",
+    },
+    final_expense: {
+      eyebrow: "Final Expense Advisor Brief",
+      title: "Read this like a permanence and benefit-structure review.",
+      summary:
+        "For final expense, the first questions are whether the benefit is truly permanent, whether any waiting period is visible, and whether the structure really matches burial or final-expense intent.",
+    },
+    ul: {
+      eyebrow: "Universal Life Advisor Brief",
+      title: "Read this like a funding and cost-pressure review.",
+      summary:
+        "For universal life, start with funding strength, visible charges, continuity support, and whether the current structure still looks durable from the packet.",
+    },
+    unknown: {
+      eyebrow: "Life Policy Advisor Brief",
+      title: "Start with the clearest risk and fit questions first.",
+      summary:
+        "This policy type is usable, but the best first move is to focus on the clearest review path before diving into every technical field.",
+    },
+  };
+
+  const resolved = byType[policyType] || byType.unknown;
+  const nextMove =
+    scorecard?.nextAction ||
+    interpretation?.review_items?.[0] ||
+    insightSummary?.missingData?.[0] ||
+    "Use the recommended question set first, then review deeper evidence if anything still feels unclear.";
+
+  return {
+    eyebrow: resolved.eyebrow,
+    title: resolved.title,
+    summary: resolved.summary,
+    scoreLabel,
+    confidenceSummary:
+      interpretation?.confidence_summary ||
+      insightSummary?.summary ||
+      "Confidence is still driven by how much visible structure and continuity the current packet provides.",
+    fundingRead:
+      basicPolicyAnalysis?.fundingPattern
+        ? `Visible funding pattern currently reads as ${String(basicPolicyAnalysis.fundingPattern).replace(/_/g, " ")}.`
+        : "Funding behavior is still only partially visible from the current packet.",
+    nextMove,
+  };
+}
+
 function renderReportFactsGrid(items = [], columns = 3) {
   return (
     <div
@@ -525,6 +771,16 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     }
   }
 
+  function getGeneralLifeScorecardSection(cardTitle) {
+    const normalized = String(cardTitle || "").toLowerCase();
+    if (normalized.includes("continuity")) return "charge_summary";
+    if (normalized.includes("funding")) return "interpretation";
+    if (normalized.includes("evidence")) return "confidence";
+    if (normalized.includes("beneficiary")) return "policy_overview";
+    if (normalized.includes("coverage")) return "policy_overview";
+    return "interpretation";
+  }
+
   useEffect(() => {
     setBundle({
       policy: null,
@@ -738,6 +994,32 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
         : null,
     [groupedIssues, iulV2, optimizationAnalysis, policyInterpretation, readerResults, showUnifiedIulReader]
   );
+  const generalLifeScorecard = useMemo(
+    () =>
+      !showUnifiedIulReader
+        ? buildGeneralLifeScorecard({
+            lifePolicy,
+            ranking,
+            policyInterpretation,
+            policyAiSummary,
+            basicPolicyAnalysis,
+            adequacyReview,
+            comparisonRow,
+            gapAnalysis,
+          })
+        : null,
+    [
+      adequacyReview,
+      basicPolicyAnalysis,
+      comparisonRow,
+      gapAnalysis,
+      lifePolicy,
+      policyAiSummary,
+      policyInterpretation,
+      ranking,
+      showUnifiedIulReader,
+    ]
+  );
   const reviewReport = useMemo(
     () =>
       buildPolicyReviewReport({
@@ -789,52 +1071,83 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     () => getPolicyAssistantIntents(lifePolicy?.meta?.policyType || "unknown"),
     [lifePolicy?.meta?.policyType]
   );
+  const assistantPromptExperience = useMemo(
+    () => buildPolicyAssistantPromptExperience(lifePolicy?.meta?.policyType || "unknown", assistantPrompts),
+    [assistantPrompts, lifePolicy?.meta?.policyType]
+  );
+  const policyAdvisorBrief = useMemo(
+    () =>
+      buildPolicyAdvisorBrief({
+        policyType: lifePolicy?.meta?.policyType || "unknown",
+        scorecard: generalLifeScorecard,
+        interpretation: policyInterpretation,
+        insightSummary: policyAiSummary,
+        basicPolicyAnalysis,
+      }),
+    [basicPolicyAnalysis, generalLifeScorecard, lifePolicy?.meta?.policyType, policyAiSummary, policyInterpretation]
+  );
   const latestAssistantEntry = assistantHistory[0] || null;
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Insurance"
-        title={snapshotTitle}
-        description={snapshotCarrier}
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-              Back
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-              Compare
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowReviewReport((current) => !current)}
-              style={reportActionButtonStyle(showReviewReport, false)}
-            >
-              {showReviewReport ? "Hide Review Report" : "Open Review Report"}
-            </button>
-            <button type="button" onClick={handlePrintReport} style={reportActionButtonStyle(false, true)}>
-              Print Report
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={actionButtonStyle(true)}>
-              Upload
-            </button>
-          </div>
-        }
-      />
+  const pageHeader = (
+    <PageHeader
+      eyebrow="Insurance"
+      title={snapshotTitle}
+      description={snapshotCarrier}
+      actions={
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
+            Back
+          </button>
+          <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
+            Compare
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowReviewReport((current) => !current)}
+            style={reportActionButtonStyle(showReviewReport, false)}
+          >
+            {showReviewReport ? "Hide Review Report" : "Open Review Report"}
+          </button>
+          <button type="button" onClick={handlePrintReport} style={reportActionButtonStyle(false, true)}>
+            Print Report
+          </button>
+          <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={actionButtonStyle(true)}>
+            Upload
+          </button>
+        </div>
+      }
+    />
+  );
 
-      {loading ? (
+  if (loading) {
+    return (
+      <div>
+        {pageHeader}
         <SectionCard>
           <div style={{ color: "#64748b" }}>Loading policy detail...</div>
         </SectionCard>
-      ) : !bundle.policy && !comparisonRow ? (
+      </div>
+    );
+  }
+
+  if (!bundle.policy && !comparisonRow) {
+    return (
+      <div>
+        {pageHeader}
         <EmptyState
           title="Policy not found"
           description={
             loadError || "This vaulted policy could not be loaded from the insurance intelligence workspace."
           }
         />
-      ) : (
-        <div style={{ display: "grid", gap: "20px" }}>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {pageHeader}
+      <div style={{ display: "grid", gap: "20px" }}>
           {showReviewReport ? (
             <ReportView
               title="Policy Review Report"
@@ -1146,194 +1459,205 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           ) : null}
 
           {!showUnifiedIulReader ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
-            <SectionCard
-              title="Cost of Insurance"
-              subtitle="Current COI visibility and source confidence from vaulted policy intelligence."
-              accent="#c7d2fe"
-            >
-              <div style={{ display: "grid", gap: "16px" }}>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background:
-                      "linear-gradient(135deg, rgba(238,242,255,1) 0%, rgba(224,231,255,0.86) 55%, rgba(255,255,255,0.95) 100%)",
-                    border: "1px solid rgba(99, 102, 241, 0.18)",
-                  }}
+            <>
+              {generalLifeScorecard ? (
+                <SectionCard
+                  title="Life Policy At A Glance"
+                  subtitle="One plain-English scored window before the deeper insurance interpretation."
+                  accent="#bfdbfe"
                 >
-                  <div style={{ fontSize: "12px", color: "#4c1d95", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Total COI
+                  <div style={{ display: "grid", gap: "18px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "16px",
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: "10px", maxWidth: "820px" }}>
+                        <div
+                          style={{
+                            padding: "18px 20px",
+                            borderRadius: "18px",
+                            background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                            border: "1px solid rgba(147, 197, 253, 0.28)",
+                            color: "#0f172a",
+                            fontSize: "16px",
+                            lineHeight: "1.8",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {generalLifeScorecard.headline}
+                        </div>
+                        <div style={{ color: "#475569", lineHeight: "1.8" }}>{generalLifeScorecard.plainEnglish}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => scrollToPolicySection("interpretation")}
+                        style={{
+                          minWidth: "150px",
+                          padding: "16px 18px",
+                          borderRadius: "16px",
+                          background: "#ffffff",
+                          border: "1px solid #dbeafe",
+                          display: "grid",
+                          gap: "6px",
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Overall Score
+                        </div>
+                        <div style={{ fontSize: "34px", fontWeight: 800, color: "#0f172a" }}>{generalLifeScorecard.overallScore}/100</div>
+                        <StatusBadge
+                          label={
+                            generalLifeScorecard.overallScore >= 80
+                              ? "Strong"
+                              : generalLifeScorecard.overallScore >= 62
+                                ? "Needs Review"
+                                : "At Risk"
+                          }
+                          tone={generalLifeScorecard.overallTone}
+                        />
+                      </button>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+                      {generalLifeScorecard.cards.map((card) => (
+                        <button
+                          type="button"
+                          key={card.title}
+                          onClick={() => scrollToPolicySection(getGeneralLifeScorecardSection(card.title))}
+                          style={{
+                            padding: "14px 16px",
+                            borderRadius: "16px",
+                            background: card.tone === "good" ? "#dcfce7" : card.tone === "warning" ? "#fef3c7" : "#fee2e2",
+                            border:
+                              card.tone === "good"
+                                ? "1px solid #bbf7d0"
+                              : card.tone === "warning"
+                                  ? "1px solid #fde68a"
+                                  : "1px solid #fecaca",
+                            display: "grid",
+                            gap: "8px",
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "baseline" }}>
+                            <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.title}</div>
+                            <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{card.score}</div>
+                          </div>
+                          <div style={{ color: "#334155", lineHeight: "1.7" }}>{card.summary}</div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => scrollToPolicySection("interpretation")}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        background: "#ffffff",
+                        border: "1px solid #dbeafe",
+                        color: "#0f172a",
+                        display: "grid",
+                        gap: "8px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                        Best Next Move
+                      </div>
+                      <div style={{ lineHeight: "1.7", fontWeight: 600 }}>{generalLifeScorecard.nextAction}</div>
+                    </button>
                   </div>
-                  <div style={{ marginTop: "8px", fontSize: "34px", fontWeight: 800, color: "#0f172a" }}>
-                    {formatDisplayValue(comparisonRow?.total_coi)}
-                  </div>
-                  <div style={{ marginTop: "10px", fontSize: "14px", color: "#4338ca", lineHeight: "1.6" }}>
-                    {getCoiInterpretation(comparisonRow?.coi_source_kind, comparisonRow?.coi_confidence)}
-                  </div>
+                </SectionCard>
+              ) : null}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
+                <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
+                  <SectionCard title="Cost and Confidence" subtitle="The clearest plain-English read on charges, continuity, and visible evidence support.">
+                    <div style={{ display: "grid", gap: "14px" }}>
+                      <div
+                        style={{
+                          padding: "18px 20px",
+                          borderRadius: "18px",
+                          background: "linear-gradient(135deg, rgba(238,242,255,1) 0%, rgba(224,231,255,0.86) 55%, rgba(255,255,255,0.95) 100%)",
+                          border: "1px solid rgba(99, 102, 241, 0.18)",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", color: "#4c1d95", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Total COI
+                        </div>
+                        <div style={{ marginTop: "8px", fontSize: "34px", fontWeight: 800, color: "#0f172a" }}>
+                          {formatDisplayValue(comparisonRow?.total_coi)}
+                        </div>
+                        <div style={{ marginTop: "10px", fontSize: "14px", color: "#4338ca", lineHeight: "1.6" }}>
+                          {getCoiInterpretation(comparisonRow?.coi_source_kind, comparisonRow?.coi_confidence)}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ color: "#64748b" }}>Continuity Score</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{ranking?.score ?? "\u2014"} {ranking?.status ? `(${ranking.status})` : ""}</div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ color: "#64748b" }}>COI Confidence</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatDisplayValue(comparisonRow?.coi_confidence)}</div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ color: "#64748b" }}>Visible Charges</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatCurrency(chargeSummary.total_visible_policy_charges ?? null)}</div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                          <div style={{ color: "#64748b" }}>Statement Support</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a", textAlign: "right" }}>{statementPresence}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </SectionCard>
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "14px",
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Source Kind
-                    </div>
-                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                      {formatDisplayValue(comparisonRow?.coi_source_kind)}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "14px",
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Confidence
-                    </div>
-                    <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                      {formatDisplayValue(comparisonRow?.coi_confidence)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <div ref={(node) => setSectionRef("confidence", node)} style={getSectionHighlight("confidence")}>
-            <SectionCard title="Data Confidence" subtitle="Live confidence signals derived from vaulted policy comparison data.">
-              <div style={{ display: "grid", gap: "12px" }}>
-                <div
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "14px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Continuity Score
-                  </div>
-                  <div style={{ marginTop: "8px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>
-                      {ranking?.score ?? "\u2014"}
-                    </div>
-                    <div style={{ fontSize: "14px", color: "#475569" }}>
-                      {ranking?.status || "Limited"}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.6" }}>
-                    {ranking?.statusExplanation || "Continuity inputs are still limited."}
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>COI Confidence</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                    {formatDisplayValue(comparisonRow?.coi_confidence)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>Charge Visibility</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                    {formatDisplayValue(comparisonRow?.charge_visibility_status)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>Statement Data Presence</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a", textAlign: "right" }}>{statementPresence}</div>
-                </div>
-              </div>
-            </SectionCard>
-            </div>
-          </div>
-          ) : null}
-
-          {!showUnifiedIulReader ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
-            <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
-            <SectionCard title="Charge Breakdown" subtitle="Visible charge components from the current vaulted analytics bundle.">
-              <div style={{ display: "grid", gap: "10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>COI</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatCurrency(chargeSummary.total_coi ?? null)}</div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>Admin Fees</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatCurrency(chargeSummary.total_admin_fees ?? null)}</div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>Expense Charges</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatCurrency(chargeSummary.total_expense_charges ?? null)}</div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ color: "#64748b" }}>Rider Charges</div>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{formatCurrency(chargeSummary.total_rider_charges ?? null)}</div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                    paddingTop: "10px",
-                    borderTop: "1px solid #e2e8f0",
-                  }}
-                >
-                  <div style={{ color: "#0f172a", fontWeight: 700 }}>Total Visible Charges</div>
-                  <div style={{ fontWeight: 800, color: "#0f172a" }}>
-                    {formatCurrency(chargeSummary.total_visible_policy_charges ?? null)}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-            </div>
-
-            <div ref={(node) => setSectionRef("confidence", node)} style={getSectionHighlight("confidence")}>
-            <SectionCard title="Missing / Weak Data" subtitle="Grouped review cues that affect current visibility and confidence.">
-              {groupedIssues.length > 0 ? (
-                <div style={{ display: "grid", gap: "14px" }}>
-                  {groupedIssues.map((group) => (
-                    <div key={group.title}>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>{group.title}</div>
-                      <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
-                        {group.items.map((item) => (
-                          <li key={item}>{item}</li>
+                <div ref={(node) => setSectionRef("confidence", node)} style={getSectionHighlight("confidence")}>
+                  <SectionCard title="Missing / Weak Data" subtitle="The biggest evidence gaps still affecting this life-policy read.">
+                    {groupedIssues.length > 0 ? (
+                      <div style={{ display: "grid", gap: "14px" }}>
+                        {groupedIssues.map((group) => (
+                          <div key={group.title}>
+                            <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>{group.title}</div>
+                            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
+                              {group.items.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
-                    </div>
-                  ))}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          padding: "14px 16px",
+                          borderRadius: "14px",
+                          background: "#f0fdf4",
+                          border: "1px solid #bbf7d0",
+                          color: "#166534",
+                          fontWeight: 600,
+                        }}
+                      >
+                        No critical missing data detected
+                      </div>
+                    )}
+                  </SectionCard>
                 </div>
-              ) : (
-                <div
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "14px",
-                    background: "#f0fdf4",
-                    border: "1px solid #bbf7d0",
-                    color: "#166534",
-                    fontWeight: 600,
-                  }}
-                >
-                  No critical missing data detected
-                </div>
-              )}
-            </SectionCard>
-            </div>
-          </div>
+              </div>
+            </>
           ) : null}
 
           {!showUnifiedIulReader ? (
@@ -1468,7 +1792,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
               </div>
             </div>
-          </SectionCard>
+            </SectionCard>
           </div>
           ) : null}
 
@@ -1938,29 +2262,117 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 ) : null}
               </div>
 
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Choose a question</div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                {assistantPrompts.map((prompt) => (
-                  <button
-                    key={prompt.id}
-                    type="button"
-                    onClick={() => handleAssistantPrompt(prompt.id)}
+                {!showUnifiedIulReader ? (
+                  <div
                     style={{
-                      padding: "10px 12px",
-                      borderRadius: "999px",
-                      border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
-                      background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#eff6ff",
-                      color: "#1d4ed8",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      fontSize: "13px",
+                      display: "grid",
+                      gap: "12px",
+                      padding: "16px 18px",
+                      borderRadius: "18px",
+                      background: "#ffffff",
+                      border: "1px solid rgba(148, 163, 184, 0.18)",
                     }}
                   >
-                    {prompt.label}
-                  </button>
-                ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ display: "grid", gap: "6px", maxWidth: "820px" }}>
+                        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {policyAdvisorBrief.eyebrow}
+                        </div>
+                        <div style={{ color: "#0f172a", fontWeight: 800, fontSize: "18px", lineHeight: "1.5" }}>
+                          {policyAdvisorBrief.title}
+                        </div>
+                      </div>
+                      <StatusBadge label={`Current read: ${policyAdvisorBrief.scoreLabel}`} tone={generalLifeScorecard?.overallTone || "info"} />
+                    </div>
+
+                    <div style={{ color: "#475569", lineHeight: "1.75" }}>{policyAdvisorBrief.summary}</div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "6px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Confidence Read</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{policyAdvisorBrief.confidenceSummary}</div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "6px" }}>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Funding Read</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{policyAdvisorBrief.fundingRead}</div>
+                      </div>
+                      <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "grid", gap: "6px" }}>
+                        <div style={{ fontSize: "11px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Best Next Move</div>
+                        <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{policyAdvisorBrief.nextMove}</div>
+                      </div>
+                    </div>
                   </div>
+                ) : null}
+
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <div
+                    style={{
+                      padding: "16px 18px",
+                      borderRadius: "18px",
+                      background: "#ffffff",
+                      border: "1px solid rgba(148, 163, 184, 0.18)",
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Advisor Mode
+                    </div>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>{assistantPromptExperience.title}</div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{assistantPromptExperience.summary}</div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Best questions to start with</div>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      {assistantPromptExperience.primaryPrompts.map((prompt) => (
+                        <button
+                          key={prompt.id}
+                          type="button"
+                          onClick={() => handleAssistantPrompt(prompt.id)}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "999px",
+                            border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
+                            background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#eff6ff",
+                            color: "#1d4ed8",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            fontSize: "13px",
+                          }}
+                        >
+                          {prompt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {assistantPromptExperience.secondaryPrompts.length > 0 ? (
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Broader review questions</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        {assistantPromptExperience.secondaryPrompts.map((prompt) => (
+                          <button
+                            key={prompt.id}
+                            type="button"
+                            onClick={() => handleAssistantPrompt(prompt.id)}
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: "999px",
+                              border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
+                              background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#ffffff",
+                              color: "#1d4ed8",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              fontSize: "13px",
+                            }}
+                          >
+                            {prompt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                {latestAssistantEntry ? (
@@ -2391,8 +2803,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
               Load note: {loadError || errors.insurancePortfolio}
             </div>
           ) : null}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

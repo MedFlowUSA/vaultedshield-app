@@ -19,6 +19,7 @@ import {
   createRetirementAssetWithAccount,
   listRetirementAccounts,
 } from "../lib/supabase/retirementData";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCategoryLabel(majorCategory) {
   const labels = {
@@ -64,6 +65,7 @@ const DEFAULT_FORM = {
 };
 
 export default function RetirementHubPage({ onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug } = usePlatformShellData();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -245,6 +247,19 @@ export default function RetirementHubPage({ onNavigate }) {
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
+              onClick={() => onNavigate?.("/household-goals")}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Open Goals Dashboard
+            </button>
+            <button
               onClick={() => onNavigate?.("/retirement/upload")}
               style={{
                 border: "1px solid #cbd5e1",
@@ -335,7 +350,7 @@ export default function RetirementHubPage({ onNavigate }) {
         style={{
           marginTop: "24px",
           display: "grid",
-          gridTemplateColumns: "1.35fr 1fr",
+          gridTemplateColumns: isTablet ? "1fr" : "1.35fr 1fr",
           gap: "18px",
           alignItems: "start",
         }}
@@ -465,26 +480,74 @@ export default function RetirementHubPage({ onNavigate }) {
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/retirement/upload")}
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Update Retirement Goal
-                </button>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/household-goals")}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Open Goals Dashboard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/retirement/upload")}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Update Retirement Goal
+                  </button>
+                </div>
               </div>
             ) : (
-              <EmptyState
-                title="No retirement goal saved yet"
-                description="Open the retirement upload planner to set a target retirement age, income goal, and first readiness estimate for this household."
-              />
+              <div style={{ display: "grid", gap: "14px" }}>
+                <EmptyState
+                  title="No retirement goal saved yet"
+                  description="Open the retirement upload planner to set a target retirement age, income goal, and first readiness estimate for this household."
+                />
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/household-goals")}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Open Goals Dashboard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/retirement/upload")}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Set Retirement Goal
+                  </button>
+                </div>
+              </div>
             )}
           </SectionCard>
 

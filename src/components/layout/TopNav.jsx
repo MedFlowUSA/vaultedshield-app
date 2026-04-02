@@ -129,6 +129,40 @@ function DesktopSignalCard({ prefix, signal }) {
   );
 }
 
+function DesktopSignalPill({ prefix, signal }) {
+  if (!signal) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "2px",
+        padding: "10px 12px",
+        borderRadius: "12px",
+        background: signal.urgencyMeta.background,
+        border: signal.urgencyMeta.border,
+        minWidth: "160px",
+        maxWidth: "220px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "11px",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: signal.urgencyMeta.accent,
+        }}
+      >
+        {prefix}: {signal.urgencyMeta.badge || signal.urgencyMeta.label}
+      </div>
+      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.35" }}>
+        {signal.title}
+      </div>
+    </div>
+  );
+}
+
 export default function TopNav({
   title,
   subtitle,
@@ -405,10 +439,14 @@ export default function TopNav({
             label="Household Score"
             value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
           />
-          <PriorityCard priority={topPriority} />
-          <DesktopSignalCard prefix="Command" signal={topBlocker} />
-          <DesktopSignalCard prefix="Housing" signal={topHousingBlocker} />
-          <DesktopSignalCard prefix="Access" signal={topEmergencyBlocker} />
+          <div style={{ display: "grid", gap: "8px", minWidth: "260px", maxWidth: "340px" }}>
+            <PriorityCard priority={topPriority} />
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <DesktopSignalPill prefix="Command" signal={topBlocker} />
+              <DesktopSignalPill prefix="Housing" signal={topHousingBlocker} />
+              <DesktopSignalPill prefix="Access" signal={topEmergencyBlocker} />
+            </div>
+          </div>
 
           <button type="button" onClick={() => onUpgrade?.()} style={actionButtonStyle}>
             Upgrade

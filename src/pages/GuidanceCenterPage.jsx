@@ -90,6 +90,20 @@ export default function GuidanceCenterPage({ onNavigate }) {
     ],
     [counts?.assetCount, intelligenceBundle?.assets?.length, savedPolicies?.length]
   );
+  const headerActions = (
+    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+      <button type="button" onClick={() => onNavigate?.("/dashboard")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+        Open Dashboard
+      </button>
+      <button type="button" onClick={() => onNavigate?.("/upload-center")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+        Open Upload Center
+      </button>
+      <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
+        Open Insurance Intelligence
+      </button>
+    </div>
+  );
+  const contextMetricColumns = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
@@ -97,52 +111,42 @@ export default function GuidanceCenterPage({ onNavigate }) {
         eyebrow="Guidance Center"
         title="How To Use VaultedShield"
         description="Use this page to understand where to start, what each major feature is for, and how the app is meant to be used as a household operating system."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-            <button type="button" onClick={() => onNavigate?.("/dashboard")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-              Open Dashboard
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/upload-center")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-              Open Upload Center
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
-              Open Insurance Intelligence
-            </button>
-          </div>
-        }
+        actions={headerActions}
       />
 
-      <SummaryPanel items={summaryItems} />
-
       <SectionCard
-        title="Current Household Context"
-        subtitle="Guidance is more useful when it reflects what the current household has already started."
+        title="Start Here"
+        subtitle="Use one clear first step, then let the rest of the guidance work off what your household already has in motion."
       >
-        <div style={{ display: "grid", gap: "14px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+            gap: "14px",
+            alignItems: "stretch",
+          }}
+        >
           <div
             style={{
-              padding: "16px 18px",
-              borderRadius: "16px",
+              padding: "18px 20px",
+              borderRadius: "18px",
               background: blankState.isBlank ? "#eff6ff" : "#f8fafc",
               border: `1px solid ${blankState.isBlank ? "#bfdbfe" : "#e2e8f0"}`,
               display: "grid",
-              gap: "10px",
+              gap: "12px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: "12px", color: blankState.isBlank ? "#1d4ed8" : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  {onboardingMission.stageLabel}
-                </div>
-                <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>
-                  {onboardingMission.headline}
-                </div>
+            <div style={{ display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", color: blankState.isBlank ? "#1d4ed8" : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                {onboardingMission.stageLabel}
               </div>
-              <div style={{ fontWeight: 800, color: "#0f172a" }}>{onboardingMission.completionSummary}</div>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", lineHeight: "1.2" }}>
+                {onboardingMission.headline}
+              </div>
             </div>
             <div style={{ color: "#475569", lineHeight: "1.75" }}>{onboardingMission.explanation}</div>
-            {onboardingMission.nextStep ? (
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {onboardingMission.nextStep ? (
                 <button
                   type="button"
                   onClick={() => onNavigate?.(onboardingMission.nextStep.route)}
@@ -150,18 +154,66 @@ export default function GuidanceCenterPage({ onNavigate }) {
                 >
                   Open {onboardingMission.nextStep.label}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/dashboard")}
-                  style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
-                >
-                  Open Guided Dashboard
-                </button>
-              </div>
-            ) : null}
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/dashboard")}
+                style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+              >
+                Open Guided Dashboard
+              </button>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
+          <div
+            style={{
+              padding: "18px 20px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              display: "grid",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "4px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                Mission Snapshot
+              </div>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{onboardingMission.completionSummary}</div>
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.75" }}>{onboardingMission.unlockPreview}</div>
+            <div style={{ display: "grid", gap: "8px" }}>
+              {summaryItems.slice(0, 3).map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "10px 12px",
+                    borderRadius: "12px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <div style={{ fontSize: "13px", color: "#475569", fontWeight: 700 }}>{item.label}</div>
+                  <div style={{ fontSize: "14px", color: "#0f172a", fontWeight: 800 }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Current Household Context"
+        subtitle="Guidance is more useful when it reflects what the current household has already started."
+      >
+        <div style={{ display: "grid", gap: "14px" }}>
+          <SummaryPanel items={summaryItems} />
+
+          <div style={{ display: "grid", gridTemplateColumns: contextMetricColumns, gap: "12px" }}>
           <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Assets</div>
             <div style={{ marginTop: "8px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0}</div>
