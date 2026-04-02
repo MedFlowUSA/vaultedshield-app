@@ -470,91 +470,42 @@ export default function TopNav({
       ) : (
         <div
           style={{
-            display: "grid",
-            gap: "10px",
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
             justifyContent: "flex-end",
             flex: "1 1 520px",
             minWidth: 0,
+            alignItems: "center",
           }}
         >
-          <div
+          <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
+          <CompactSummaryCard
+            label="Household Score"
+            value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
+          />
+          <DesktopPriorityStrip priority={topPriority} />
+          <button type="button" onClick={() => onUpgrade?.()} style={desktopQuickActionStyle}>
+            Upgrade
+          </button>
+          <button type="button" onClick={() => onNavigate("/upload-center")} style={desktopQuickActionStyle}>
+            Upload
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate("/insurance")}
             style={{
-              display: "flex",
-              gap: "8px",
-              flexWrap: "wrap",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              minWidth: 0,
+              ...desktopQuickActionStyle,
+              border: "none",
+              background: "#0f172a",
+              color: "#ffffff",
             }}
           >
-            <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
-            <CompactSummaryCard
-              label="Household Score"
-              value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
-            />
-            <DesktopPriorityStrip priority={topPriority} />
-            <button
-              type="button"
-              onClick={() => onNavigate("/insurance")}
-              style={{
-                ...desktopQuickActionStyle,
-                border: "none",
-                background: "#0f172a",
-                color: "#ffffff",
-              }}
-            >
-              Insurance
-            </button>
-            <button
-              type="button"
-              onClick={() => setCompactPanelOpen((current) => !current)}
-              style={desktopQuickActionStyle}
-            >
-              {compactPanelOpen ? "Hide quick actions" : "Show quick actions"}
-            </button>
-          </div>
-
-          {compactPanelOpen ? (
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                flexWrap: "wrap",
-                justifyContent: "flex-end",
-                alignItems: "flex-start",
-                paddingTop: "2px",
-              }}
-            >
-              <DesktopSignalPill prefix="Command" signal={topBlocker} />
-              <DesktopSignalPill prefix="Housing" signal={topHousingBlocker} />
-              <DesktopSignalPill prefix="Access" signal={topEmergencyBlocker} />
-              <button type="button" onClick={() => onUpgrade?.()} style={desktopQuickActionStyle}>
-                Upgrade
-              </button>
-              <button type="button" onClick={() => onNavigate("/upload-center")} style={desktopQuickActionStyle}>
-                Upload Center
-              </button>
-              <button type="button" onClick={() => onSignOut?.()} style={desktopQuickActionStyle}>
-                Log Out
-              </button>
-              {import.meta.env.DEV ? (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "12px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    fontSize: "11px",
-                    color: "#64748b",
-                    maxWidth: "520px",
-                    lineHeight: "1.45",
-                  }}
-                >
-                  auth={debug.authUserId || "guest"} | household={debug.householdId || "none"} | guestMode={debug.guestModeActive ? "yes" : "no"} | sharedFallback={debug.sharedFallbackActive ? "yes" : "no"} | policyScope={debug.policyScopeSource}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+            Insurance
+          </button>
+          <button type="button" onClick={() => onSignOut?.()} style={desktopQuickActionStyle}>
+            Log Out
+          </button>
         </div>
       )}
 
