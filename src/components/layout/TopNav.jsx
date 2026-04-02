@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import logo from "../../assets/vaultedshield-logo.png";
 import { buildHouseholdIntelligence, buildHouseholdRiskContinuityMap } from "../../lib/domain/platformIntelligence";
 import {
@@ -18,6 +18,117 @@ import {
 } from "../../lib/domain/platformIntelligence/reviewWorkflowState";
 import { usePlatformShellData } from "../../lib/intelligence/PlatformShellDataContext";
 
+function CompactSummaryCard({ label, value, accent = false }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "2px",
+        padding: "10px 12px",
+        borderRadius: "12px",
+        background: accent ? "#eff6ff" : "#f8fafc",
+        border: accent ? "none" : "1px solid #e2e8f0",
+        color: accent ? "#1d4ed8" : "#0f172a",
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "11px",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: accent ? "#1d4ed8" : "#64748b",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "12px",
+          color: accent ? "#475569" : "#0f172a",
+          fontWeight: 700,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function PriorityCard({ priority }) {
+  if (!priority) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "4px",
+        padding: "10px 12px",
+        borderRadius: "12px",
+        background: priority.urgencyMeta.background,
+        border: priority.urgencyMeta.border,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "11px",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: priority.urgencyMeta.accent,
+        }}
+      >
+        Priority: {priority.urgencyMeta.label}
+      </div>
+      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
+        {priority.title}
+      </div>
+      <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
+        {priority.impactLabel} | {priority.nextAction}
+      </div>
+    </div>
+  );
+}
+
+function DesktopSignalCard({ prefix, signal }) {
+  if (!signal) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "4px",
+        padding: "10px 12px",
+        borderRadius: "12px",
+        background: signal.urgencyMeta.background,
+        border: signal.urgencyMeta.border,
+        minWidth: "240px",
+        maxWidth: "320px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "11px",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: signal.urgencyMeta.accent,
+        }}
+      >
+        {prefix}: {signal.urgencyMeta.badge || signal.urgencyMeta.label}
+      </div>
+      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
+        {signal.title}
+      </div>
+      <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
+        {signal.staleLabel || signal.impactLabel} | {signal.nextAction}
+      </div>
+    </div>
+  );
+}
+
 export default function TopNav({
   title,
   subtitle,
@@ -30,6 +141,7 @@ export default function TopNav({
   showSidebarToggle = false,
   isCompact = false,
 }) {
+  const [compactPanelOpen, setCompactPanelOpen] = useState(false);
   const { householdState, debug, intelligenceBundle, insuranceRows } = usePlatformShellData();
   const resolvedHouseholdName = householdState.household?.household_name || householdName;
   const reviewScope = useMemo(
@@ -99,6 +211,18 @@ export default function TopNav({
   const topHousingBlocker = housingCommandCenter.blockers[0] || null;
   const topEmergencyBlocker = emergencyAccessCommand.blockers[0] || null;
   const topPriority = householdPriorityEngine.priorities[0] || null;
+  const compactHeadline =
+    topPriority?.title ||
+    topBlocker?.title ||
+    topHousingBlocker?.title ||
+    topEmergencyBlocker?.title ||
+    "Household workspace ready";
+  const compactSupportLine =
+    topPriority?.impactLabel ||
+    topBlocker?.nextAction ||
+    topHousingBlocker?.nextAction ||
+    topEmergencyBlocker?.nextAction ||
+    `${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`;
   const actionButtonStyle = {
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -131,7 +255,7 @@ export default function TopNav({
         overflowX: "clip",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: isCompact ? "12px" : "14px", minWidth: 0, flex: "1 1 320px" }}>
+      <div style={{ display: "flex", alignItems: isCompact ? "flex-start" : "center", gap: isCompact ? "12px" : "14px", minWidth: 0, flex: "1 1 320px" }}>
         {showSidebarToggle ? (
           <button
             type="button"
@@ -165,221 +289,156 @@ export default function TopNav({
           <div style={{ fontSize: isCompact ? "17px" : "22px", fontWeight: 700, color: "#0f172a", lineHeight: 1.15, wordBreak: "break-word" }}>
             {title}
           </div>
-          <div style={{ marginTop: "4px", color: "#64748b", fontSize: isCompact ? "12px" : "14px", lineHeight: "1.5" }}>{subtitle}</div>
+          <div style={{ marginTop: "4px", color: "#64748b", fontSize: isCompact ? "12px" : "14px", lineHeight: "1.5" }}>
+            {subtitle}
+          </div>
+          {isCompact ? (
+            <div style={{ marginTop: "8px", display: "grid", gap: "4px" }}>
+              <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.4" }}>
+                {compactHeadline}
+              </div>
+              <div style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.4" }}>
+                {compactSupportLine}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          flexWrap: "wrap",
-          justifyContent: isCompact ? "stretch" : "flex-end",
-          flex: isCompact ? "1 1 100%" : "0 1 auto",
-          width: isCompact ? "100%" : "auto",
-        }}
-      >
+      {isCompact ? (
         <div
           style={{
             display: "grid",
-            gap: "2px",
-            padding: "10px 12px",
-            borderRadius: "12px",
-            background: "#eff6ff",
-            color: "#1d4ed8",
-            minWidth: isCompact ? "100%" : "auto",
+            gap: "10px",
+            flex: "1 1 100%",
+            width: "100%",
           }}
         >
-          <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            {currentPlanLabel}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "8px",
+              width: "100%",
+            }}
+          >
+            <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
+            <CompactSummaryCard
+              label="Household Score"
+              value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
+            />
           </div>
-          <div style={{ fontSize: "12px", color: "#475569" }}>{resolvedHouseholdName}</div>
+
+          <button
+            type="button"
+            onClick={() => setCompactPanelOpen((current) => !current)}
+            style={{
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "12px 14px",
+              cursor: "pointer",
+              fontWeight: 700,
+              width: "100%",
+              minHeight: "44px",
+            }}
+          >
+            {compactPanelOpen ? "Hide quick actions" : "Show quick actions"}
+          </button>
+
+          {compactPanelOpen ? (
+            <div
+              style={{
+                display: "grid",
+                gap: "10px",
+                padding: "12px",
+                borderRadius: "14px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <PriorityCard priority={topPriority} />
+
+              <div style={{ display: "grid", gap: "8px" }}>
+                <button type="button" onClick={() => onUpgrade?.()} style={actionButtonStyle}>
+                  Upgrade
+                </button>
+                <button type="button" onClick={() => onNavigate("/upload-center")} style={actionButtonStyle}>
+                  Upload Center
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("/insurance")}
+                  style={{
+                    border: "none",
+                    background: "#0f172a",
+                    color: "#ffffff",
+                    borderRadius: "12px",
+                    padding: "12px 14px",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    width: "100%",
+                    minHeight: "44px",
+                  }}
+                >
+                  Open Insurance Workspace
+                </button>
+                <button type="button" onClick={() => onSignOut?.()} style={actionButtonStyle}>
+                  Log Out
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
+      ) : (
         <div
           style={{
-            display: "grid",
-            gap: "2px",
-            padding: "10px 12px",
-            borderRadius: "12px",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            minWidth: isCompact ? "100%" : "auto",
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+            flex: "0 1 auto",
           }}
         >
-          <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>
-            Household Score
-          </div>
-          <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700 }}>
-            {householdScorecard.overallScore ?? "--"} · {householdScorecard.overallStatus}
-          </div>
+          <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
+          <CompactSummaryCard
+            label="Household Score"
+            value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
+          />
+          <PriorityCard priority={topPriority} />
+          <DesktopSignalCard prefix="Command" signal={topBlocker} />
+          <DesktopSignalCard prefix="Housing" signal={topHousingBlocker} />
+          <DesktopSignalCard prefix="Access" signal={topEmergencyBlocker} />
+
+          <button type="button" onClick={() => onUpgrade?.()} style={actionButtonStyle}>
+            Upgrade
+          </button>
+          <button type="button" onClick={() => onNavigate("/upload-center")} style={actionButtonStyle}>
+            Upload Center
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate("/insurance")}
+            style={{
+              border: "none",
+              background: "#0f172a",
+              color: "#ffffff",
+              borderRadius: "12px",
+              padding: "12px 14px",
+              cursor: "pointer",
+              fontWeight: 700,
+              width: "auto",
+              minHeight: "44px",
+            }}
+          >
+            Open Insurance Workspace
+          </button>
+          <button type="button" onClick={() => onSignOut?.()} style={actionButtonStyle}>
+            Log Out
+          </button>
         </div>
-        {topPriority ? (
-          <div
-            style={{
-              display: "grid",
-              gap: "4px",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              background: topPriority.urgencyMeta.background,
-              border: topPriority.urgencyMeta.border,
-              minWidth: isCompact ? "100%" : "240px",
-              maxWidth: isCompact ? "100%" : "320px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: topPriority.urgencyMeta.accent,
-              }}
-            >
-              Priority: {topPriority.urgencyMeta.label}
-            </div>
-            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-              {topPriority.title}
-            </div>
-            <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-              {topPriority.impactLabel} | {topPriority.nextAction}
-            </div>
-          </div>
-        ) : null}
-        {topBlocker ? (
-          <div
-            style={{
-              display: "grid",
-              gap: "4px",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              background: topBlocker.urgencyMeta.background,
-              border: topBlocker.urgencyMeta.border,
-              minWidth: isCompact ? "100%" : "240px",
-              maxWidth: isCompact ? "100%" : "320px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: topBlocker.urgencyMeta.accent,
-              }}
-            >
-              Command: {topBlocker.urgencyMeta.badge}
-            </div>
-            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-              {topBlocker.title}
-            </div>
-            <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-              {topBlocker.staleLabel} | {topBlocker.nextAction}
-            </div>
-          </div>
-        ) : null}
-        {topHousingBlocker ? (
-          <div
-            style={{
-              display: "grid",
-              gap: "4px",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              background: topHousingBlocker.urgencyMeta.background,
-              border: topHousingBlocker.urgencyMeta.border,
-              minWidth: isCompact ? "100%" : "240px",
-              maxWidth: isCompact ? "100%" : "320px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: topHousingBlocker.urgencyMeta.accent,
-              }}
-            >
-              Housing: {topHousingBlocker.urgencyMeta.badge}
-            </div>
-            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-              {topHousingBlocker.title}
-            </div>
-            <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-              {topHousingBlocker.staleLabel} | {topHousingBlocker.nextAction}
-            </div>
-          </div>
-        ) : null}
-        {topEmergencyBlocker ? (
-          <div
-            style={{
-              display: "grid",
-              gap: "4px",
-              padding: "10px 12px",
-              borderRadius: "12px",
-              background: topEmergencyBlocker.urgencyMeta.background,
-              border: topEmergencyBlocker.urgencyMeta.border,
-              minWidth: isCompact ? "100%" : "240px",
-              maxWidth: isCompact ? "100%" : "320px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: topEmergencyBlocker.urgencyMeta.accent,
-              }}
-            >
-              Access: {topEmergencyBlocker.urgencyMeta.badge}
-            </div>
-            <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-              {topEmergencyBlocker.title}
-            </div>
-            <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-              {topEmergencyBlocker.staleLabel} | {topEmergencyBlocker.nextAction}
-            </div>
-          </div>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => onUpgrade?.()}
-          style={actionButtonStyle}
-        >
-          Upgrade
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate("/upload-center")}
-          style={actionButtonStyle}
-        >
-          Upload Center
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate("/insurance")}
-          style={{
-            border: "none",
-            background: "#0f172a",
-            color: "#ffffff",
-            borderRadius: "12px",
-            padding: "12px 14px",
-            cursor: "pointer",
-            fontWeight: 700,
-            width: isCompact ? "100%" : "auto",
-            minHeight: "44px",
-          }}
-        >
-          Open Insurance Workspace
-        </button>
-        <button
-          type="button"
-          onClick={() => onSignOut?.()}
-          style={actionButtonStyle}
-        >
-          Log Out
-        </button>
-      </div>
+      )}
+
       {import.meta.env.DEV ? (
         <div
           style={{
