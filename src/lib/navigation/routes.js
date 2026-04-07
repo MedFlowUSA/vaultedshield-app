@@ -14,6 +14,7 @@ export const ROUTES = {
   assetDetail: { path: "/assets/detail", title: "Asset Detail", section: "Assets", minimumTier: "free" },
   insuranceHub: { path: "/insurance", title: "Insurance Intelligence", section: "Assets", minimumTier: "free" },
   insurancePolicyCompare: { path: "/insurance/compare", title: "Policy Comparison", section: "Assets", minimumTier: "essential" },
+  insuranceIulConsole: { path: "/insurance/iul", title: "IUL Review Console", section: "Assets", minimumTier: "free" },
   insurancePolicyDetail: { path: "/insurance/:policyId", title: "Policy Detail", section: "Assets", minimumTier: "free" },
   homeownersHub: { path: "/insurance/homeowners", title: "Homeowners", section: "Assets", minimumTier: "essential" },
   homeownersDetail: { path: "/insurance/homeowners/detail", title: "Homeowners Detail", section: "Assets", minimumTier: "essential" },
@@ -110,9 +111,15 @@ export function getRouteByPath(pathname) {
     return ROUTES.insurancePolicyCompare;
   }
   if (
+    pathname.startsWith(ROUTES.insuranceIulConsole.path)
+  ) {
+    return ROUTES.insuranceIulConsole;
+  }
+  if (
     pathname.startsWith("/insurance/") &&
     pathname !== ROUTES.insuranceHub.path &&
     !pathname.startsWith(ROUTES.insurancePolicyCompare.path) &&
+    !pathname.startsWith(ROUTES.insuranceIulConsole.path) &&
     !pathname.startsWith(ROUTES.homeownersHub.path) &&
     !pathname.startsWith(ROUTES.autoInsuranceHub.path) &&
     !pathname.startsWith(ROUTES.healthInsuranceHub.path) &&

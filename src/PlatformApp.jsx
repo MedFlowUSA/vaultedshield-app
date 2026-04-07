@@ -194,9 +194,17 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
     );
   }
 
+  if (pathname.startsWith("/insurance/iul/")) {
+    const policyId = pathname.replace("/insurance/iul/", "");
+    if (policyId) {
+      return <PolicyDetailPage policyId={policyId} onNavigate={navigate} featureMode="iul_console" />;
+    }
+  }
+
   if (
     pathname.startsWith("/insurance/") &&
     !pathname.startsWith("/insurance/compare/") &&
+    !pathname.startsWith("/insurance/iul/") &&
     !pathname.startsWith("/insurance/homeowners") &&
     !pathname.startsWith("/insurance/auto") &&
     !pathname.startsWith("/insurance/health") &&

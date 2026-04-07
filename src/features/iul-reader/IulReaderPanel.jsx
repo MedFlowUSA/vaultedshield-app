@@ -108,6 +108,7 @@ export function IulReaderPanel({ reader, results }) {
   const prioritiesSectionRef = useRef(null);
   const unifiedLeversSectionRef = useRef(null);
   const performanceSectionRef = useRef(null);
+  const verdictSectionRef = useRef(null);
 
   function scrollToReaderSection(target) {
     const lookup = {
@@ -118,6 +119,7 @@ export function IulReaderPanel({ reader, results }) {
       strategy_mix: unifiedLeversSectionRef,
       next_action: prioritiesSectionRef,
       benchmarks: performanceSectionRef,
+      verdict: verdictSectionRef,
     };
 
     const ref = lookup[target];
@@ -144,10 +146,10 @@ export function IulReaderPanel({ reader, results }) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ maxWidth: "700px", minWidth: 0 }}>
-          <div style={{ fontSize: "12px", letterSpacing: "0.7px", color: "#475569" }}>LIFE POLICY READER</div>
-          <h2 style={{ margin: "8px 0 10px 0" }}>Start Here</h2>
+          <div style={{ fontSize: "12px", letterSpacing: "0.7px", color: "#1d4ed8", fontWeight: 800 }}>IUL REVIEW CONSOLE</div>
+          <h2 style={{ margin: "8px 0 10px 0" }}>Start with the verdict, then verify the why</h2>
           <p style={{ margin: 0, color: "#475569", lineHeight: "1.7" }}>
-            This reader separates confirmed facts from AI interpretation so product type, values, and concerns are easier to trust at first glance.
+            This review starts with one adjudicated policy read, then moves into pressure, illustration support, charges, funding, and evidence quality.
           </p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px", minWidth: 0, width: "100%", flex: "1 1 320px" }}>
@@ -166,7 +168,260 @@ export function IulReaderPanel({ reader, results }) {
         </div>
       </div>
 
+      <div
+        style={{
+          marginTop: "16px",
+          padding: "12px 14px",
+          borderRadius: "14px",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          display: "flex",
+          gap: "10px",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, minWidth: "fit-content" }}>
+          Review Flow
+        </div>
+        <div style={{ color: "#475569", lineHeight: "1.7", flex: "1 1 540px" }}>
+          Verdict first. Then pressure stack, review questions, illustration proof, chronology, and source-backed evidence.
+        </div>
+      </div>
+
       <div style={{ marginTop: "20px", display: "grid", gap: "18px", alignItems: "start" }}>
+        {reader.verdict ? (
+          <div
+            ref={verdictSectionRef}
+            style={{
+              background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(147, 197, 253, 0.28)",
+              borderRadius: "18px",
+              padding: "20px",
+              display: "grid",
+              gap: "16px",
+              minWidth: 0,
+              scrollMarginTop: "96px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ display: "grid", gap: "8px", maxWidth: "820px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Policy Verdict
+                </div>
+                <h3 style={{ margin: 0 }}>One adjudicated read before the deeper analytics</h3>
+                <div style={{ color: "#0f172a", lineHeight: "1.75", fontWeight: 700 }}>
+                  {reader.verdict.headline}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.75" }}>
+                  {reader.verdict.rationale}
+                </div>
+              </div>
+              <div
+                style={{
+                  minWidth: "180px",
+                  padding: "16px 18px",
+                  borderRadius: "16px",
+                  background: "#ffffff",
+                  border: "1px solid #dbeafe",
+                  display: "grid",
+                  gap: "6px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Current Verdict
+                </div>
+                <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{reader.verdict.verdict}</div>
+                <ReaderStatusBadge status={reader.verdict.verdict === "Healthy" ? "confirmed" : reader.verdict.verdict === "Watch Closely" ? "review" : "missing"}>
+                  Confidence {reader.verdict.confidenceLabel}
+                </ReaderStatusBadge>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+              <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#ffffff", border: "1px solid #dbeafe", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Primary Driver</div>
+                <div style={{ fontWeight: 700, color: "#0f172a", lineHeight: "1.6" }}>{reader.verdict.primaryDriver}</div>
+                <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>{reader.verdict.primaryDriverDetail}</div>
+              </div>
+              <div style={{ padding: "14px 16px", borderRadius: "16px", background: "#ffffff", border: "1px solid #dbeafe", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Missing Link</div>
+                <div style={{ fontWeight: 700, color: "#0f172a", lineHeight: "1.6" }}>{reader.verdict.missingLink}</div>
+                <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>The fastest next item that would sharpen or confirm this read.</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                Five Review Questions
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {reader.verdict.reviewQuestions.map((item) => (
+                  <div key={item.label} style={{ padding: "14px 16px", borderRadius: "16px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline", flexWrap: "wrap" }}>
+                      <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</div>
+                      <ReaderStatusBadge status={item.status === "good" ? "confirmed" : item.status === "risk" ? "missing" : "review"}>
+                        {item.status === "good" ? "Good" : item.status === "risk" ? "Pressure" : "Watch"}
+                      </ReaderStatusBadge>
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>{item.answer}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "18px",
+            padding: "20px",
+            display: "grid",
+            gap: "14px",
+            minWidth: 0,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                Illustration Vs Actual
+              </div>
+              <h3 style={{ margin: "8px 0 0 0" }}>Primary proof layer for whether the policy is keeping pace</h3>
+            </div>
+            <ReaderStatusBadge status={reader.projectionView.available ? "review" : "missing"}>
+              {reader.projectionView.available ? "Proof Available" : "Proof Still Limited"}
+            </ReaderStatusBadge>
+          </div>
+
+          <div style={{ color: "#475569", lineHeight: "1.7" }}>{reader.projectionView.narrative}</div>
+
+          {reader.projectionView.available ? (
+            <div style={{ display: "grid", gap: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "12px" }}>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fed7aa" }}>
+                  <div style={{ fontSize: "11px", color: "#9a3412", textTransform: "uppercase", letterSpacing: "0.08em" }}>Annual Review Support</div>
+                  <div style={{ marginTop: "8px", fontWeight: 700, color: "#7c2d12" }}>{reader.projectionView.annualReviewLabel}</div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fbff", border: "1px solid #dbeafe" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Chronology Quality</div>
+                  <div style={{ marginTop: "8px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.chronologyLabel}</div>
+                  <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6", fontSize: "13px" }}>{reader.projectionView.chronologyNote}</div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fbff", border: "1px solid #dbeafe" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Year Match</div>
+                  <div style={{ marginTop: "8px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.yearMatchLabel}</div>
+                </div>
+                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fbff", border: "1px solid #dbeafe" }}>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Statements Used</div>
+                  <div style={{ marginTop: "8px", fontWeight: 700, color: "#0f172a" }}>{reader.projectionView.statementCount}</div>
+                </div>
+              </div>
+
+              {reader.projectionView.currentMatch ? (
+                <div style={{ padding: "16px 18px", borderRadius: "16px", background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(255,255,255,1) 100%)", border: "1px solid #e2e8f0", display: "grid", gap: "12px" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Current Policy-Year Match</div>
+                    <div style={{ marginTop: "6px", fontWeight: 700, color: "#0f172a" }}>
+                      Actual year {reader.projectionView.currentMatch.actual_policy_year} vs illustration year {reader.projectionView.currentMatch.matched_policy_year}
+                    </div>
+                    <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6" }}>
+                      The primary checkpoint read is using {reader.projectionView.selectedMetricLabel.toLowerCase()}
+                      {reader.projectionView.policyYearGap !== null ? ` with a visible policy-year gap of ${reader.projectionView.policyYearGap}.` : "."}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                    <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>Projected Accumulation</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700 }}>{reader.projectionView.currentMatch.projected_accumulation_value || "Limited"}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>Actual Accumulation</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700 }}>{reader.projectionView.currentMatch.actual_accumulation_value || "Limited"}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>Accumulation Variance</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700 }}>{reader.projectionView.currentMatch.accumulation_variance_display || "Limited"}</div>
+                    </div>
+                    <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "12px" }}>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>CSV Variance</div>
+                      <div style={{ marginTop: "4px", fontWeight: 700 }}>{reader.projectionView.currentMatch.cash_surrender_variance_display || "Limited"}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
+                  A clean current policy-year match is not visible yet, so the illustration read remains more directional than definitive.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
+              No usable illustration ledger checkpoints were extracted yet. Upload the pages that show yearly illustrated values or the in-force ledger to strengthen this proof layer.
+            </div>
+          )}
+        </div>
+
+        {reader.evidenceLedger?.length > 0 ? (
+          <div
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "18px",
+              padding: "20px",
+              display: "grid",
+              gap: "14px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                Evidence Ledger
+              </div>
+              <h3 style={{ margin: 0 }}>Why the console is making each major read</h3>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                Each conclusion shows the visible support behind it, the confidence of that support, and the next missing dependency that would sharpen the read.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
+              {reader.evidenceLedger.map((item) => (
+                <div
+                  key={item.title}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "16px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline", flexWrap: "wrap" }}>
+                    <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.title}</div>
+                    <ReaderStatusBadge
+                      status={item.confidence === "High" ? "confirmed" : item.confidence === "Moderate" ? "review" : "missing"}
+                    >
+                      {item.confidence}
+                    </ReaderStatusBadge>
+                  </div>
+                  <div style={{ color: "#0f172a", lineHeight: "1.65", fontWeight: 600 }}>{item.conclusion}</div>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Source Type</div>
+                    <div style={{ color: "#475569", lineHeight: "1.6" }}>{item.sourceType}</div>
+                  </div>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Missing Dependency</div>
+                    <div style={{ color: "#475569", lineHeight: "1.6" }}>{item.missingDependency}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {reader.plainEnglishScorecard ? (
           <div
             style={{
@@ -327,6 +582,17 @@ export function IulReaderPanel({ reader, results }) {
                 <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "12px", color: "#64748b" }}>Chronology</div>
                   <div style={{ marginTop: "6px", fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>{reader.evidenceAudit.chronologyLabel}</div>
+                  <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6", fontSize: "13px" }}>
+                    {reader.evidenceAudit.chronologyStrength === "strong"
+                      ? "Multiple clean dated statements support a stronger direction-of-travel read."
+                      : reader.evidenceAudit.chronologyStrength === "usable"
+                        ? "The annual trail is usable, though still not especially deep."
+                        : reader.evidenceAudit.chronologyStrength === "irregular"
+                          ? "Duplicates or irregular spacing weaken continuity confidence."
+                          : reader.evidenceAudit.chronologyStrength === "thin"
+                            ? "Only one dated statement is visible so far."
+                            : "The dated statement trail is still too thin for stronger continuity trust."}
+                  </div>
                 </div>
                 <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                   <div style={{ fontSize: "12px", color: "#64748b" }}>Identity</div>
@@ -411,10 +677,28 @@ export function IulReaderPanel({ reader, results }) {
           ) : null}
 
           <div style={{ marginTop: "14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
+            {reader.verdict?.pressureStack?.length > 0 ? (
+              <div style={{ padding: "14px", borderRadius: "14px", background: "#ffffff", border: "1px solid #fed7aa" }}>
+                <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Pressure Stack</div>
+                <div style={{ display: "grid", gap: "10px", marginTop: "8px" }}>
+                  {reader.verdict.pressureStack.slice(0, 4).map((item) => (
+                    <div key={item.label} style={{ display: "grid", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", alignItems: "baseline" }}>
+                        <div style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</div>
+                        <ReaderStatusBadge status={item.severity === "low" ? "confirmed" : item.severity === "high" ? "missing" : "review"}>
+                          {item.severity}
+                        </ReaderStatusBadge>
+                      </div>
+                      <div style={{ color: "#7c2d12", fontSize: "13px", lineHeight: "1.6" }}>{item.explanation}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div style={{ padding: "14px", borderRadius: "14px", background: "#ffffff", border: "1px solid #fed7aa" }}>
               <div style={{ fontSize: "12px", color: "#1d4ed8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>Best Next Uploads</div>
               <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
-                {(reader.pressureSummary?.checklist?.length ? reader.pressureSummary.checklist : reader.nextSteps).slice(0, 3).map((step, index) => (
+                {(reader.verdict?.reviewOrder?.length ? reader.verdict.reviewOrder : reader.pressureSummary?.checklist?.length ? reader.pressureSummary.checklist : reader.nextSteps).slice(0, 4).map((step, index) => (
                   <div key={index} style={{ lineHeight: "1.6", color: "#0f172a" }}>{step}</div>
                 ))}
               </div>
@@ -515,7 +799,7 @@ export function IulReaderPanel({ reader, results }) {
 
           <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid #e2e8f0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
-              <h4 style={{ margin: 0 }}>Projected Vs Actual</h4>
+              <h4 style={{ margin: 0 }}>Detailed Projection Support</h4>
               <div style={{ fontSize: "12px", color: "#64748b" }}>Illustration checkpoints extracted from the baseline packet</div>
             </div>
             <p style={{ margin: "10px 0 14px 0", color: "#475569", lineHeight: "1.7" }}>{reader.projectionView.narrative}</p>

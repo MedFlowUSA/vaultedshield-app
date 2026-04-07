@@ -650,7 +650,7 @@ function ReportView({ title, subtitle, report, onPrint }) {
   );
 }
 
-export default function PolicyDetailPage({ policyId, onNavigate }) {
+export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "default" }) {
   const { isTablet } = useResponsiveLayout();
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
@@ -919,6 +919,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     [iulV2, lifePolicy, normalizedAnalytics, normalizedPolicy, statementTimeline]
   );
   const showUnifiedIulReader = ["iul", "ul"].includes(lifePolicy?.meta?.policyType);
+  const isIulConsoleMode = featureMode === "iul_console" && showUnifiedIulReader;
   const iulReader = useMemo(
     () =>
       showUnifiedIulReader
@@ -1207,16 +1208,20 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
 
   const pageHeader = (
     <PageHeader
-      eyebrow="In-Force Policy Intelligence"
-      title={snapshotTitle}
-      description={snapshotDescription}
+      eyebrow={isIulConsoleMode ? "Flagship IUL Review Console" : "In-Force Policy Intelligence"}
+      title={isIulConsoleMode ? `IUL Review Console${snapshotTitle ? `: ${snapshotTitle}` : ""}` : snapshotTitle}
+      description={
+        isIulConsoleMode
+          ? "VaultedShield’s standalone in-force IUL review experience. Start with the policy verdict, move into pressure drivers, and then verify the read through illustration support, charges, funding, and chronology."
+          : snapshotDescription
+      }
       actions={
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-            Back
+            {isIulConsoleMode ? "Back To Insurance" : "Back"}
           </button>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-            Compare
+            {isIulConsoleMode ? "Compare In Insurance Hub" : "Compare"}
           </button>
           <button
             type="button"
@@ -1229,7 +1234,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             Print Report
           </button>
           <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={actionButtonStyle(true)}>
-            Upload
+            {isIulConsoleMode ? "Upload Supporting Policy Files" : "Upload"}
           </button>
         </div>
       }
@@ -1265,6 +1270,29 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     <div>
       {pageHeader}
       <div style={{ display: "grid", gap: "20px" }}>
+          {isIulConsoleMode ? (
+            <section
+              style={{
+                display: "grid",
+                gap: "14px",
+                padding: "22px 24px",
+                borderRadius: "20px",
+                background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+                border: "1px solid rgba(147, 197, 253, 0.28)",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                Standalone Showcase
+              </div>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.2" }}>
+                The IUL Review Console is the centerpiece of the insurance experience.
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "980px" }}>
+                This workflow is designed to answer the highest-value review questions first: is the policy healthy, what is pressuring it, how trustworthy is the evidence, and what should be reviewed next before any conclusion is treated as settled.
+              </div>
+            </section>
+          ) : null}
+
           {showReviewReport ? (
             <ReportView
               title="Policy Review Report"
@@ -2620,3 +2648,4 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     </div>
   );
 }
+

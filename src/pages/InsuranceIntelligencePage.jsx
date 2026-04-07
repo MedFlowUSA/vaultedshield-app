@@ -236,6 +236,38 @@ function renderSignalCard({ label, value, detail }) {
   );
 }
 
+function isIulShowcasePolicy(policy) {
+  const normalizedType = String(
+    policy?.policy_type ||
+      policy?.policyType ||
+      policy?.policy_type_label ||
+      policy?.basicAnalysis?.policyType ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (["iul", "indexed_universal_life", "indexed universal life"].includes(normalizedType)) {
+    return true;
+  }
+
+  const displayText = [policy?.product, policy?.product_name, policy?.policy_type_label]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return displayText.includes("iul") || displayText.includes("indexed universal");
+}
+
+function getPolicyDetailRoute(policy) {
+  if (!policy?.policy_id) return "/insurance";
+  return isIulShowcasePolicy(policy) ? `/insurance/iul/${policy.policy_id}` : `/insurance/${policy.policy_id}`;
+}
+
+function getPolicyEntryLabel(policy) {
+  return isIulShowcasePolicy(policy) ? "Open IUL Review Console" : "Open Policy Detail";
+}
+
 function PortfolioReportView({ report, onPrint, isCompact = false }) {
   if (!report) return null;
 
@@ -618,8 +650,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         narrative:
           firstPolicy?.interpretation?.bottom_line_summary ||
           "VaultedShield can now surface baseline policy understanding, charge visibility, continuity support, and policy health. The next gain comes from adding statement history or a second policy for comparison.",
-        nextAction: firstPolicy?.policy_id ? "Open Policy Detail" : "Upload Another Policy",
-        route: firstPolicy?.policy_id ? `/insurance/${firstPolicy.policy_id}` : "/insurance/life/upload",
+        nextAction: firstPolicy?.policy_id ? getPolicyEntryLabel(firstPolicy) : "Upload Another Policy",
+        route: firstPolicy?.policy_id ? getPolicyDetailRoute(firstPolicy) : "/insurance/life/upload",
       };
     }
 
@@ -630,8 +662,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       narrative:
         topPriority?.reviewReason ||
         "The portfolio is strongest where statement freshness, charge visibility, and policy identity are complete, and weakest where evidence is still partial.",
-      nextAction: topPriority ? "Review Top Policy" : "Upload Another Policy",
-      route: topPriority?.policy_id ? `/insurance/${topPriority.policy_id}` : "/insurance/life/upload",
+      nextAction: topPriority ? getPolicyEntryLabel(topPriority) : "Upload Another Policy",
+      route: topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload",
     };
   }, [portfolioBrief, rankedPolicies]);
   const firstPolicy = rankedPolicies[0] || null;
@@ -717,6 +749,10 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       };
     });
   }, [rankedPolicies]);
+  const iulShowcasePolicy = useMemo(
+    () => rankedPolicies.find((policy) => isIulShowcasePolicy(policy)) || null,
+    [rankedPolicies]
+  );
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "22px 20px" : "26px 28px";
   const sectionRadius = isMobile ? "20px" : "24px";
   const briefColumns = isTablet ? "1fr" : "1.15fr 0.85fr";
@@ -999,6 +1035,76 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
       {showPortfolioReport ? (
         <PortfolioReportView report={portfolioReport} onPrint={handlePrintPortfolioReport} isCompact={isTablet} />
+      ) : null}
+
+      {iulShowcasePolicy ? (
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.05fr) minmax(300px, 0.95fr)",
+            gap: "18px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
+            background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
+            border: "1px solid rgba(147, 197, 253, 0.28)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+            <div style={{ fontSize: "12px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+              Flagship Insurance Feature
+            </div>
+            <div style={{ fontSize: isMobile ? "24px" : "30px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a", lineHeight: "1.1" }}>
+              IUL Review Console
+            </div>
+            <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>
+              VaultedShield’s strongest insurance experience is the in-force IUL review console: a single policy workspace built to judge health, surface drag, compare illustration versus actual, and show what to review next.
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "860px" }}>
+              The current standout file is {iulShowcasePolicy.product || "this IUL policy"}, where the reader can move from policy verdict to pressure stack to illustration proof without making the reviewer assemble the story manually.
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => iulShowcasePolicy.policy_id && onNavigate?.(`/insurance/iul/${iulShowcasePolicy.policy_id}`)}
+                style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
+              >
+                Open IUL Review Console
+              </button>
+              <button
+                type="button"
+                onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+              >
+                See Portfolio Context
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "12px",
+              alignContent: "start",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ padding: "16px 18px", borderRadius: "18px", background: "#ffffff", border: "1px solid rgba(147, 197, 253, 0.28)", display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Showcase Policy</div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{iulShowcasePolicy.product || "IUL Policy"}</div>
+              <div style={{ color: "#475569", lineHeight: "1.65" }}>{iulShowcasePolicy.carrier || "Carrier still forming"}</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+              <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#ffffff", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Policy Health</div>
+                <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{iulShowcasePolicy.ranking?.status || "Developing"}</div>
+              </div>
+              <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#ffffff", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Latest Statement</div>
+                <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{formatDateValue(iulShowcasePolicy.latest_statement_date)}</div>
+              </div>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       <section
@@ -1312,7 +1418,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 <button
                   key={policy.policy_id || policy.product}
                   type="button"
-                  onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                  onClick={() => policy.policy_id && onNavigate?.(getPolicyDetailRoute(policy))}
                   style={{
                     padding: "16px 18px",
                     borderRadius: "16px",
@@ -1380,7 +1486,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                     <div style={{ display: "grid", gap: "4px", minWidth: 0, flex: "1 1 300px" }}>
                       <button
                         type="button"
-                        onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                        onClick={() => policy.policy_id && onNavigate?.(getPolicyDetailRoute(policy))}
                         style={{
                           padding: 0,
                           border: "none",
@@ -1434,10 +1540,10 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                       </div>
                       <button
                         type="button"
-                        onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                        onClick={() => policy.policy_id && onNavigate?.(getPolicyDetailRoute(policy))}
                         style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
                       >
-                        Open Policy
+                        {getPolicyEntryLabel(policy)}
                       </button>
                       <button
                         onClick={() =>
@@ -1573,7 +1679,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                                 onNavigate?.(
                                   item.id === "compare-stronger"
                                     ? `/insurance/compare/${policy.policy_id}`
-                                    : `/insurance/${policy.policy_id}`
+                                    : getPolicyDetailRoute(policy)
                                 )
                               }
                               style={{
@@ -1662,7 +1768,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 <div style={{ display: "grid", gap: "6px" }}>
                   <button
                     type="button"
-                    onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                    onClick={() => policy.policy_id && onNavigate?.(getPolicyDetailRoute(policy))}
                     style={{
                       padding: 0,
                       border: "none",
@@ -1726,7 +1832,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                   <td style={{ padding: "14px 0", fontWeight: 600 }}>
                     <button
                       type="button"
-                      onClick={() => policy.policy_id && onNavigate?.(`/insurance/${policy.policy_id}`)}
+                      onClick={() => policy.policy_id && onNavigate?.(getPolicyDetailRoute(policy))}
                       style={{
                         padding: 0,
                         border: "none",

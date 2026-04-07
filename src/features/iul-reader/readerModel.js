@@ -1,3 +1,5 @@
+import { buildIulPolicyVerdict } from "./buildIulPolicyVerdict.js";
+
 function getConfidence(value) {
   if (value && typeof value === "object" && value.confidence) {
     return value.confidence.charAt(0).toUpperCase() + value.confidence.slice(1);
@@ -480,6 +482,17 @@ function buildEvidenceAudit(results, sections, warnings) {
         ? "The current packet is usable, but some conclusions still depend on partial charge, chronology, or strategy support."
         : "The current packet is still provisional, so the reader should be treated as a guided review rather than a final judgment.";
 
+  const chronologyStrength =
+    parsedDates.length >= 3 && chronologyAligned && duplicateStatementDates === 0 && irregularGapCount === 0
+      ? "strong"
+      : parsedDates.length >= 2 && duplicateStatementDates === 0 && irregularGapCount === 0
+        ? "usable"
+        : parsedDates.length >= 2
+          ? "irregular"
+          : parsedDates.length === 1
+            ? "thin"
+            : "insufficient";
+
   return {
     evidenceScore,
     overallStatus,
@@ -487,17 +500,23 @@ function buildEvidenceAudit(results, sections, warnings) {
     reviewCount,
     missingCount,
     statementCount: statementResults.length,
-    chronologyStatus: parsedDates.length >= 2 ? (chronologyAligned ? "aligned" : "mixed") : "limited",
+    chronologyStatus:
+      chronologyStrength === "strong" || chronologyStrength === "usable"
+        ? "aligned"
+        : chronologyStrength === "irregular"
+          ? "mixed"
+          : "limited",
     chronologyLabel:
-      parsedDates.length >= 2
-        ? duplicateStatementDates > 0
-          ? "Chronology duplicated"
-          : irregularGapCount > 0
-            ? "Chronology irregular"
-            : chronologyAligned
-              ? "Chronology aligned"
-              : "Chronology mixed"
-        : "Chronology limited",
+      chronologyStrength === "strong"
+        ? "Strong annual trail"
+        : chronologyStrength === "usable"
+          ? "Usable annual trail"
+          : chronologyStrength === "irregular"
+            ? "Irregular statement trail"
+            : chronologyStrength === "thin"
+              ? "Thin statement trail"
+              : "Insufficient statement trail",
+    chronologyStrength,
     identityStatus: identityWarnings.length > 0 ? "review" : "clear",
     identityLabel: identityWarnings.length > 0 ? "Identity mismatches" : "Identity aligned",
     duplicateStatementDates,
@@ -505,6 +524,88 @@ function buildEvidenceAudit(results, sections, warnings) {
     headline,
     notes: notes.slice(0, 6),
   };
+}
+
+function buildEvidenceLedger(results, evidenceAudit, projectionView, verdict) {
+  const iulV2 = results.iulV2 || {};
+  const illustration = iulV2.illustrationComparison || {};
+  const charge = iulV2.chargeAnalysis || {};
+  const funding = iulV2.fundingAnalysis || {};
+  const risk = iulV2.riskAnalysis || {};
+  const strategy = iulV2.strategyAnalysis || {};
+  const normalizedAnalytics = results.normalizedAnalytics || {};
+  const chargeSummary = normalizedAnalytics.charge_summary || {};
+  const performanceSummary = normalizedAnalytics.performance_summary || {};
+
+  const ledger = [
+    {
+      title: "Policy Verdict",
+      conclusion: verdict?.verdict || "Watch Closely",
+      sourceType: evidenceAudit?.statementCount > 0 ? "Latest statement plus baseline packet" : "Baseline packet only",
+      confidence: verdict?.confidenceLabel || "Developing",
+      missingDependency: verdict?.missingLink || "A stronger statement trail would sharpen this read.",
+    },
+    {
+      title: "Illustration Pace",
+      conclusion:
+        illustration.shortExplanation ||
+        illustration.explanation ||
+        projectionView?.narrative ||
+        "Illustration pace is still only partly supported.",
+      sourceType: projectionView?.available ? "Illustration ledger and statement chronology" : "Illustration support still limited",
+      confidence: projectionView?.annualReviewStatus === "confirmed" ? "High" : projectionView?.available ? "Moderate" : "Developing",
+      missingDependency:
+        projectionView?.yearMatchNote ||
+        "Upload the original illustration pages with yearly values or a stronger in-force ledger.",
+    },
+    {
+      title: "Charge Drag",
+      conclusion: charge.explanation || "Charge drag is still developing from the visible packet.",
+      sourceType:
+        chargeSummary.total_visible_policy_charges !== null && chargeSummary.total_visible_policy_charges !== undefined
+          ? "Charge extraction and statement activity"
+          : "Partial charge extraction",
+      confidence:
+        chargeSummary.coi_confidence === "strong"
+          ? "High"
+          : chargeSummary.coi_confidence === "moderate"
+            ? "Moderate"
+            : "Developing",
+      missingDependency:
+        chargeSummary.coi_confidence === "strong"
+          ? "A longer statement trail would sharpen drag over time."
+          : "Upload statement pages with monthly activity, COI, and visible policy charges.",
+    },
+    {
+      title: "Funding Pace",
+      conclusion: funding.explanation || "Funding pace is still only partly visible from the current packet.",
+      sourceType: funding.targetPremium ? "Target premium and visible payment support" : "Visible premium references only",
+      confidence:
+        funding.status === "sufficient" || funding.status === "underfunded"
+          ? "Moderate"
+          : "Developing",
+      missingDependency: "Upload clearer premium history or target-premium pages to confirm funding consistency.",
+    },
+    {
+      title: "Loan And Lapse Pressure",
+      conclusion: risk.explanation || "Loan and lapse pressure are still developing.",
+      sourceType:
+        performanceSummary.latest_statement_date
+          ? "Latest statement values and loan support"
+          : "Limited live statement support",
+      confidence: risk.overallRisk === "low" || risk.overallRisk === "moderate" || risk.overallRisk === "high" ? "Moderate" : "Developing",
+      missingDependency: "A fuller review would benefit from additional statement history and cleaner loan support.",
+    },
+    {
+      title: "Strategy Visibility",
+      conclusion: strategy.explanation || "Strategy visibility is still partly limited.",
+      sourceType: strategy.strategiesVisible ? "Allocation and indexed-account pages" : "Limited strategy support",
+      confidence: strategy.strategiesVisible ? "Moderate" : "Developing",
+      missingDependency: "Upload allocation, segment, or indexed-account detail pages to improve strategy confidence.",
+    },
+  ];
+
+  return ledger.filter((item) => item.conclusion || item.missingDependency);
 }
 
 function buildPolicyPressureSummary(results, evidenceAudit) {
@@ -863,6 +964,17 @@ function buildProjectionView(results) {
         ? "missing"
         : "review";
 
+  const chronologyStrength =
+    chronologyStatus === "aligned" && statementCount >= 3 && duplicateCount === 0 && irregularGapCount === 0
+      ? "strong"
+      : chronologyStatus === "aligned" && statementCount >= 2
+        ? "usable"
+        : chronologyStatus === "mixed"
+          ? "irregular"
+          : statementCount === 1
+            ? "thin"
+            : "insufficient";
+
   const annualReviewLabel =
     annualReviewStatus === "confirmed"
       ? "Annual review support is clean"
@@ -871,11 +983,15 @@ function buildProjectionView(results) {
         : "Annual review support needs cleanup";
 
   const chronologyLabel =
-    chronologyStatus === "aligned"
-      ? "Chronology aligned"
-      : chronologyStatus === "mixed"
-        ? "Chronology mixed"
-        : "Chronology limited";
+    chronologyStrength === "strong"
+      ? "Strong annual trail"
+      : chronologyStrength === "usable"
+        ? "Usable annual trail"
+        : chronologyStrength === "irregular"
+          ? "Irregular statement trail"
+          : chronologyStrength === "thin"
+            ? "Thin statement trail"
+            : "Insufficient statement trail";
 
   const yearMatchLabel =
     alignmentConfidence === "high"
@@ -895,11 +1011,15 @@ function buildProjectionView(results) {
 
   const chronologyNote =
     chronology?.note ||
-    (chronologyStatus === "mixed"
-      ? "Visible statement timing is irregular or duplicated, which weakens year-over-year comparison confidence."
-      : chronologyStatus === "aligned"
-        ? "Visible statements appear reasonably clean for year-over-year review."
-        : "There are not enough dated statements yet for a stronger annual comparison read.");
+    (chronologyStrength === "strong"
+      ? "Visible statements appear clean and sequential enough to support a stronger year-over-year read."
+      : chronologyStrength === "usable"
+        ? "Visible statements are usable for annual comparison, but the trail is still not especially deep."
+        : chronologyStrength === "irregular"
+          ? "Visible statement timing is irregular or duplicated, which weakens year-over-year comparison confidence."
+          : chronologyStrength === "thin"
+            ? "Only one dated statement is visible, so the current read is more current-state than direction-of-travel."
+            : "There are not enough dated statements yet for a stronger annual comparison read.");
 
   const annualReviewChecklist = [];
   const reviewRecommendations = Array.isArray(illustrationComparison.reviewRecommendations)
@@ -935,6 +1055,7 @@ function buildProjectionView(results) {
       "Projection support is limited because extracted illustration ledger checkpoints were not available.",
     limitations: projection.limitations || [],
     chronologyStatus,
+    chronologyStrength,
     chronologyLabel,
     chronologyNote,
     annualReviewStatus,
@@ -1303,6 +1424,14 @@ export function buildIulReaderModel(results) {
   ].filter((table) => table.rows.length > 0);
 
   const plainEnglishScorecard = buildIulAtAGlance(results, evidenceAudit, pressureSummary);
+  const verdict = buildIulPolicyVerdict({
+    results,
+    evidenceAudit,
+    pressureSummary,
+    policyInterpretation,
+    nextSteps,
+  });
+  const evidenceLedger = buildEvidenceLedger(results, evidenceAudit, projectionView, verdict);
 
   return {
     sections,
@@ -1315,6 +1444,8 @@ export function buildIulReaderModel(results) {
     benchmarks: benchmarkView.benchmarks,
     laymanSummary: benchmarkView.laymanSummary,
     plainEnglishScorecard,
+    verdict,
+    evidenceLedger,
     projectionSummary: benchmarkView.projectionSummary,
     projectionView,
     classification,
