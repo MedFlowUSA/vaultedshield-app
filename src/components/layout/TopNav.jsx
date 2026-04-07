@@ -47,7 +47,8 @@ function CompactSummaryCard({ label, value, accent = false }) {
         style={{
           fontSize: "12px",
           color: accent ? "#475569" : "#0f172a",
-          fontWeight: 700,
+                    fontWeight: 700,
+          lineHeight: "1.4",
           overflowWrap: "anywhere",
         }}
       >
@@ -290,7 +291,7 @@ export default function TopNav({
     topBlocker?.nextAction ||
     topHousingBlocker?.nextAction ||
     topEmergencyBlocker?.nextAction ||
-    `${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`;
+    `${householdScorecard.overallScore ?? "--"} - ${householdScorecard.overallStatus}`;
   const actionButtonStyle = {
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -402,7 +403,7 @@ export default function TopNav({
             <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
             <CompactSummaryCard
               label="Household Score"
-              value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
+              value={`${householdScorecard.overallScore ?? "--"} - ${householdScorecard.overallStatus}`}
             />
           </div>
 
@@ -525,3 +526,4 @@ export default function TopNav({
     </div>
   );
 }
+
