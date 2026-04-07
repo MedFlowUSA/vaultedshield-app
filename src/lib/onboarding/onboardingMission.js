@@ -48,6 +48,9 @@ export function buildHouseholdOnboardingMission({
   const explanation = nextStep
     ? nextStep.hint || "Finish the next setup step to unlock a more useful household read."
     : "VaultedShield has enough foundation data to shift from setup into ongoing household review.";
+  const unlockPreview = preview.length > 0
+    ? preview.join(" ")
+    : "Add a few core household records and VaultedShield will start replacing setup guidance with stronger live review signals.";
 
   const urgency = nextStep
     ? progressPercent === 0
@@ -71,5 +74,6 @@ export function buildHouseholdOnboardingMission({
         }
       : null,
     preview,
+    unlockPreview,
   };
 }

@@ -506,7 +506,6 @@ export function buildPropertyHubCommand(properties = []) {
 }
 
 export function buildRetirementCommandCenter({
-  retirementAccount = null,
   retirementRead = null,
   retirementDocuments = [],
   retirementSnapshots = [],
@@ -804,7 +803,6 @@ export function buildRetirementHubCommand({
 }
 
 export function buildMortgageCommandCenter({
-  mortgageLoan = null,
   mortgageReview = null,
   mortgageDocuments = [],
   mortgageSnapshots = [],
@@ -1367,6 +1365,601 @@ export function buildHomeownersHubCommand({
       total: safePolicies.length,
       active: safePolicies.filter((policy) => String(policy?.policy_status || "").toLowerCase() === "active").length,
       attention: rows.length,
+    },
+  };
+}
+
+export function buildAutoCommandCenter({
+  autoPolicy = null,
+  autoDocuments = [],
+  autoSnapshots = [],
+  autoAnalytics = [],
+  assetBundle = null,
+} = {}) {
+  const blockers = [];
+  const documents = Array.isArray(autoDocuments) ? autoDocuments : [];
+  const snapshots = Array.isArray(autoSnapshots) ? autoSnapshots : [];
+  const analytics = Array.isArray(autoAnalytics) ? autoAnalytics : [];
+  const portalLinks = Array.isArray(assetBundle?.portalLinks) ? assetBundle.portalLinks : [];
+  const missingRecoveryCount = Number(assetBundle?.portalContinuity?.missingRecoveryCount || 0);
+  const assetAlerts = Array.isArray(assetBundle?.alerts) ? assetBundle.alerts : [];
+  const assetTasks = Array.isArray(assetBundle?.tasks) ? assetBundle.tasks : [];
+  const expirationDate = autoPolicy?.expiration_date || null;
+  const daysToExpiration = (() => {
+    if (!expirationDate) return null;
+    const parsed = new Date(expirationDate);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return Math.ceil((parsed.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  })();
+
+  if (documents.length === 0) {
+    blockers.push({
+      id: "auto-no-documents",
+      title: "No auto coverage evidence",
+      blocker: "No declarations, ID-card references, or auto documents are attached to this policy yet.",
+      consequence: "Coverage review stays weak without source evidence for renewal, drivers, and vehicle support.",
+      nextAction: "Upload auto documents",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: null,
+      staleLabel: "No evidence yet",
+    });
+  }
+
+  if (!autoPolicy?.carrier_key) {
+    blockers.push({
+      id: "auto-carrier-unconfirmed",
+      title: "Carrier identity is limited",
+      blocker: "The carrier is not clearly confirmed on this auto policy record.",
+      consequence: "Claims, renewal, and access continuity become weaker when carrier identity is uncertain.",
+      nextAction: "Confirm carrier details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Carrier gap",
+    });
+  }
+
+  if (!autoPolicy?.named_insured) {
+    blockers.push({
+      id: "auto-named-insured-missing",
+      title: "Named insured is missing",
+      blocker: "Named insured visibility is incomplete on this auto policy record.",
+      consequence: "Coverage ownership and household handoff confidence remain weaker until the insured party is explicit.",
+      nextAction: "Add named insured",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Ownership gap",
+    });
+  }
+
+  if (daysToExpiration !== null && daysToExpiration < 0) {
+    blockers.push({
+      id: "auto-expired",
+      title: "Policy appears expired",
+      blocker: "The auto policy expiration date is already past.",
+      consequence: "Coverage continuity may already be broken for one or more drivers or vehicles.",
+      nextAction: "Review policy status immediately",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: Math.abs(daysToExpiration),
+      staleLabel: `Expired ${Math.abs(daysToExpiration)} day${Math.abs(daysToExpiration) === 1 ? "" : "s"} ago`,
+    });
+  } else if (daysToExpiration !== null && daysToExpiration <= 45) {
+    blockers.push({
+      id: "auto-renewal-soon",
+      title: "Renewal pressure is near",
+      blocker: `This auto policy expires in ${daysToExpiration} day${daysToExpiration === 1 ? "" : "s"}.`,
+      consequence: "If renewal timing slips, vehicle protection continuity can weaken quickly.",
+      nextAction: "Review renewal status",
+      urgency: daysToExpiration <= 14 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(daysToExpiration <= 14 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: `Renews in ${daysToExpiration} day${daysToExpiration === 1 ? "" : "s"}`,
+    });
+  }
+
+  if (snapshots.length === 0 && documents.length > 0) {
+    blockers.push({
+      id: "auto-no-snapshots",
+      title: "Policy detail is still shallow",
+      blocker: "Documents exist, but no normalized auto snapshot is visible yet.",
+      consequence: "Vehicle, liability, and completeness review remain shallow until policy detail is normalized.",
+      nextAction: "Review auto intake",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Needs normalization",
+    });
+  }
+
+  if (portalLinks.length === 0) {
+    blockers.push({
+      id: "auto-no-portal-link",
+      title: "Carrier access continuity not mapped",
+      blocker: "No carrier portal continuity record is linked yet.",
+      consequence: "Claims and renewal access recovery remain weaker for this policy.",
+      nextAction: "Link carrier portal",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Access gap",
+    });
+  } else if (missingRecoveryCount > 0) {
+    blockers.push({
+      id: "auto-recovery-gap",
+      title: "Recovery guidance incomplete",
+      blocker: `${missingRecoveryCount} linked portal${missingRecoveryCount === 1 ? "" : "s"} still miss recovery hints.`,
+      consequence: "Carrier access continuity is still incomplete if claim or renewal access is needed quickly.",
+      nextAction: "Add portal recovery hints",
+      urgency: missingRecoveryCount >= 2 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(missingRecoveryCount >= 2 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: "Continuity gap",
+    });
+  }
+
+  const overdueTask = assetTasks.find((task) => {
+    const due = toTimestamp(task?.due_date);
+    return due !== null && due < Date.now();
+  });
+  if (overdueTask) {
+    const daysStalled = getDaysStalled(overdueTask.due_date || overdueTask.updated_at || overdueTask.created_at || null);
+    blockers.push({
+      id: `auto-overdue-task-${overdueTask.id}`,
+      title: "Auto follow-up is overdue",
+      blocker: overdueTask.title || overdueTask.description || "An auto-linked task is overdue.",
+      consequence: "Coverage cleanup can quietly slip if follow-up stays unresolved.",
+      nextAction: "Resolve overdue task",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: `Overdue since ${formatDaysStalled(daysStalled)}`,
+    });
+  }
+
+  const urgentAlert = assetAlerts.find((alert) => alert?.severity === "urgent");
+  if (urgentAlert) {
+    const daysStalled = getDaysStalled(urgentAlert.updated_at || urgentAlert.created_at || null);
+    blockers.push({
+      id: `auto-urgent-alert-${urgentAlert.id}`,
+      title: "Urgent auto alert",
+      blocker: urgentAlert.title || urgentAlert.description || "An auto-linked alert needs attention.",
+      consequence: "This policy should not be treated as stable until the alert is reviewed.",
+      nextAction: "Review urgent alert",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: formatDaysStalled(daysStalled),
+    });
+  }
+
+  const sorted = blockers.sort((left, right) => {
+    const urgencyOrder = { critical: 3, warning: 2, ready: 1 };
+    const urgencyDelta = (urgencyOrder[right.urgency] || 0) - (urgencyOrder[left.urgency] || 0);
+    if (urgencyDelta !== 0) return urgencyDelta;
+    return (right.daysStalled || 0) - (left.daysStalled || 0);
+  });
+
+  return {
+    headline:
+      sorted.length > 0
+        ? `${sorted.filter((item) => item.urgency === "critical").length > 0 ? "Critical" : "Active"} auto command items are visible.`
+        : "This auto policy currently looks operationally steady.",
+    blockers: sorted.slice(0, 5),
+    metrics: {
+      critical: sorted.filter((item) => item.urgency === "critical").length,
+      warning: sorted.filter((item) => item.urgency === "warning").length,
+      documents: documents.length,
+      snapshots: snapshots.length,
+      analytics: analytics.length,
+    },
+  };
+}
+
+export function buildHealthCommandCenter({
+  healthPlan = null,
+  healthDocuments = [],
+  healthSnapshots = [],
+  healthAnalytics = [],
+  assetBundle = null,
+} = {}) {
+  const blockers = [];
+  const documents = Array.isArray(healthDocuments) ? healthDocuments : [];
+  const snapshots = Array.isArray(healthSnapshots) ? healthSnapshots : [];
+  const analytics = Array.isArray(healthAnalytics) ? healthAnalytics : [];
+  const portalLinks = Array.isArray(assetBundle?.portalLinks) ? assetBundle.portalLinks : [];
+  const missingRecoveryCount = Number(assetBundle?.portalContinuity?.missingRecoveryCount || 0);
+  const assetAlerts = Array.isArray(assetBundle?.alerts) ? assetBundle.alerts : [];
+  const assetTasks = Array.isArray(assetBundle?.tasks) ? assetBundle.tasks : [];
+  const renewalDate = healthPlan?.renewal_date || null;
+  const daysToRenewal = (() => {
+    if (!renewalDate) return null;
+    const parsed = new Date(renewalDate);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return Math.ceil((parsed.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  })();
+
+  if (documents.length === 0) {
+    blockers.push({
+      id: "health-no-documents",
+      title: "No health coverage evidence",
+      blocker: "No summaries of benefits, ID-card references, or health documents are attached to this plan yet.",
+      consequence: "Coverage review stays weak without source evidence for eligibility, renewal, and care access support.",
+      nextAction: "Upload health documents",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: null,
+      staleLabel: "No evidence yet",
+    });
+  }
+
+  if (!healthPlan?.carrier_key) {
+    blockers.push({
+      id: "health-carrier-unconfirmed",
+      title: "Carrier identity is limited",
+      blocker: "The carrier is not clearly confirmed on this health plan record.",
+      consequence: "Claims, renewal, and support continuity become weaker when carrier identity is uncertain.",
+      nextAction: "Confirm carrier details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Carrier gap",
+    });
+  }
+
+  if (!healthPlan?.subscriber_name) {
+    blockers.push({
+      id: "health-subscriber-missing",
+      title: "Subscriber visibility is missing",
+      blocker: "The subscriber name is incomplete on this health plan record.",
+      consequence: "Coverage ownership and household handoff confidence remain weaker until the subscriber is explicit.",
+      nextAction: "Add subscriber details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Subscriber gap",
+    });
+  }
+
+  if (!healthPlan?.employer_group_name && String(healthPlan?.health_plan_type_key || "").includes("employer")) {
+    blockers.push({
+      id: "health-employer-group-missing",
+      title: "Employer group context is missing",
+      blocker: "This employer-linked health plan does not clearly show the group or employer name.",
+      consequence: "Eligibility handoff and renewal follow-up stay weaker without group context.",
+      nextAction: "Add employer group details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Group gap",
+    });
+  }
+
+  if (daysToRenewal !== null && daysToRenewal < 0) {
+    blockers.push({
+      id: "health-renewal-passed",
+      title: "Renewal date has passed",
+      blocker: "The recorded renewal date is already past for this health plan.",
+      consequence: "Coverage continuity or renewal support may already be out of date for current care access.",
+      nextAction: "Review plan status immediately",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: Math.abs(daysToRenewal),
+      staleLabel: `Renewal passed ${Math.abs(daysToRenewal)} day${Math.abs(daysToRenewal) === 1 ? "" : "s"} ago`,
+    });
+  } else if (daysToRenewal !== null && daysToRenewal <= 45) {
+    blockers.push({
+      id: "health-renewal-soon",
+      title: "Renewal pressure is near",
+      blocker: `This health plan renews in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}.`,
+      consequence: "If renewal timing slips, care access and coverage continuity can weaken quickly.",
+      nextAction: "Review renewal status",
+      urgency: daysToRenewal <= 14 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(daysToRenewal <= 14 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: `Renews in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}`,
+    });
+  }
+
+  if (snapshots.length === 0 && documents.length > 0) {
+    blockers.push({
+      id: "health-no-snapshots",
+      title: "Plan detail is still shallow",
+      blocker: "Documents exist, but no normalized health snapshot is visible yet.",
+      consequence: "Eligibility, deductible, and completeness review remain shallow until plan detail is normalized.",
+      nextAction: "Review health intake",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Needs normalization",
+    });
+  }
+
+  if (portalLinks.length === 0) {
+    blockers.push({
+      id: "health-no-portal-link",
+      title: "Carrier access continuity not mapped",
+      blocker: "No carrier portal continuity record is linked yet.",
+      consequence: "Claims, benefits review, and renewal access recovery remain weaker for this plan.",
+      nextAction: "Link carrier portal",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Access gap",
+    });
+  } else if (missingRecoveryCount > 0) {
+    blockers.push({
+      id: "health-recovery-gap",
+      title: "Recovery guidance incomplete",
+      blocker: `${missingRecoveryCount} linked portal${missingRecoveryCount === 1 ? "" : "s"} still miss recovery hints.`,
+      consequence: "Carrier access continuity is still incomplete if benefits or claim access is needed quickly.",
+      nextAction: "Add portal recovery hints",
+      urgency: missingRecoveryCount >= 2 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(missingRecoveryCount >= 2 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: "Continuity gap",
+    });
+  }
+
+  const overdueTask = assetTasks.find((task) => {
+    const due = toTimestamp(task?.due_date);
+    return due !== null && due < Date.now();
+  });
+  if (overdueTask) {
+    const daysStalled = getDaysStalled(overdueTask.due_date || overdueTask.updated_at || overdueTask.created_at || null);
+    blockers.push({
+      id: `health-overdue-task-${overdueTask.id}`,
+      title: "Health follow-up is overdue",
+      blocker: overdueTask.title || overdueTask.description || "A health-linked task is overdue.",
+      consequence: "Coverage cleanup can quietly slip if follow-up stays unresolved.",
+      nextAction: "Resolve overdue task",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: `Overdue since ${formatDaysStalled(daysStalled)}`,
+    });
+  }
+
+  const urgentAlert = assetAlerts.find((alert) => alert?.severity === "urgent");
+  if (urgentAlert) {
+    const daysStalled = getDaysStalled(urgentAlert.updated_at || urgentAlert.created_at || null);
+    blockers.push({
+      id: `health-urgent-alert-${urgentAlert.id}`,
+      title: "Urgent health alert",
+      blocker: urgentAlert.title || urgentAlert.description || "A health-linked alert needs attention.",
+      consequence: "This plan should not be treated as stable until the alert is reviewed.",
+      nextAction: "Review urgent alert",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: formatDaysStalled(daysStalled),
+    });
+  }
+
+  const sorted = blockers.sort((left, right) => {
+    const urgencyOrder = { critical: 3, warning: 2, ready: 1 };
+    const urgencyDelta = (urgencyOrder[right.urgency] || 0) - (urgencyOrder[left.urgency] || 0);
+    if (urgencyDelta !== 0) return urgencyDelta;
+    return (right.daysStalled || 0) - (left.daysStalled || 0);
+  });
+
+  return {
+    headline:
+      sorted.length > 0
+        ? `${sorted.filter((item) => item.urgency === "critical").length > 0 ? "Critical" : "Active"} health command items are visible.`
+        : "This health plan currently looks operationally steady.",
+    blockers: sorted.slice(0, 5),
+    metrics: {
+      critical: sorted.filter((item) => item.urgency === "critical").length,
+      warning: sorted.filter((item) => item.urgency === "warning").length,
+      documents: documents.length,
+      snapshots: snapshots.length,
+      analytics: analytics.length,
+    },
+  };
+}
+
+export function buildWarrantyCommandCenter({
+  warranty = null,
+  warrantyDocuments = [],
+  warrantySnapshots = [],
+  warrantyAnalytics = [],
+  assetBundle = null,
+} = {}) {
+  const blockers = [];
+  const documents = Array.isArray(warrantyDocuments) ? warrantyDocuments : [];
+  const snapshots = Array.isArray(warrantySnapshots) ? warrantySnapshots : [];
+  const analytics = Array.isArray(warrantyAnalytics) ? warrantyAnalytics : [];
+  const portalLinks = Array.isArray(assetBundle?.portalLinks) ? assetBundle.portalLinks : [];
+  const missingRecoveryCount = Number(assetBundle?.portalContinuity?.missingRecoveryCount || 0);
+  const assetAlerts = Array.isArray(assetBundle?.alerts) ? assetBundle.alerts : [];
+  const assetTasks = Array.isArray(assetBundle?.tasks) ? assetBundle.tasks : [];
+  const expirationDate = warranty?.expiration_date || null;
+  const daysToExpiration = (() => {
+    if (!expirationDate) return null;
+    const parsed = new Date(expirationDate);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return Math.ceil((parsed.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  })();
+
+  if (documents.length === 0) {
+    blockers.push({
+      id: "warranty-no-documents",
+      title: "No warranty evidence attached",
+      blocker: "No contract, protection-plan, or proof-of-purchase document is attached to this warranty yet.",
+      consequence: "Claim support and coverage verification stay weak without source evidence.",
+      nextAction: "Upload warranty documents",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: null,
+      staleLabel: "No evidence yet",
+    });
+  }
+
+  if (!warranty?.provider_key) {
+    blockers.push({
+      id: "warranty-provider-unconfirmed",
+      title: "Provider identity is limited",
+      blocker: "The provider is not clearly confirmed on this warranty record.",
+      consequence: "Claim and service continuity become weaker when provider identity is uncertain.",
+      nextAction: "Confirm provider details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Provider gap",
+    });
+  }
+
+  if (!warranty?.covered_item_name) {
+    blockers.push({
+      id: "warranty-covered-item-missing",
+      title: "Covered item is unclear",
+      blocker: "This warranty record does not clearly identify the covered item.",
+      consequence: "Claim validation and household handoff confidence remain weaker until the covered item is explicit.",
+      nextAction: "Add covered item details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Coverage gap",
+    });
+  }
+
+  if (!warranty?.purchaser_name) {
+    blockers.push({
+      id: "warranty-purchaser-missing",
+      title: "Purchaser visibility is missing",
+      blocker: "The purchaser name is incomplete on this warranty record.",
+      consequence: "Ownership and claim handoff stay weaker until the purchaser is explicit.",
+      nextAction: "Add purchaser details",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Ownership gap",
+    });
+  }
+
+  if (daysToExpiration !== null && daysToExpiration < 0) {
+    blockers.push({
+      id: "warranty-expired",
+      title: "Warranty appears expired",
+      blocker: "The warranty expiration date is already past.",
+      consequence: "Coverage continuity may already be broken for the covered item.",
+      nextAction: "Review warranty status immediately",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled: Math.abs(daysToExpiration),
+      staleLabel: `Expired ${Math.abs(daysToExpiration)} day${Math.abs(daysToExpiration) === 1 ? "" : "s"} ago`,
+    });
+  } else if (daysToExpiration !== null && daysToExpiration <= 45) {
+    blockers.push({
+      id: "warranty-expiring-soon",
+      title: "Warranty expiration is near",
+      blocker: `This warranty expires in ${daysToExpiration} day${daysToExpiration === 1 ? "" : "s"}.`,
+      consequence: "If expiration timing slips, repair or claim support can weaken quickly.",
+      nextAction: "Review warranty status",
+      urgency: daysToExpiration <= 14 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(daysToExpiration <= 14 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: `Expires in ${daysToExpiration} day${daysToExpiration === 1 ? "" : "s"}`,
+    });
+  }
+
+  if (snapshots.length === 0 && documents.length > 0) {
+    blockers.push({
+      id: "warranty-no-snapshots",
+      title: "Contract detail is still shallow",
+      blocker: "Documents exist, but no normalized warranty snapshot is visible yet.",
+      consequence: "Coverage terms and completeness review remain shallow until contract detail is normalized.",
+      nextAction: "Review warranty intake",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Needs normalization",
+    });
+  }
+
+  if (portalLinks.length === 0) {
+    blockers.push({
+      id: "warranty-no-portal-link",
+      title: "Provider access continuity not mapped",
+      blocker: "No provider portal continuity record is linked yet.",
+      consequence: "Claim and service access recovery remain weaker for this warranty.",
+      nextAction: "Link provider portal",
+      urgency: "warning",
+      urgencyMeta: getCommandUrgencyMeta("warning"),
+      daysStalled: null,
+      staleLabel: "Access gap",
+    });
+  } else if (missingRecoveryCount > 0) {
+    blockers.push({
+      id: "warranty-recovery-gap",
+      title: "Recovery guidance incomplete",
+      blocker: `${missingRecoveryCount} linked portal${missingRecoveryCount === 1 ? "" : "s"} still miss recovery hints.`,
+      consequence: "Provider access continuity is still incomplete if warranty service is needed quickly.",
+      nextAction: "Add portal recovery hints",
+      urgency: missingRecoveryCount >= 2 ? "critical" : "warning",
+      urgencyMeta: getCommandUrgencyMeta(missingRecoveryCount >= 2 ? "critical" : "warning"),
+      daysStalled: null,
+      staleLabel: "Continuity gap",
+    });
+  }
+
+  const overdueTask = assetTasks.find((task) => {
+    const due = toTimestamp(task?.due_date);
+    return due !== null && due < Date.now();
+  });
+  if (overdueTask) {
+    const daysStalled = getDaysStalled(overdueTask.due_date || overdueTask.updated_at || overdueTask.created_at || null);
+    blockers.push({
+      id: `warranty-overdue-task-${overdueTask.id}`,
+      title: "Warranty follow-up is overdue",
+      blocker: overdueTask.title || overdueTask.description || "A warranty-linked task is overdue.",
+      consequence: "Coverage cleanup can quietly slip if follow-up stays unresolved.",
+      nextAction: "Resolve overdue task",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: `Overdue since ${formatDaysStalled(daysStalled)}`,
+    });
+  }
+
+  const urgentAlert = assetAlerts.find((alert) => alert?.severity === "urgent");
+  if (urgentAlert) {
+    const daysStalled = getDaysStalled(urgentAlert.updated_at || urgentAlert.created_at || null);
+    blockers.push({
+      id: `warranty-urgent-alert-${urgentAlert.id}`,
+      title: "Urgent warranty alert",
+      blocker: urgentAlert.title || urgentAlert.description || "A warranty-linked alert needs attention.",
+      consequence: "This warranty should not be treated as stable until the alert is reviewed.",
+      nextAction: "Review urgent alert",
+      urgency: "critical",
+      urgencyMeta: getCommandUrgencyMeta("critical"),
+      daysStalled,
+      staleLabel: formatDaysStalled(daysStalled),
+    });
+  }
+
+  const sorted = blockers.sort((left, right) => {
+    const urgencyOrder = { critical: 3, warning: 2, ready: 1 };
+    const urgencyDelta = (urgencyOrder[right.urgency] || 0) - (urgencyOrder[left.urgency] || 0);
+    if (urgencyDelta !== 0) return urgencyDelta;
+    return (right.daysStalled || 0) - (left.daysStalled || 0);
+  });
+
+  return {
+    headline:
+      sorted.length > 0
+        ? `${sorted.filter((item) => item.urgency === "critical").length > 0 ? "Critical" : "Active"} warranty command items are visible.`
+        : "This warranty currently looks operationally steady.",
+    blockers: sorted.slice(0, 5),
+    metrics: {
+      critical: sorted.filter((item) => item.urgency === "critical").length,
+      warning: sorted.filter((item) => item.urgency === "warning").length,
+      documents: documents.length,
+      snapshots: snapshots.length,
+      analytics: analytics.length,
     },
   };
 }
@@ -1972,6 +2565,8 @@ export function buildEmergencyAccessCommand(bundle = {}) {
   const contacts = Array.isArray(bundle?.contacts) ? bundle.contacts : [];
   const portals = Array.isArray(bundle?.portals) ? bundle.portals : [];
   const portalReadiness = bundle?.portalReadiness || {};
+  const householdMembers = Array.isArray(bundle?.householdMembers) ? bundle.householdMembers : [];
+  const documents = Array.isArray(bundle?.documents) ? bundle.documents : [];
 
   const bankingAssets = assets.filter((asset) =>
     String(`${asset?.asset_category || ""} ${asset?.asset_subcategory || ""} ${asset?.asset_name || ""}`)
@@ -1991,6 +2586,28 @@ export function buildEmergencyAccessCommand(bundle = {}) {
   );
 
   const blockers = [];
+
+  const hasMeaningfulSetup =
+    assets.length > 0 ||
+    contacts.length > 0 ||
+    portals.length > 0 ||
+    householdMembers.length > 0 ||
+    documents.length > 0;
+
+  if (!hasMeaningfulSetup) {
+    return {
+      headline: "Emergency access setup has not started yet.",
+      summary:
+        "Start with a household member, one important asset, and one supporting document before VaultedShield treats emergency access as a live continuity read.",
+      blockers: [],
+      metrics: [
+        { label: "Liquidity Records", value: 0 },
+        { label: "Emergency Portals", value: 0 },
+        { label: "Missing Recovery", value: 0 },
+        { label: "Attention", value: 0 },
+      ],
+    };
+  }
 
   function pushBlocker({
     id,

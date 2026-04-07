@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
@@ -19,6 +19,15 @@ import {
 } from "../lib/supabase/warrantyData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
+import { buildWarrantyCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  annotateReviewWorkflowItems,
+  buildReviewAssignmentOptions,
+  getHouseholdReviewWorkflowState,
+  REVIEW_WORKFLOW_STATUSES,
+  saveHouseholdReviewWorkflowState,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildWarrantyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 
 const WARRANTY_DOCUMENT_CLASSES = listWarrantyDocumentClasses();
 const WARRANTY_PROVIDERS = listWarrantyProviders();
@@ -44,7 +53,7 @@ function getStatusTone(status) {
 }
 
 export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
-  const { householdState, debug: shellDebug } = usePlatformShellData();
+  const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -54,6 +63,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
       householdId: householdState.context.householdId || null,
@@ -70,8 +80,19 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     ]
   );
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: shellDebug.authUserId || null,
+    }),
+    [householdState.context.householdId, shellDebug.authUserId]
+  );
 
-  async function loadWarrantyBundle(targetWarrantyId, options = {}) {
+  useEffect(() => {
+    setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
+  }, [reviewScope]);
+
+  const loadWarrantyBundle = useCallback(async (targetWarrantyId, options = {}) => {
     const result = await getWarrantyBundle(targetWarrantyId);
     if (result.error || !result.data?.warranty) {
       if (!options.silent) {
@@ -99,7 +120,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     }
 
     return { data: result.data, error: null };
-  }
+  }, [platformScope]);
 
   useEffect(() => {
     if (!warrantyId) return;
@@ -114,11 +135,46 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [warrantyId, scopeKey]);
+  }, [warrantyId, loadWarrantyBundle, scopeKey]);
 
   const warranty = bundle?.warranty || null;
   const warrantyType = warranty ? getWarrantyType(warranty.warranty_type_key) : null;
   const linkedAsset = warranty?.assets || null;
+  const warrantyCommandCenter = useMemo(
+    () =>
+      buildWarrantyCommandCenter({
+        warranty,
+        warrantyDocuments: bundle?.warrantyDocuments || [],
+        warrantySnapshots: bundle?.warrantySnapshots || [],
+        warrantyAnalytics: bundle?.warrantyAnalytics || [],
+        assetBundle,
+      }),
+    [
+      assetBundle,
+      bundle?.warrantyAnalytics,
+      bundle?.warrantyDocuments,
+      bundle?.warrantySnapshots,
+      warranty,
+    ]
+  );
+  const warrantyReviewQueueItems = useMemo(
+    () =>
+      annotateReviewWorkflowItems(
+        buildWarrantyDetailReviewQueueItems({
+          warranty,
+          warrantyBundle: bundle,
+          assetBundle,
+          warrantyCommandCenter,
+        }),
+        reviewWorkflowState || {}
+      ),
+    [assetBundle, bundle, reviewWorkflowState, warranty, warrantyCommandCenter]
+  );
+  const warrantyReviewItemsById = useMemo(
+    () => Object.fromEntries(warrantyReviewQueueItems.map((item) => [item.id, item])),
+    [warrantyReviewQueueItems]
+  );
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
     if (!warranty) return [];
@@ -129,6 +185,40 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
       { label: "Analytics", value: bundle?.warrantyAnalytics?.length || 0, helper: "Future warranty review outputs" },
     ];
   }, [bundle, warranty, warrantyType]);
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    if (!reviewScope.householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    if (!reviewScope.householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -222,6 +312,130 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={warrantyType?.display_name || warranty.warranty_type_key} tone="info" />
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Warranty Command"
+              subtitle="The strongest warranty blockers, why they matter, and what to do next on this contract."
+            >
+              <div style={{ display: "grid", gap: "16px" }}>
+                <AIInsightPanel
+                  title="Coverage Command"
+                  summary={warrantyCommandCenter.headline}
+                  bullets={[
+                    `${warrantyCommandCenter.metrics.critical || 0} critical blocker${warrantyCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                    `${warrantyCommandCenter.metrics.warning || 0} warning item${warrantyCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                    `${warrantyCommandCenter.metrics.documents || 0} warranty document${warrantyCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                    `${warrantyCommandCenter.metrics.snapshots || 0} snapshot${warrantyCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${warrantyCommandCenter.metrics.analytics || 0} analytic${warrantyCommandCenter.metrics.analytics === 1 ? "" : "s"} are visible.`,
+                  ]}
+                />
+                {warrantyCommandCenter.blockers.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {warrantyCommandCenter.blockers.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "14px",
+                          background: item.urgencyMeta.background,
+                          border: item.urgencyMeta.border,
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        {(() => {
+                          const workflowItem = warrantyReviewItemsById[`warranty:${warranty?.id}:${item.id}`] || null;
+                          return (
+                            <>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                                <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                  <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                                  <StatusBadge label={item.staleLabel} tone="info" />
+                                  {workflowItem ? (
+                                    <StatusBadge
+                                      label={workflowItem.workflow_label}
+                                      tone={
+                                        workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                          ? "good"
+                                          : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                            ? "warning"
+                                            : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                              ? "alert"
+                                              : "info"
+                                      }
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                                <strong>Blocker:</strong> {item.blocker}
+                              </div>
+                              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                                <strong>Consequence:</strong> {item.consequence}
+                              </div>
+                              <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                                Next action: {item.nextAction}
+                              </div>
+                              {workflowItem ? (
+                                <div style={{ display: "grid", gap: "8px" }}>
+                                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                                    <StatusBadge
+                                      label={`Owner: ${workflowItem.workflow_assignee_label}`}
+                                      tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
+                                    />
+                                    <select
+                                      value={workflowItem.workflow_assignee_key || ""}
+                                      onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                                      style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                    >
+                                      {assigneeChoices.map((option) => (
+                                        <option key={option.key || "unassigned"} value={option.key}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                                    style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                  >
+                                    Pending Docs
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                                    style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                  >
+                                    Follow Up
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                                    style={{ padding: "9px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                  >
+                                    {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                                  </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No active warranty blockers"
+                    description="This warranty currently looks relatively steady across evidence, expiration, and access continuity."
+                  />
+                )}
+              </div>
+            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>

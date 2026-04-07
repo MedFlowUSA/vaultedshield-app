@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
@@ -12,6 +12,14 @@ import {
 } from "../lib/domain/retirement";
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
 import { buildRetirementCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  annotateReviewWorkflowItems,
+  buildReviewAssignmentOptions,
+  getHouseholdReviewWorkflowState,
+  REVIEW_WORKFLOW_STATUSES,
+  saveHouseholdReviewWorkflowState,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildRetirementDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import {
@@ -103,7 +111,7 @@ function formatFlagLabel(value) {
 }
 
 export default function RetirementAccountDetailPage({ retirementAccountId, onNavigate }) {
-  const { householdState, debug: shellDebug } = usePlatformShellData();
+  const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -116,6 +124,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   const [parsingDocumentId, setParsingDocumentId] = useState("");
   const [parseError, setParseError] = useState("");
   const [parseDebug, setParseDebug] = useState(null);
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
       householdId: householdState.context.householdId || null,
@@ -132,8 +141,19 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     ]
   );
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: shellDebug.authUserId || null,
+    }),
+    [householdState.context.householdId, shellDebug.authUserId]
+  );
 
-  async function loadRetirementBundle(targetRetirementAccountId, options = {}) {
+  useEffect(() => {
+    setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
+  }, [reviewScope]);
+
+  const loadRetirementBundle = useCallback(async (targetRetirementAccountId, options = {}) => {
     const result = await getRetirementAccountBundle(targetRetirementAccountId);
 
     if (result.error || !result.data?.retirementAccount) {
@@ -165,7 +185,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     }
 
     return { data: result.data, error: null };
-  }
+  }, [platformScope]);
 
   useEffect(() => {
     if (!retirementAccountId) return;
@@ -174,7 +194,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
 
     async function loadBundle() {
       setLoading(true);
-      const result = await loadRetirementBundle(retirementAccountId);
+      await loadRetirementBundle(retirementAccountId);
       if (!active) return;
 
       setLoading(false);
@@ -184,11 +204,22 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     return () => {
       active = false;
     };
-  }, [retirementAccountId, scopeKey]);
+  }, [loadRetirementBundle, retirementAccountId, scopeKey]);
 
   const retirementAccount = bundle?.retirementAccount || null;
   const retirementType = retirementAccount ? getRetirementType(retirementAccount.retirement_type_key) : null;
   const linkedAsset = retirementAccount?.assets || null;
+  const latestAnalytics = bundle?.retirementAnalytics?.[0] || null;
+  const latestSnapshot = bundle?.retirementSnapshots?.[0] || null;
+  const retirementRead = useMemo(
+    () =>
+      analyzeRetirementReadiness({
+        snapshot: latestSnapshot,
+        analytics: latestAnalytics,
+        positions: bundle?.retirementPositions || [],
+      }),
+    [bundle?.retirementPositions, latestAnalytics, latestSnapshot]
+  );
 
   const summaryItems = useMemo(() => {
     if (!retirementAccount) return [];
@@ -265,17 +296,6 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     };
   }, [bundle]);
 
-  const latestAnalytics = bundle?.retirementAnalytics?.[0] || null;
-  const latestSnapshot = bundle?.retirementSnapshots?.[0] || null;
-  const retirementRead = useMemo(
-    () =>
-      analyzeRetirementReadiness({
-        snapshot: latestSnapshot,
-        analytics: latestAnalytics,
-        positions: bundle?.retirementPositions || [],
-      }),
-    [bundle?.retirementPositions, latestAnalytics, latestSnapshot]
-  );
   const retirementCommandCenter = useMemo(
     () =>
       buildRetirementCommandCenter({
@@ -297,6 +317,59 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
       retirementRead,
     ]
   );
+  const retirementReviewQueueItems = useMemo(
+    () =>
+      annotateReviewWorkflowItems(
+        buildRetirementDetailReviewQueueItems({
+          retirementAccount,
+          retirementRead,
+          retirementBundle: bundle,
+          assetBundle,
+          retirementCommandCenter,
+        }),
+        reviewWorkflowState || {}
+      ),
+    [assetBundle, bundle, retirementAccount, retirementCommandCenter, retirementRead, reviewWorkflowState]
+  );
+  const retirementReviewItemsById = useMemo(
+    () => Object.fromEntries(retirementReviewQueueItems.map((item) => [item.id, item])),
+    [retirementReviewQueueItems]
+  );
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    if (!reviewScope.householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    if (!reviewScope.householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -487,11 +560,30 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                           gap: "8px",
                         }}
                       >
+                        {(() => {
+                          const workflowItem =
+                            retirementReviewItemsById[`retirement:${retirementAccount?.id}:${item.id}`] || null;
+                          return (
+                            <>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
                           <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
                             <StatusBadge label={item.staleLabel} tone="info" />
+                            {workflowItem ? (
+                              <StatusBadge
+                                label={workflowItem.workflow_label}
+                                tone={
+                                  workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                    ? "good"
+                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                      ? "warning"
+                                      : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                        ? "alert"
+                                        : "info"
+                                }
+                              />
+                            ) : null}
                           </div>
                         </div>
                         <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
@@ -503,6 +595,82 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                         <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
                           Next action: {item.nextAction}
                         </div>
+                        {workflowItem ? (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                              <StatusBadge
+                                label={`Owner: ${workflowItem.workflow_assignee_label}`}
+                                tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
+                              />
+                              <select
+                                value={workflowItem.workflow_assignee_key || ""}
+                                onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                                style={{
+                                  padding: "9px 12px",
+                                  borderRadius: "10px",
+                                  border: "1px solid #cbd5e1",
+                                  background: "#ffffff",
+                                  cursor: "pointer",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {assigneeChoices.map((option) => (
+                                  <option key={option.key || "unassigned"} value={option.key}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                              style={{
+                                padding: "9px 12px",
+                                borderRadius: "10px",
+                                border: "1px solid #cbd5e1",
+                                background: "#ffffff",
+                                cursor: "pointer",
+                                fontWeight: 700,
+                              }}
+                            >
+                              Pending Docs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                              style={{
+                                padding: "9px 12px",
+                                borderRadius: "10px",
+                                border: "1px solid #cbd5e1",
+                                background: "#ffffff",
+                                cursor: "pointer",
+                                fontWeight: 700,
+                              }}
+                            >
+                              Follow Up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                              style={{
+                                padding: "9px 12px",
+                                borderRadius: "10px",
+                                border: "none",
+                                background: "#0f172a",
+                                color: "#ffffff",
+                                cursor: "pointer",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                            </button>
+                            </div>
+                          </div>
+                        ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
+import PolicyAiAssistantCard from "../components/policy/PolicyAiAssistantCard";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -12,13 +13,6 @@ import {
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
 import { buildPolicyInsightSummary } from "../lib/ai/policyInsightEngine";
-import {
-  buildPolicyAssistantAnswer,
-} from "../lib/ai/policyAssistantEngine";
-import {
-  findPolicyAssistantIntent,
-  getPolicyAssistantIntents,
-} from "../lib/ai/policyAssistantIntents";
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { buildPolicyOptimizationEngine } from "../lib/insurance/policyOptimizationEngine";
@@ -157,6 +151,27 @@ function getDetailQualityTone(value) {
   if (value === "Strong detail") return { color: "#166534", background: "#f0fdf4" };
   if (value === "Partial detail") return { color: "#92400e", background: "#fffbeb" };
   return { color: "#475569", background: "#f8fafc" };
+}
+
+function renderInterpretationCard({ eyebrow, title, body, accent = false }) {
+  return (
+    <div
+      style={{
+        padding: "14px 16px",
+        borderRadius: "16px",
+        background: accent ? "#eff6ff" : "#f8fafc",
+        border: accent ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
+        display: "grid",
+        gap: "8px",
+      }}
+    >
+      <div style={{ fontSize: "11px", color: accent ? "#1d4ed8" : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+        {eyebrow}
+      </div>
+      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{title}</div>
+      {body ? <div style={{ color: "#475569", lineHeight: "1.7" }}>{body}</div> : null}
+    </div>
+  );
 }
 
 function buildIssueGroups(row, ranking) {
@@ -364,52 +379,6 @@ function buildGeneralLifeScorecard({
             : "This read still needs stronger statement or support-page evidence to feel dependable.",
       },
     ],
-  };
-}
-
-function buildPolicyAssistantPromptExperience(policyType = "unknown", prompts = []) {
-  const safePrompts = Array.isArray(prompts) ? prompts : [];
-  const typeSpecific = safePrompts.filter(
-    (item) => !["policy_health", "policy_type", "what_to_review_first", "data_completeness", "policy_optimization"].includes(item.id)
-  );
-  const universal = safePrompts.filter((item) =>
-    ["policy_health", "policy_type", "what_to_review_first", "data_completeness", "policy_optimization"].includes(item.id)
-  );
-
-  const copy = {
-    iul: {
-      title: "Best questions for this IUL",
-      summary: "Start with performance, charges, funding, and lapse pressure before moving into the deeper technical sections.",
-    },
-    ul: {
-      title: "Best questions for this UL policy",
-      summary: "Start with performance, charges, funding strength, and visible loan or lapse pressure.",
-    },
-    whole_life: {
-      title: "Best questions for this whole life policy",
-      summary: "Start with whole-life stability, dividend visibility, and whether loan activity is creating pressure.",
-    },
-    term: {
-      title: "Best questions for this term policy",
-      summary: "Start with expiration, conversion visibility, and the real coverage structure before reading anything else.",
-    },
-    final_expense: {
-      title: "Best questions for this final expense policy",
-      summary: "Start with permanence, waiting-period visibility, and whether the structure really fits final-expense needs.",
-    },
-    unknown: {
-      title: "Best questions for this policy",
-      summary: "Start with the clearest review questions first, then use the broader prompts if you still need context.",
-    },
-  };
-
-  const resolved = copy[policyType] || copy.unknown;
-
-  return {
-    title: resolved.title,
-    summary: resolved.summary,
-    primaryPrompts: [...typeSpecific.slice(0, 3), ...universal.filter((item) => item.id === "what_to_review_first").slice(0, 1)].slice(0, 4),
-    secondaryPrompts: universal.filter((item) => item.id !== "what_to_review_first"),
   };
 }
 
@@ -696,8 +665,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
   const [loadError, setLoadError] = useState("");
   const [activeFollowupSection, setActiveFollowupSection] = useState("");
   const [showReviewReport, setShowReviewReport] = useState(false);
-  const [selectedAssistantIntent, setSelectedAssistantIntent] = useState("");
-  const [assistantHistory, setAssistantHistory] = useState([]);
+  const [latestPolicyAiEntry, setLatestPolicyAiEntry] = useState(null);
 
   function setSectionRef(key, node) {
     if (!key) return;
@@ -732,35 +700,6 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     if (typeof window !== "undefined") {
       window.setTimeout(() => window.print(), 80);
     }
-  }
-
-  function handleAssistantPrompt(intentValue) {
-    const resolvedIntent = findPolicyAssistantIntent(intentValue, lifePolicy?.meta?.policyType || "unknown");
-    if (!resolvedIntent) return;
-
-    const response = buildPolicyAssistantAnswer({
-      intent: resolvedIntent.id,
-      lifePolicy,
-      normalizedPolicy,
-      normalizedAnalytics,
-      statementRows: statementTimeline,
-      comparisonSummary,
-      interpretation: policyInterpretation,
-      insightSummary: policyAiSummary,
-      iulV2,
-      optimizationAnalysis,
-    });
-
-    setAssistantHistory((current) => [
-      {
-        id: `${Date.now()}-${current.length}`,
-        intent: resolvedIntent.id,
-        question: resolvedIntent.label,
-        response,
-      },
-      ...current,
-    ].slice(0, 6));
-    setSelectedAssistantIntent(resolvedIntent.id);
   }
 
   function scrollToPolicySection(section) {
@@ -856,8 +795,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
   }, [debug.authUserId, debug.householdId, policyId]);
 
   useEffect(() => {
-    setAssistantHistory([]);
-    setSelectedAssistantIntent("");
+    setLatestPolicyAiEntry(null);
   }, [policyId]);
 
   const comparisonRow = useMemo(
@@ -1060,6 +998,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     bundle.policy?.policy_number_masked ||
     "Policy Detail";
   const snapshotCarrier = comparisonRow?.carrier || bundle.policy?.carrier_name || "Carrier unavailable";
+  const snapshotDescription = `${snapshotCarrier} | In-force policy intelligence with live statement interpretation, charge visibility, and evidence support.`;
 
   const snapshotMetrics = [
     { label: "Cash Value", value: formatDisplayValue(comparisonRow?.cash_value) },
@@ -1067,14 +1006,6 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
     { label: "Total COI", value: formatDisplayValue(comparisonRow?.total_coi) },
     { label: "Latest Statement", value: formatDate(comparisonRow?.latest_statement_date) },
   ];
-  const assistantPrompts = useMemo(
-    () => getPolicyAssistantIntents(lifePolicy?.meta?.policyType || "unknown"),
-    [lifePolicy?.meta?.policyType]
-  );
-  const assistantPromptExperience = useMemo(
-    () => buildPolicyAssistantPromptExperience(lifePolicy?.meta?.policyType || "unknown", assistantPrompts),
-    [assistantPrompts, lifePolicy?.meta?.policyType]
-  );
   const policyAdvisorBrief = useMemo(
     () =>
       buildPolicyAdvisorBrief({
@@ -1086,13 +1017,199 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
       }),
     [basicPolicyAnalysis, generalLifeScorecard, lifePolicy?.meta?.policyType, policyAiSummary, policyInterpretation]
   );
-  const latestAssistantEntry = assistantHistory[0] || null;
+  const interpretationSignalCards = useMemo(
+    () => [
+      {
+        eyebrow: "Growth Read",
+        title: policyInterpretation.growth_summary,
+        body: "How current value support and trajectory appear based on visible statements.",
+      },
+      {
+        eyebrow: "Charge Read",
+        title: policyInterpretation.charge_summary_explanation,
+        body: "How COI and visible charges appear to be influencing current performance.",
+      },
+      {
+        eyebrow: "Confidence Read",
+        title: policyInterpretation.confidence_summary,
+        body: "How complete the visible evidence stack appears right now.",
+      },
+      {
+        eyebrow: "Best Next Move",
+        title: policyAdvisorBrief.nextMove,
+        body: "The first review path that appears most useful from the current file set.",
+        accent: true,
+      },
+    ],
+    [
+      policyAdvisorBrief.nextMove,
+      policyInterpretation.charge_summary_explanation,
+      policyInterpretation.confidence_summary,
+      policyInterpretation.growth_summary,
+    ]
+  );
+  const policyAiContext = useMemo(
+    () => ({
+      lifePolicy,
+      normalizedPolicy,
+      normalizedAnalytics,
+      statementRows: statementTimeline,
+      comparisonSummary,
+      policyInterpretation,
+      policyAiSummary,
+      iulV2,
+      optimizationAnalysis,
+      comparisonRow,
+      ranking,
+      trendSummary,
+      generalLifeScorecard,
+      reviewReport,
+      chargeSummary,
+      missingFields,
+      basicPolicyAnalysis,
+      adequacyReview,
+    }),
+    [
+      adequacyReview,
+      basicPolicyAnalysis,
+      chargeSummary,
+      comparisonRow,
+      comparisonSummary,
+      generalLifeScorecard,
+      iulV2,
+      lifePolicy,
+      missingFields,
+      normalizedAnalytics,
+      normalizedPolicy,
+      optimizationAnalysis,
+      policyAiSummary,
+      policyInterpretation,
+      ranking,
+      reviewReport,
+      statementTimeline,
+      trendSummary,
+    ]
+  );
+  const policyAiComparisonOptions = useMemo(
+    () =>
+      insuranceRows
+        .filter((row) => row.policy_id && row.policy_id !== policyId)
+        .slice(0, 6)
+        .map((row) => ({
+          id: row.policy_id,
+          label: row.product || row.carrier || `Policy ${row.policy_id}`,
+          bundle: {
+            comparisonRow: row,
+            policyAiSummary: {
+              status: row.ranking_status || row.status || "Unavailable",
+              missingData: row.missing_fields || [],
+            },
+          },
+        })),
+    [insuranceRows, policyId]
+  );
+  const quickReviewSections = [
+    { label: "Health Snapshot", section: !showUnifiedIulReader ? "interpretation" : "policy_overview" },
+    { label: "Charge Drag", section: "charge_summary" },
+    { label: "Evidence Gaps", section: "confidence" },
+    { label: "Policy AI Assistant", section: "policy_ai_assistant" },
+    { label: "Annual Review", section: "annual_review" },
+  ];
+  const primaryProtectionMetrics = [
+    {
+      label: "Coverage Confidence",
+      value: formatConfidencePercent(gapAnalysis?.confidence) || "\u2014",
+    },
+    {
+      label: "Funding Pattern",
+      value: formatDisplayValue(basicPolicyAnalysis?.fundingPattern),
+    },
+    {
+      label: "COI Trend",
+      value: formatDisplayValue(basicPolicyAnalysis?.coiTrend),
+    },
+    {
+      label: "Visible Gap Status",
+      value: gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap",
+    },
+    {
+      label: "Adequacy Status",
+      value: formatDisplayValue(adequacyReview?.displayStatus),
+    },
+    {
+      label: "Beneficiary Visibility",
+      value:
+        adequacyReview?.primaryBeneficiaryName || adequacyReview?.contingentBeneficiaryName
+          ? [adequacyReview?.primaryBeneficiaryName, adequacyReview?.contingentBeneficiaryName].filter(Boolean).join(" / ")
+          : adequacyReview?.beneficiaryStatusLabel || formatDisplayValue(adequacyReview?.beneficiaryVisibility),
+    },
+  ];
+  const secondaryProtectionMetrics = [
+    {
+      label: "Owner Visible",
+      value: adequacyReview?.ownerName || (adequacyReview?.ownerVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Insured Visible",
+      value: adequacyReview?.insuredName || (adequacyReview?.insuredVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Joint Insured",
+      value: adequacyReview?.jointInsuredName || (adequacyReview?.jointInsuredVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Ownership Structure",
+      value: adequacyReview?.ownershipStructure || (adequacyReview?.trustOwned ? "Trust-style ownership" : "Limited"),
+    },
+    {
+      label: "Payor Visibility",
+      value: adequacyReview?.payorName || (adequacyReview?.payorVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Trustee Visibility",
+      value: adequacyReview?.trusteeName || (adequacyReview?.trusteeVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Trust Name",
+      value: adequacyReview?.trustName || (adequacyReview?.trustNameVisible ? "Yes" : "Limited"),
+    },
+    {
+      label: "Benefit Option",
+      value: adequacyReview?.benefitOption || (adequacyReview?.benefitOptionVisible ? "Visible" : "Limited"),
+    },
+    {
+      label: "Rider Visibility",
+      value: adequacyReview?.highlightedRiders?.length
+        ? adequacyReview.highlightedRiders.join(" / ")
+        : adequacyReview?.detectedRiders?.length
+          ? adequacyReview.detectedRiders.join(" / ")
+          : adequacyReview?.riderChargeVisible
+            ? "Charge visible"
+            : "Limited",
+    },
+    {
+      label: "Protection Purpose",
+      value: adequacyReview?.protectionPurposeLabels?.length
+        ? adequacyReview.protectionPurposeLabels.join(" / ")
+        : "Limited",
+    },
+    {
+      label: "Beneficiary Shares",
+      value:
+        [
+          adequacyReview?.primaryBeneficiaryShare ? `Primary ${adequacyReview.primaryBeneficiaryShare}` : "",
+          adequacyReview?.contingentBeneficiaryShare ? `Contingent ${adequacyReview.contingentBeneficiaryShare}` : "",
+        ]
+          .filter(Boolean)
+          .join(" / ") || "Limited",
+    },
+  ];
 
   const pageHeader = (
     <PageHeader
-      eyebrow="Insurance"
+      eyebrow="In-Force Policy Intelligence"
       title={snapshotTitle}
-      description={snapshotCarrier}
+      description={snapshotDescription}
       actions={
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
@@ -1237,11 +1354,40 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
               ))}
             </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                paddingTop: "4px",
+              }}
+            >
+              {quickReviewSections.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => scrollToPolicySection(item.section)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "999px",
+                    border: "1px solid rgba(148, 163, 184, 0.22)",
+                    background: "rgba(255,255,255,0.82)",
+                    color: "#0f172a",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: "12px",
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </section>
 
           <SectionCard
             title="Protection Confidence"
-            subtitle="A high-level protection check built from visible death-benefit support, funding pattern, COI trend, and the current extracted evidence."
+            subtitle="A high-level protection check built from visible death-benefit support, funding pattern, COI trend, and the current evidence trail."
           >
             <div style={{ display: "grid", gap: "16px" }}>
               <div
@@ -1262,155 +1408,33 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Coverage Confidence
+                {primaryProtectionMetrics.map((item) => (
+                  <div key={item.label} style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {item.label}
+                    </div>
+                    <div style={{ marginTop: "8px", fontSize: item.label === "Coverage Confidence" ? "22px" : "16px", fontWeight: 800, color: "#0f172a" }}>
+                      {item.value}
+                    </div>
                   </div>
-                  <div style={{ marginTop: "8px", fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>
-                    {formatConfidencePercent(gapAnalysis?.confidence) || "\u2014"}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Funding Pattern
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {formatDisplayValue(basicPolicyAnalysis?.fundingPattern)}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    COI Trend
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {formatDisplayValue(basicPolicyAnalysis?.coiTrend)}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Visible Gap Status
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {gapAnalysis?.coverageGap ? "Possible gap" : "No obvious gap"}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Adequacy Status
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {formatDisplayValue(adequacyReview?.displayStatus)}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Owner Visible
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.ownerName || (adequacyReview?.ownerVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Insured Visible
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.insuredName || (adequacyReview?.insuredVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Joint Insured
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.jointInsuredName || (adequacyReview?.jointInsuredVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Ownership Structure
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.ownershipStructure || (adequacyReview?.trustOwned ? "Trust-style ownership" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Payor Visibility
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.payorName || (adequacyReview?.payorVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Trustee Visibility
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.trusteeName || (adequacyReview?.trusteeVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Trust Name
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.trustName || (adequacyReview?.trustNameVisible ? "Yes" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Benefit Option
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.benefitOption || (adequacyReview?.benefitOptionVisible ? "Visible" : "Limited")}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Rider Visibility
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.highlightedRiders?.length
-                      ? adequacyReview.highlightedRiders.join(" / ")
-                      : adequacyReview?.detectedRiders?.length
-                        ? adequacyReview.detectedRiders.join(" / ")
-                        : adequacyReview?.riderChargeVisible
-                          ? "Charge visible"
-                          : "Limited"}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Protection Purpose
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.protectionPurposeLabels?.length
-                      ? adequacyReview.protectionPurposeLabels.join(" / ")
-                      : "Limited"}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Beneficiary Visibility
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {adequacyReview?.primaryBeneficiaryName || adequacyReview?.contingentBeneficiaryName
-                      ? [adequacyReview?.primaryBeneficiaryName, adequacyReview?.contingentBeneficiaryName].filter(Boolean).join(" / ")
-                      : adequacyReview?.beneficiaryStatusLabel || formatDisplayValue(adequacyReview?.beneficiaryVisibility)}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Beneficiary Shares
-                  </div>
-                  <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-                    {[adequacyReview?.primaryBeneficiaryShare ? `Primary ${adequacyReview.primaryBeneficiaryShare}` : "", adequacyReview?.contingentBeneficiaryShare ? `Contingent ${adequacyReview.contingentBeneficiaryShare}` : ""]
-                      .filter(Boolean)
-                      .join(" / ") || "Limited"}
-                  </div>
-                </div>
+                ))}
               </div>
+
+              <details>
+                <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>Show More Protection Detail</summary>
+                <div style={{ marginTop: "14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                  {secondaryProtectionMetrics.map((item) => (
+                    <div key={item.label} style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {item.label}
+                      </div>
+                      <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
 
               {basicPolicyAnalysis?.flags?.length > 0 ? (
                 <div style={{ display: "grid", gap: "8px" }}>
@@ -1462,8 +1486,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
             <>
               {generalLifeScorecard ? (
                 <SectionCard
-                  title="Life Policy At A Glance"
-                  subtitle="One plain-English scored window before the deeper insurance interpretation."
+                  title="Policy Health Snapshot"
+                  subtitle="A plain-English policy health read before the deeper in-force performance interpretation."
                   accent="#bfdbfe"
                 >
                   <div style={{ display: "grid", gap: "18px" }}>
@@ -1517,8 +1541,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                             generalLifeScorecard.overallScore >= 80
                               ? "Strong"
                               : generalLifeScorecard.overallScore >= 62
-                                ? "Needs Review"
-                                : "At Risk"
+                                ? "Moderate"
+                                : "Needs Attention"
                           }
                           tone={generalLifeScorecard.overallTone}
                         />
@@ -1582,7 +1606,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
                 <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
-                  <SectionCard title="Cost and Confidence" subtitle="The clearest plain-English read on charges, continuity, and visible evidence support.">
+                  <SectionCard title="COI and Charge Drag" subtitle="The clearest plain-English read on cost of insurance, visible charges, and how much drag they may be creating.">
                     <div style={{ display: "grid", gap: "14px" }}>
                       <div
                         style={{
@@ -1626,7 +1650,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
 
                 <div ref={(node) => setSectionRef("confidence", node)} style={getSectionHighlight("confidence")}>
-                  <SectionCard title="Missing / Weak Data" subtitle="The biggest evidence gaps still affecting this life-policy read.">
+                  <SectionCard title="Evidence Gaps" subtitle="The biggest evidence gaps still affecting this in-force policy read.">
                     {groupedIssues.length > 0 ? (
                       <div style={{ display: "grid", gap: "14px" }}>
                         {groupedIssues.map((group) => (
@@ -1663,8 +1687,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
           {!showUnifiedIulReader ? (
           <div ref={(node) => setSectionRef("interpretation", node)} style={getSectionHighlight("interpretation")}>
           <SectionCard
-            title="Policy Interpretation"
-            subtitle="A plain-English policy read built from visible statements, charges, funding, strategy detail, and continuity support."
+            title="Performance Interpretation"
+            subtitle="A plain-English in-force policy read built from visible statements, charges, funding, strategy detail, and continuity support."
           >
             <div style={{ display: "grid", gap: "18px" }}>
               <div
@@ -1720,34 +1744,12 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-                <div style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Growth Interpretation</div>
-                  <div style={{ color: "#475569", lineHeight: "1.8" }}>
-                    {policyInterpretation.growth_summary}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {interpretationSignalCards.map((card) => (
+                  <div key={card.eyebrow}>
+                    {renderInterpretationCard(card)}
                   </div>
-                </div>
-                <div style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Charge Interpretation</div>
-                  <div style={{ color: "#475569", lineHeight: "1.8" }}>
-                    {policyInterpretation.charge_summary_explanation}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-                <div style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Strategy Interpretation</div>
-                  <div style={{ color: "#475569", lineHeight: "1.8" }}>
-                    {policyInterpretation.strategy_summary}
-                  </div>
-                </div>
-                <div style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Confidence Summary</div>
-                  <div style={{ color: "#475569", lineHeight: "1.8" }}>
-                    {policyInterpretation.confidence_summary}
-                  </div>
-                </div>
+                ))}
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
@@ -1791,11 +1793,32 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   </div>
                 </div>
               </div>
+
+              <details style={{ padding: "4px 0 0" }}>
+                <summary style={{ cursor: "pointer", color: "#1d4ed8", fontWeight: 700 }}>
+                  Open Deeper Interpretation Context
+                </summary>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginTop: "14px" }}>
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Strategy Interpretation</div>
+                    <div style={{ color: "#475569", lineHeight: "1.8" }}>
+                      {policyInterpretation.strategy_summary}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Current Position Context</div>
+                    <div style={{ color: "#475569", lineHeight: "1.8" }}>
+                      {policyInterpretation.current_position_summary}
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
             </SectionCard>
           </div>
           ) : null}
 
+          <div ref={(node) => setSectionRef("policy_ai_assistant", node)} style={getSectionHighlight("policy_ai_assistant")}>
           <SectionCard
             title="Ask Vault AI"
             subtitle="These answers are based on the uploaded policy data and visible statement history."
@@ -1815,7 +1838,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: "8px", maxWidth: "820px" }}>
                     <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      AI Summary
+                      Plain-English Summary
                     </div>
                     <div style={{ fontSize: "18px", lineHeight: "1.7", color: "#0f172a", fontWeight: 700 }}>
                       {policyAiSummary.summary}
@@ -1865,8 +1888,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     }}
                   >
                     <div style={{ display: "grid", gap: "6px" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        IUL V2 Summary
+                        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        IUL Monitoring Read
                       </div>
                       <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
                         {iulV2.summary.headline}
@@ -1879,7 +1902,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         tone={getIulStatusTone(iulV2.illustrationComparison.status)}
                       />
                       <StatusBadge
-                        label={`Charge drag ${iulV2.chargeAnalysis.chargeDragLevel}`}
+                        label={`Charge Drag ${iulV2.chargeAnalysis.chargeDragLevel}`}
                         tone={getIulStatusTone(iulV2.chargeAnalysis.chargeDragLevel)}
                       />
                       <StatusBadge
@@ -1930,7 +1953,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                           <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#ffffff", border: "1px solid #dbeafe", display: "grid", gap: "8px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                               <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                                Annual Review Support
+                                Statement Match Support
                               </div>
                               <StatusBadge
                                 label={iulV2.illustrationComparison.reviewSupport.supportStatus.replace(/_/g, " ")}
@@ -2004,7 +2027,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         {iulV2.illustrationComparison.reviewRecommendations?.length > 0 ? (
                           <div style={{ display: "grid", gap: "6px" }}>
                             <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                              Annual Review Next Steps
+                              Monitoring Next Steps
                             </div>
                             <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
                               {iulV2.illustrationComparison.reviewRecommendations.slice(0, 4).map((item) => (
@@ -2041,13 +2064,13 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                         </div>
                       </div>
                       <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Illustration Read</div>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Illustration vs Actual Read</div>
                         <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
                           {iulV2.illustrationComparison.context}
                         </div>
                       </div>
                       <div style={{ padding: "12px 14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Charge Read</div>
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Charge Drag Read</div>
                         <div style={{ marginTop: "8px", color: "#0f172a", fontWeight: 700 }}>
                           {iulV2.chargeAnalysis.explanation}
                         </div>
@@ -2304,224 +2327,13 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                   </div>
                 ) : null}
 
-                <div style={{ display: "grid", gap: "14px" }}>
-                  <div
-                    style={{
-                      padding: "16px 18px",
-                      borderRadius: "18px",
-                      background: "#ffffff",
-                      border: "1px solid rgba(148, 163, 184, 0.18)",
-                      display: "grid",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Advisor Mode
-                    </div>
-                    <div style={{ fontWeight: 700, color: "#0f172a" }}>{assistantPromptExperience.title}</div>
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{assistantPromptExperience.summary}</div>
-                  </div>
-
-                  <div style={{ display: "grid", gap: "8px" }}>
-                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Best questions to start with</div>
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      {assistantPromptExperience.primaryPrompts.map((prompt) => (
-                        <button
-                          key={prompt.id}
-                          type="button"
-                          onClick={() => handleAssistantPrompt(prompt.id)}
-                          style={{
-                            padding: "10px 12px",
-                            borderRadius: "999px",
-                            border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
-                            background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#eff6ff",
-                            color: "#1d4ed8",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            fontSize: "13px",
-                          }}
-                        >
-                          {prompt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {assistantPromptExperience.secondaryPrompts.length > 0 ? (
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Broader review questions</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        {assistantPromptExperience.secondaryPrompts.map((prompt) => (
-                          <button
-                            key={prompt.id}
-                            type="button"
-                            onClick={() => handleAssistantPrompt(prompt.id)}
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: "999px",
-                              border: selectedAssistantIntent === prompt.id ? "1px solid #93c5fd" : "1px solid #dbeafe",
-                              background: selectedAssistantIntent === prompt.id ? "#dbeafe" : "#ffffff",
-                              color: "#1d4ed8",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              fontSize: "13px",
-                            }}
-                          >
-                            {prompt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-               {latestAssistantEntry ? (
-                 <div
-                  style={{
-                    display: "grid",
-                    gap: "16px",
-                    padding: "20px 22px",
-                    borderRadius: "20px",
-                    background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
-                    border: "1px solid rgba(147, 197, 253, 0.28)",
-                  }}
-                >
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Latest Answer
-                      </div>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{latestAssistantEntry.question}</div>
-                      <div style={{ color: "#0f172a", lineHeight: "1.8", fontSize: "16px", fontWeight: 600 }}>
-                        {latestAssistantEntry.response.answer}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      <StatusBadge
-                        label="Grounded answer"
-                        tone="info"
-                      />
-                      <StatusBadge
-                        label={`Confidence: ${latestAssistantEntry.response.confidence}`}
-                        tone={
-                          latestAssistantEntry.response.confidence === "high"
-                            ? "good"
-                            : latestAssistantEntry.response.confidence === "moderate"
-                              ? "warning"
-                              : "info"
-                        }
-                      />
-                    </div>
-
-                    {latestAssistantEntry.response.confidenceExplanation ? (
-                      <div style={{ color: "#475569", lineHeight: "1.7", fontSize: "14px" }}>
-                        {latestAssistantEntry.response.confidenceExplanation}
-                      </div>
-                    ) : null}
-
-                    {latestAssistantEntry.response.supportingData?.length > 0 ? (
-                      <div>
-                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Data</div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
-                          {latestAssistantEntry.response.supportingData.map((point) => (
-                            <div
-                              key={`${point.label}-${point.value}`}
-                              style={{
-                                padding: "12px 14px",
-                                borderRadius: "14px",
-                                background: "#ffffff",
-                                border: "1px solid rgba(148, 163, 184, 0.18)",
-                                display: "grid",
-                                gap: "6px",
-                              }}
-                            >
-                              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{point.label}</div>
-                              <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{point.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {latestAssistantEntry.response.missingData?.length > 0 ? (
-                      <div>
-                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Missing Data</div>
-                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                          {latestAssistantEntry.response.missingData.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        {(latestAssistantEntry.response.suggestedFollowUps || []).map((prompt) => (
-                          <button
-                            key={prompt}
-                            type="button"
-                          onClick={() => handleAssistantPrompt(prompt)}
-                          style={{
-                            padding: "10px 12px",
-                            borderRadius: "999px",
-                            border: "1px solid #dbeafe",
-                            background: "#ffffff",
-                            color: "#1d4ed8",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                          }}
-                        >
-                          {prompt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                 ) : (
-                   <div
-                     style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                      color: "#475569",
-                      lineHeight: "1.8",
-                    }}
-                  >
-                  Pick one of the supported questions to get a concise answer grounded in the policy data already visible on this page.
-                  </div>
-                )}
-
-              {assistantHistory.length > 1 ? (
-                <div style={{ display: "grid", gap: "10px" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Session History</div>
-                  <div style={{ display: "grid", gap: "10px" }}>
-                    {assistantHistory.slice(1, 4).map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => handleAssistantPrompt(entry.intent || entry.question)}
-                        style={{
-                          padding: "14px 16px",
-                          borderRadius: "14px",
-                          border: "1px solid rgba(148, 163, 184, 0.18)",
-                          background: "#ffffff",
-                          textAlign: "left",
-                          cursor: "pointer",
-                          display: "grid",
-                          gap: "6px",
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{entry.question}</div>
-                        <div style={{ color: "#475569", lineHeight: "1.7" }}>{entry.response.answer}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </SectionCard>
+                <PolicyAiAssistantCard
+                  policyBundle={policyAiContext}
+                  comparisonOptions={policyAiComparisonOptions}
+                  onLatestEntryChange={setLatestPolicyAiEntry}
+                />
+              </div>
+            </SectionCard>
 
           <div ref={(node) => setSectionRef("annual_review", node)} style={getSectionHighlight("annual_review")}>
           <SectionCard
@@ -2627,6 +2439,7 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
               />
             )}
           </SectionCard>
+          </div>
           </div>
 
           <SectionCard title="Statement Timeline" subtitle="Statement records shown oldest to newest using live vaulted statement rows.">
@@ -2778,19 +2591,19 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
                     <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Policy Assistant</div>
                     <pre style={{ margin: 0, fontSize: "12px", color: "#475569", overflowX: "auto" }}>
                         {JSON.stringify(
-                          latestAssistantEntry
+                          latestPolicyAiEntry
                             ? {
-                              response_confidence: latestAssistantEntry.response?.confidence || null,
-                              intent: latestAssistantEntry.intent || null,
-                              supporting_data: latestAssistantEntry.response?.supportingData || [],
-                              missing_data: latestAssistantEntry.response?.missingData || [],
-                              suggested_followups: latestAssistantEntry.response?.suggestedFollowUps || [],
-                              iul_v2: iulV2,
+                                intent: latestPolicyAiEntry.intent || null,
+                                question: latestPolicyAiEntry.question || null,
+                                evidence: latestPolicyAiEntry.response?.evidence || [],
+                                missing_data: latestPolicyAiEntry.response?.missingData || [],
+                                disclaimers: latestPolicyAiEntry.response?.disclaimers || [],
+                                iul_v2: iulV2,
                               }
-                            : { note: "No assistant question asked in this session." },
+                            : { note: "No policy AI assistant question asked in this session." },
                           null,
-                        2
-                      )}
+                          2
+                        )}
                     </pre>
                   </div>
                 </div>

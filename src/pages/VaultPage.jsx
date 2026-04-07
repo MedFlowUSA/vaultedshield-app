@@ -10,6 +10,8 @@ import { listHouseholdDocuments } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
+const EMPTY_DOCUMENTS = [];
+
 export default function VaultPage() {
   const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
@@ -18,7 +20,9 @@ export default function VaultPage() {
 
   useEffect(() => {
     if (!householdState.context.householdId) {
-      setDocuments([]);
+      queueMicrotask(() => {
+        setDocuments(EMPTY_DOCUMENTS);
+      });
       return;
     }
 

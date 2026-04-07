@@ -14,6 +14,14 @@ import {
 } from "../lib/supabase/platformData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { buildAssetCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  buildReviewAssignmentOptions,
+  getHouseholdReviewWorkflowState,
+  saveHouseholdReviewWorkflowState,
+  annotateReviewWorkflowItems,
+  REVIEW_WORKFLOW_STATUSES,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildAssetDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
@@ -32,8 +40,8 @@ function formatDate(value) {
 }
 
 export default function AssetDetailPage({ assetId, onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
-  const { householdState, debug: shellDebug } = usePlatformShellData();
+  const { isTablet } = useResponsiveLayout();
+  const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const [bundle, setBundle] = useState({
     asset: null,
     documents: [],
@@ -43,6 +51,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     portalLinks: [],
   });
   const [loadError, setLoadError] = useState("");
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const [existingPortalOptions, setExistingPortalOptions] = useState([]);
   const [existingPortalForm, setExistingPortalForm] = useState({
     portal_profile_id: "",
@@ -79,6 +88,17 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     ]
   );
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: shellDebug.authUserId || null,
+    }),
+    [householdState.context.householdId, shellDebug.authUserId]
+  );
+
+  useEffect(() => {
+    setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
+  }, [reviewScope]);
 
   useEffect(() => {
     if (!assetId) return;
@@ -113,7 +133,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [assetId, householdState.context.householdId, scopeKey]);
+  }, [assetId, householdState.context.householdId, platformScope]);
 
   useEffect(() => {
     setBundle({
@@ -256,9 +276,52 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     updatedAt: formatDate(document.created_at),
   }));
   const commandCenter = useMemo(() => buildAssetCommandCenter(bundle), [bundle]);
+  const reviewQueueItems = useMemo(
+    () => annotateReviewWorkflowItems(buildAssetDetailReviewQueueItems(bundle), reviewWorkflowState || {}),
+    [bundle, reviewWorkflowState]
+  );
+  const reviewItemsById = useMemo(
+    () => Object.fromEntries(reviewQueueItems.map((item) => [item.id, item])),
+    [reviewQueueItems]
+  );
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
   const dualRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
   const splitLayout = isTablet ? "1fr" : "1fr 1fr";
   const portalLayout = isTablet ? "1fr" : "1.1fr 1fr";
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    if (!reviewScope.householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    if (!reviewScope.householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
 
   return (
     <div>
@@ -345,6 +408,10 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
                     gap: "10px",
                   }}
                 >
+                  {(() => {
+                    const workflowItem = reviewItemsById[`asset:${bundle.asset?.id}:${item.id}`] || null;
+                    return (
+                      <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -375,14 +442,134 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
                           background: "#ffffff",
                           border: "1px solid #e2e8f0",
                         }}
-                      >
-                        {item.staleLabel}
-                      </span>
-                    </div>
+                        >
+                          {item.staleLabel}
+                        </span>
+                        {workflowItem ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "5px 9px",
+                              borderRadius: "999px",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color:
+                                workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                  ? "#166534"
+                                  : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                    ? "#92400e"
+                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                      ? "#9a3412"
+                                      : "#475569",
+                              background:
+                                workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                  ? "#dcfce7"
+                                  : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                    ? "#fef3c7"
+                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                      ? "#ffedd5"
+                                      : "#ffffff",
+                              border: "1px solid #e2e8f0",
+                            }}
+                          >
+                            {workflowItem.workflow_label}
+                          </span>
+                        ) : null}
+                      </div>
                   </div>
                   <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{item.blocker}</div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div>
                   <div style={{ color: "#334155", fontWeight: 700 }}>{item.nextAction}</div>
+                  {workflowItem ? (
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "5px 9px",
+                            borderRadius: "999px",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            color: workflowItem.workflow_assignee_key ? "#1d4ed8" : "#64748b",
+                            background: workflowItem.workflow_assignee_key ? "#dbeafe" : "#e2e8f0",
+                          }}
+                        >
+                          Owner: {workflowItem.workflow_assignee_label}
+                        </span>
+                        <select
+                          value={workflowItem.workflow_assignee_key || ""}
+                          onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                          style={{
+                            border: "1px solid #e2e8f0",
+                            background: "#ffffff",
+                            borderRadius: "10px",
+                            padding: "9px 12px",
+                            fontWeight: 700,
+                            color: "#475569",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {assigneeChoices.map((option) => (
+                            <option key={option.key || "unassigned"} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                          borderRadius: "10px",
+                          padding: "9px 12px",
+                          fontWeight: 700,
+                          color: "#475569",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Pending Docs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                          borderRadius: "10px",
+                          padding: "9px 12px",
+                          fontWeight: 700,
+                          color: "#475569",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Follow Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                        style={{
+                          border: "none",
+                          background: "#0f172a",
+                          borderRadius: "10px",
+                          padding: "9px 12px",
+                          fontWeight: 700,
+                          color: "#ffffff",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                      </button>
+                      </div>
+                    </div>
+                  ) : null}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

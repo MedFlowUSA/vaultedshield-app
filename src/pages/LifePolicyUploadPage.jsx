@@ -1211,8 +1211,8 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     <div style={{ display: "grid", gap: "24px" }}>
       <PageHeader
         eyebrow="Life Policy Intelligence"
-        title="Life Policy Upload Workspace"
-        description="Start with the initial policy illustration, then add annual statements separately to build performance history and a stronger current read."
+        title="In-Force Policy Intake"
+        description="Bring in the original illustration, then add annual statements so the engine can normalize the policy, interpret performance, and surface charge pressure over time."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
             <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(false)}>
@@ -1230,7 +1230,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
       <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
         <SectionCard
           title="1. Initial Policy / Illustration Upload"
-          subtitle="Upload the original illustration or baseline policy PDF first."
+          subtitle="Upload the original illustration or baseline policy PDF first so the system can anchor the policy design."
         >
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
@@ -1298,7 +1298,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
         </SectionCard>
         <SectionCard
           title="2. Annual Statement History Upload"
-          subtitle="Upload yearly statement PDFs separately after the baseline file."
+          subtitle="Upload yearly statement PDFs separately after the baseline file to build the live in-force history."
         >
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
@@ -1405,7 +1405,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
       <SectionCard
         title="Analyze And Save"
-        subtitle="Run the current carrier-aware life-policy parser and save the result into the vaulted policy workflow."
+        subtitle="Run the carrier-aware parser, build the in-force policy read, and save the result into the vaulted policy workflow."
       >
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
           <button

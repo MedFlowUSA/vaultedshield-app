@@ -25,7 +25,7 @@ import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "—";
+  if (!Number.isFinite(numeric)) return "\u2014";
   return numeric.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
@@ -34,7 +34,7 @@ function formatCurrency(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) return "\u2014";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString("en-US", {
@@ -46,7 +46,7 @@ function formatDate(value) {
 }
 
 function displayNullable(value) {
-  return value === null || value === undefined || value === "" ? "—" : value;
+  return value === null || value === undefined || value === "" ? "\u2014" : value;
 }
 
 function displayVisibleValue(flag, value) {
@@ -55,8 +55,8 @@ function displayVisibleValue(flag, value) {
 }
 
 function getTone(label) {
-  if (label === "Well Supported") return "good";
-  if (label === "Stable but Needs Monitoring") return "warning";
+  if (label === "Well Supported" || label === "Strong") return "good";
+  if (label === "Stable but Needs Monitoring" || label === "Moderate") return "warning";
   if (label === "At Risk") return "alert";
   return "info";
 }
@@ -140,7 +140,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
             `Latest statement: ${formatDate(basePolicy.latest_statement_date)}`,
             `Visible periods: ${baseTrend?.periods_count ?? 0}`,
             `Trend continuity: ${displayNullable(baseTrend?.continuity_trend)}`,
-            `Statement dates: ${(baseStatements || []).map((row) => formatDate(row.statement_date)).join(", ") || "—"}`,
+            `Statement dates: ${(baseStatements || []).map((row) => formatDate(row.statement_date)).join(", ") || "\u2014"}`,
           ],
         },
         {
@@ -149,7 +149,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
             `Latest statement: ${formatDate(comparePolicy.latest_statement_date)}`,
             `Visible periods: ${compareTrend?.periods_count ?? 0}`,
             `Trend continuity: ${displayNullable(compareTrend?.continuity_trend)}`,
-            `Statement dates: ${(compareStatements || []).map((row) => formatDate(row.statement_date)).join(", ") || "—"}`,
+            `Statement dates: ${(compareStatements || []).map((row) => formatDate(row.statement_date)).join(", ") || "\u2014"}`,
           ],
         },
       ],
@@ -185,7 +185,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
           values: [
             `Charge visibility: ${displayNullable(basePolicy.charge_visibility_status)}`,
             `Total visible charges: ${displayNullable(basePolicy.total_visible_charges)}`,
-            `Trend note: ${baseTrend?.visible_charge_trend?.note || "—"}`,
+            `Trend note: ${baseTrend?.visible_charge_trend?.note || "\u2014"}`,
           ],
         },
         {
@@ -193,7 +193,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
           values: [
             `Charge visibility: ${displayNullable(comparePolicy.charge_visibility_status)}`,
             `Total visible charges: ${displayNullable(comparePolicy.total_visible_charges)}`,
-            `Trend note: ${compareTrend?.visible_charge_trend?.note || "—"}`,
+            `Trend note: ${compareTrend?.visible_charge_trend?.note || "\u2014"}`,
           ],
         },
       ],
@@ -249,7 +249,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
           values: [
             `Oldest statement: ${formatDate(baseTrend?.oldest_statement_date)}`,
             `Newest statement: ${formatDate(baseTrend?.newest_statement_date)}`,
-            `Trend note: ${baseTrend?.cash_value_trend?.note || "—"}`,
+            `Trend note: ${baseTrend?.cash_value_trend?.note || "\u2014"}`,
           ],
         },
         {
@@ -257,7 +257,7 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
           values: [
             `Oldest statement: ${formatDate(compareTrend?.oldest_statement_date)}`,
             `Newest statement: ${formatDate(compareTrend?.newest_statement_date)}`,
-            `Trend note: ${compareTrend?.cash_value_trend?.note || "—"}`,
+            `Trend note: ${compareTrend?.cash_value_trend?.note || "\u2014"}`,
           ],
         },
       ],
@@ -268,11 +268,11 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
       rows: [
         {
           label: basePolicy.product || "Current policy",
-          values: [`Trend note: ${baseTrend?.cash_surrender_value_trend?.note || "—"}`],
+          values: [`Trend note: ${baseTrend?.cash_surrender_value_trend?.note || "\u2014"}`],
         },
         {
           label: comparePolicy.product || "Comparison policy",
-          values: [`Trend note: ${compareTrend?.cash_surrender_value_trend?.note || "—"}`],
+          values: [`Trend note: ${compareTrend?.cash_surrender_value_trend?.note || "\u2014"}`],
         },
       ],
     },
@@ -283,14 +283,14 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
         {
           label: basePolicy.product || "Current policy",
           values: [
-            `Trend note: ${baseTrend?.total_coi_trend?.note || "—"}`,
+            `Trend note: ${baseTrend?.total_coi_trend?.note || "\u2014"}`,
             `Latest visible statement COI: ${formatCurrency(baseStatements.at(-1)?.cost_of_insurance)}`,
           ],
         },
         {
           label: comparePolicy.product || "Comparison policy",
           values: [
-            `Trend note: ${compareTrend?.total_coi_trend?.note || "—"}`,
+            `Trend note: ${compareTrend?.total_coi_trend?.note || "\u2014"}`,
             `Latest visible statement COI: ${formatCurrency(compareStatements.at(-1)?.cost_of_insurance)}`,
           ],
         },
@@ -302,11 +302,11 @@ function buildEvidenceLookup(basePolicy, comparePolicy, comparisonAnalysis, tren
       rows: [
         {
           label: basePolicy.product || "Current policy",
-          values: [`Trend note: ${baseTrend?.visible_charge_trend?.note || "—"}`],
+          values: [`Trend note: ${baseTrend?.visible_charge_trend?.note || "\u2014"}`],
         },
         {
           label: comparePolicy.product || "Comparison policy",
-          values: [`Trend note: ${compareTrend?.visible_charge_trend?.note || "—"}`],
+          values: [`Trend note: ${compareTrend?.visible_charge_trend?.note || "\u2014"}`],
         },
       ],
     },
@@ -366,7 +366,7 @@ function renderReportFactsGrid(items = [], columns = 3) {
   );
 }
 
-function renderReportSection(section) {
+function renderReportSection(section, isTablet = false) {
   if (!section) return null;
 
   return (
@@ -511,7 +511,7 @@ function ReportView({ title, subtitle, report, onPrint }) {
             Print Report
           </button>
         </div>
-        {report.sections.map((section) => renderReportSection(section))}
+        {report.sections.map((section) => renderReportSection(section, isTablet))}
       </div>
     </SectionCard>
   );
@@ -836,9 +836,9 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <PageHeader
-        eyebrow="Insurance"
-        title="Focused Policy Comparison"
-        description="A direct side-by-side review that lines the current policy up against a stronger or cleaner comparison file."
+        eyebrow="In-Force Policy Intelligence"
+        title="Policy Strength Comparison"
+        description="A side-by-side in-force review that shows which policy is stronger, where charges and evidence differ, and how the statement trail supports the call."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
@@ -899,8 +899,8 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
           ) : null}
 
           <SectionCard
-            title="Comparison Read"
-            subtitle="This view highlights which policy currently carries the stronger visible support and where the main evidence gaps differ."
+            title="Policy Health Comparison"
+            subtitle="This view highlights which in-force policy currently looks stronger, where charge drag and evidence support differ, and which file needs closer attention."
           >
             <div style={{ display: "grid", gap: "14px" }}>
               <div
@@ -934,7 +934,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
           {protectionComparison ? (
             <SectionCard
               title="Protection Confidence"
-              subtitle="This layer compares coverage-read confidence, funding visibility, and visible gap pressure so the stronger continuity file is not mistaken for complete protection."
+              subtitle="This layer compares protection-read confidence, funding visibility, and visible gap pressure so stronger policy monitoring is not mistaken for complete protection."
             >
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
@@ -969,6 +969,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{policy.product || "Unnamed policy"}</div>
                         <StatusBadge
                           label={policy.gapAnalysis?.coverageGap ? "Gap Review Needed" : "Protection Check"}
+                          
                           tone={getProtectionTone(policy.gapAnalysis?.coverageGap, policy.gapAnalysis?.confidence)}
                         />
                       </div>
@@ -1012,7 +1013,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                           label={
                             item.strongerPolicy === "comparison"
                               ? "Comparison Stronger"
-                              : item.strongerPolicy === "current"
+                            : item.strongerPolicy === "current"
                                 ? "Current Stronger"
                                 : "Even"
                           }
@@ -1109,8 +1110,8 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
 
           {advisorComparisonRead ? (
             <SectionCard
-              title="Advisor Read"
-              subtitle="A practical recommendation layer that separates cleaner review support from actual protection confidence."
+              title="Plain-English Comparison Read"
+              subtitle="A practical recommendation layer that separates cleaner monitoring support from actual protection confidence."
             >
               <div style={{ display: "grid", gap: "14px" }}>
                 <div
@@ -1138,8 +1139,8 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
 
           {comparisonAnalysis ? (
             <SectionCard
-              title="Why The Comparison Policy Is Stronger"
-              subtitle="This layer compares continuity, statement support, charges, COI support, strategy visibility, and missing-data pressure side by side."
+              title="Why One Policy Looks Stronger"
+              subtitle="This layer compares continuity, statement support, charge drag, COI support, strategy visibility, and missing-data pressure side by side."
             >
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
@@ -1227,9 +1228,9 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                         <StatusBadge
                           label={
                             item.stronger_policy === "comparison"
-                              ? "Comparison Policy Stronger"
+                              ? "Comparison Stronger"
                               : item.stronger_policy === "current"
-                                ? "Current Policy Stronger"
+                                ? "Current Stronger"
                                 : "Even"
                           }
                           tone={
@@ -1251,8 +1252,8 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
 
           {trendDeltaAnalysis ? (
             <SectionCard
-              title="Trend Delta Comparison"
-              subtitle="This layer compares how cash value, surrender value, COI, charges, and statement support are moving over time in each policy."
+              title="Performance Trend Comparison"
+              subtitle="This layer compares how cash value, surrender value, COI, charge drag, and statement support are moving over time in each policy."
             >
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
@@ -1292,9 +1293,9 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                         <StatusBadge
                           label={
                             item.stronger_policy === "comparison"
-                              ? "Comparison Policy Stronger"
+                              ? "Comparison Stronger"
                               : item.stronger_policy === "current"
-                                ? "Current Policy Stronger"
+                                ? "Current Stronger"
                                 : item.stronger_policy === "limited"
                                   ? "Limited"
                                   : "Even"
@@ -1319,7 +1320,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
           {activeEvidence ? (
             <SectionCard
               title={activeEvidence.title}
-              subtitle="This drill-down shows the specific side-by-side evidence currently driving the comparison call."
+              subtitle="This drill-down shows the specific side-by-side evidence currently driving the policy comparison call."
             >
               <div style={{ display: "grid", gap: "16px" }}>
                 <div

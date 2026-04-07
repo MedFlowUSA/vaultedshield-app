@@ -73,12 +73,21 @@ export default function RetirementHubPage({ onNavigate }) {
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
-  const [goalSnapshot, setGoalSnapshot] = useState(null);
+  const goalSnapshot = useMemo(
+    () =>
+      loadRetirementGoalSnapshot({
+        userId: debug.authUserId || null,
+        householdId: debug.householdId || null,
+      }),
+    [debug.authUserId, debug.householdId]
+  );
 
   useEffect(() => {
     if (householdState.loading) return;
     if (!householdState.context.householdId) {
-      setLoading(false);
+      queueMicrotask(() => {
+        setLoading(false);
+      });
       return;
     }
 
@@ -98,15 +107,6 @@ export default function RetirementHubPage({ onNavigate }) {
       active = false;
     };
   }, [householdState.loading, householdState.context.householdId]);
-
-  useEffect(() => {
-    setGoalSnapshot(
-      loadRetirementGoalSnapshot({
-        userId: debug.authUserId || null,
-        householdId: debug.householdId || null,
-      })
-    );
-  }, [debug.authUserId, debug.householdId]);
 
   const summaryItems = useMemo(() => {
     const majorCategoryCounts = accounts.reduce(

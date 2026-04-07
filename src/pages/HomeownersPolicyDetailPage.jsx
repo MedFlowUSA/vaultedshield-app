@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
@@ -26,6 +26,14 @@ import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataConte
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildHomeownersCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  annotateReviewWorkflowItems,
+  buildReviewAssignmentOptions,
+  getHouseholdReviewWorkflowState,
+  REVIEW_WORKFLOW_STATUSES,
+  saveHouseholdReviewWorkflowState,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildHomeownersDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 
 const HOMEOWNERS_DOCUMENT_CLASSES = listHomeownersDocumentClasses();
 const HOMEOWNERS_CARRIERS = listHomeownersCarriers();
@@ -51,7 +59,7 @@ function getStatusTone(status) {
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
-  const { householdState, debug: shellDebug } = usePlatformShellData();
+  const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
@@ -71,6 +79,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   const [uploadQueue, setUploadQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
       householdId: householdState.context.householdId || null,
@@ -87,8 +96,19 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     ]
   );
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: shellDebug.authUserId || null,
+    }),
+    [householdState.context.householdId, shellDebug.authUserId]
+  );
 
-  async function loadHomeownersBundle(targetHomeownersPolicyId, options = {}) {
+  useEffect(() => {
+    setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
+  }, [reviewScope]);
+
+  const loadHomeownersBundle = useCallback(async (targetHomeownersPolicyId, options = {}) => {
     const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId);
     if (result.error || !result.data?.homeownersPolicy) {
       if (!options.silent) {
@@ -135,7 +155,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     }
 
     return { data: result.data, error: null };
-  }
+  }, [platformScope]);
 
   useEffect(() => {
     if (!homeownersPolicyId) return;
@@ -150,7 +170,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     return () => {
       active = false;
     };
-  }, [homeownersPolicyId, scopeKey]);
+  }, [homeownersPolicyId, loadHomeownersBundle, scopeKey]);
 
   useEffect(() => {
     setBundle(null);
@@ -189,6 +209,25 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
       propertyLinks,
     ]
   );
+  const homeownersReviewQueueItems = useMemo(
+    () =>
+      annotateReviewWorkflowItems(
+        buildHomeownersDetailReviewQueueItems({
+          homeownersPolicy,
+          homeownersBundle: bundle,
+          propertyLinks,
+          assetBundle,
+          homeownersCommandCenter,
+        }),
+        reviewWorkflowState || {}
+      ),
+    [assetBundle, bundle, homeownersCommandCenter, homeownersPolicy, propertyLinks, reviewWorkflowState]
+  );
+  const homeownersReviewItemsById = useMemo(
+    () => Object.fromEntries(homeownersReviewQueueItems.map((item) => [item.id, item])),
+    [homeownersReviewQueueItems]
+  );
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
     if (!homeownersPolicy) return [];
@@ -199,6 +238,40 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
       { label: "Analytics", value: bundle?.homeownersAnalytics?.length || 0, helper: "Future homeowners review outputs" },
     ];
   }, [bundle, homeownersPolicy, homeownersPolicyType]);
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    if (!reviewScope.householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    if (!reviewScope.householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -397,11 +470,30 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                           gap: "8px",
                         }}
                       >
+                        {(() => {
+                          const workflowItem =
+                            homeownersReviewItemsById[`homeowners:${homeownersPolicy?.id}:${item.id}`] || null;
+                          return (
+                            <>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
                           <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
                             <StatusBadge label={item.staleLabel} tone="info" />
+                            {workflowItem ? (
+                              <StatusBadge
+                                label={workflowItem.workflow_label}
+                                tone={
+                                  workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                    ? "good"
+                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                      ? "warning"
+                                      : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                        ? "alert"
+                                        : "info"
+                                }
+                              />
+                            ) : null}
                           </div>
                         </div>
                         <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
@@ -413,6 +505,53 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                         <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
                           Next action: {item.nextAction}
                         </div>
+                        {workflowItem ? (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                              <StatusBadge
+                                label={`Owner: ${workflowItem.workflow_assignee_label}`}
+                                tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
+                              />
+                              <select
+                                value={workflowItem.workflow_assignee_key || ""}
+                                onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                                style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                              >
+                                {assigneeChoices.map((option) => (
+                                  <option key={option.key || "unassigned"} value={option.key}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                              style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                            >
+                              Pending Docs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                              style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                            >
+                              Follow Up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                              style={{ padding: "9px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                            >
+                              {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                            </button>
+                            </div>
+                          </div>
+                        ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

@@ -82,11 +82,18 @@ function buildSignedOutSession() {
   };
 }
 
+function sanitizeStoredSession(session) {
+  if (session?.source === "free_access") {
+    return buildSignedOutSession();
+  }
+  return session;
+}
+
 function isLocalFallbackSession(session) {
   return Boolean(
     session?.isAuthenticated &&
       session?.authMode === "local" &&
-      ["free_access", "signup", "login", "local_profile", "pricing_upgrade"].includes(session?.source)
+      ["signup", "login", "local_profile", "pricing_upgrade"].includes(session?.source)
   );
 }
 
@@ -292,7 +299,7 @@ async function signOutFromSupabase() {
 
 export function useAccessPortal() {
   const [session, setSession] = useState(() =>
-    safeReadStorage(SESSION_STORAGE_KEY, buildSignedOutSession())
+    sanitizeStoredSession(safeReadStorage(SESSION_STORAGE_KEY, buildSignedOutSession()))
   );
   const [profiles, setProfiles] = useState(() => safeReadStorage(PROFILE_STORAGE_KEY, []));
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
@@ -411,20 +418,6 @@ export function useAccessPortal() {
     return { ok: true, profile: nextSession };
   }
 
-  function continueWithFreeAccess() {
-    const guestProfile = {
-      householdName: "Free Workspace",
-      email: "free@vaultedshield.local",
-      tier: "free",
-      source: "free_access",
-      createdAt: new Date().toISOString(),
-      authMode: "local",
-    };
-    setSession(createSession(guestProfile));
-    setAuthReady(true);
-    return { ok: true, profile: guestProfile };
-  }
-
   async function signOut() {
     if (isSupabaseConfigured()) {
       await signOutFromSupabase();
@@ -464,7 +457,6 @@ export function useAccessPortal() {
     signIn,
     signOut,
     upgradePlan,
-    continueWithFreeAccess,
     hasAccess: (minimumTier = "free") => hasTierAccess(currentTier, minimumTier),
   };
 }

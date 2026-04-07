@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import process from "node:process";
 import { handlePropertyCompsRequest } from "./property-comps-server.js";
 
 function sendJson(res, status, payload) {

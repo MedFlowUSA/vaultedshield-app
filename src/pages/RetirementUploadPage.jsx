@@ -144,10 +144,12 @@ export default function RetirementUploadPage({ onNavigate }) {
 
   useEffect(() => {
     const stored = loadRetirementGoalSnapshot(storageScope);
-    if (stored?.goalForm) {
-      setGoalForm((current) => ({ ...current, ...stored.goalForm }));
-    }
-    setPlannerReadyForPersistence(true);
+    queueMicrotask(() => {
+      if (stored?.goalForm) {
+        setGoalForm((current) => ({ ...current, ...stored.goalForm }));
+      }
+      setPlannerReadyForPersistence(true);
+    });
   }, [storageScope]);
 
   useEffect(() => {

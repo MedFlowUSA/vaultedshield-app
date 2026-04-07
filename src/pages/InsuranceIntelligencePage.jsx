@@ -217,6 +217,25 @@ function renderReportSection(section) {
   );
 }
 
+function renderSignalCard({ label, value, detail }) {
+  return (
+    <div
+      style={{
+        padding: "14px 16px",
+        borderRadius: "16px",
+        background: "#ffffff",
+        border: "1px solid rgba(148, 163, 184, 0.18)",
+        display: "grid",
+        gap: "8px",
+      }}
+    >
+      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+      <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{value}</div>
+      {detail ? <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>{detail}</div> : null}
+    </div>
+  );
+}
+
 function PortfolioReportView({ report, onPrint, isCompact = false }) {
   if (!report) return null;
 
@@ -573,6 +592,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const insurancePortfolioStatus =
     rankedPolicies.length === 0
       ? "Awaiting first upload"
+      : rankedPolicies.length === 1
+        ? "First policy active"
       : atRiskPolicies.length > 0
         ? "Needs review"
         : "Stable comparison";
@@ -589,6 +610,19 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       };
     }
 
+    if (rankedPolicies.length === 1) {
+      const firstPolicy = rankedPolicies[0];
+      return {
+        eyebrow: "First Policy Loaded",
+        headline: "Your first in-force policy is now readable.",
+        narrative:
+          firstPolicy?.interpretation?.bottom_line_summary ||
+          "VaultedShield can now surface baseline policy understanding, charge visibility, continuity support, and policy health. The next gain comes from adding statement history or a second policy for comparison.",
+        nextAction: firstPolicy?.policy_id ? "Open Policy Detail" : "Open Upload Workspace",
+        route: firstPolicy?.policy_id ? `/insurance/${firstPolicy.policy_id}` : "/insurance/life/upload",
+      };
+    }
+
     const topPriority = portfolioBrief.priority_policies?.[0] || null;
     return {
       eyebrow: "Advisor Brief",
@@ -600,6 +634,67 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       route: topPriority?.policy_id ? `/insurance/${topPriority.policy_id}` : "/insurance/life/upload",
     };
   }, [portfolioBrief, rankedPolicies]);
+  const firstPolicy = rankedPolicies[0] || null;
+  const singlePolicyNextSteps = useMemo(() => {
+    if (rankedPolicies.length !== 1 || !firstPolicy) return [];
+    return [
+      firstPolicy.latest_statement_date
+        ? "Add a second statement to turn this into a more useful annual review timeline."
+        : "Upload the first in-force annual statement to improve continuity and trend support.",
+      firstPolicy.total_visible_charges === null || firstPolicy.total_visible_charges === undefined
+        ? "Strengthen charge visibility so COI and total drag are easier to trust."
+        : "Review COI and visible charge drag to confirm whether costs are manageable.",
+      "Add a second policy when available to unlock side-by-side policy health comparison.",
+    ];
+  }, [firstPolicy, rankedPolicies.length]);
+  const portfolioSignalStrip = useMemo(() => {
+    if (rankedPolicies.length === 0) {
+      return [
+        {
+          label: "Readiness",
+          value: "Awaiting first policy",
+          detail: "Upload one illustration or in-force statement to unlock policy intelligence.",
+        },
+        {
+          label: "Comparison",
+          value: "Not active yet",
+          detail: "A second saved policy unlocks side-by-side strength and charge review.",
+        },
+      ];
+    }
+
+    const resolvedStatements = rankedPolicies.filter((row) => row.latest_statement_date).length;
+    const strongChargeSupport = rankedPolicies.filter(
+      (row) => row.total_visible_charges !== null && row.total_visible_charges !== undefined && row.coi_confidence !== "weak"
+    ).length;
+
+    return [
+      {
+        label: "Portfolio Readiness",
+        value: insurancePortfolioStatus,
+        detail:
+          rankedPolicies.length === 1
+            ? "One policy is readable. More statement history will deepen the annual review."
+            : `${resolvedStatements}/${rankedPolicies.length} policies currently show resolved latest-statement support.`,
+      },
+      {
+        label: "Charge Support",
+        value: `${strongChargeSupport}/${rankedPolicies.length} stronger reads`,
+        detail:
+          strongChargeSupport === rankedPolicies.length
+            ? "Charge and COI visibility are broadly usable across the current set."
+            : "Some policies still need clearer COI or visible-charge support before deeper conclusions.",
+      },
+      {
+        label: "Comparison Readiness",
+        value: rankedPolicies.length > 1 ? "Active" : "Waiting for second policy",
+        detail:
+          rankedPolicies.length > 1
+            ? "Side-by-side policy health and charge drag review is available now."
+            : "Add another saved policy to unlock a stronger portfolio comparison story.",
+      },
+    ];
+  }, [insurancePortfolioStatus, rankedPolicies]);
 
   const rankingHighlights = useMemo(() => {
     return rankedPolicies.map((policy) => {
@@ -804,10 +899,16 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             </button>
             <button
               type="button"
-              onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              onClick={() => {
+                if (rankedPolicies.length > 1) {
+                  comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                } else {
+                  onNavigate?.("/insurance/life/upload");
+                }
+              }}
               style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
             >
-              Compare Policies
+              {rankedPolicies.length > 1 ? "Compare Policies" : "Add Another Policy"}
             </button>
           </div>
         </div>
@@ -851,6 +952,33 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             </div>
           </div>
 
+          {rankedPolicies.length === 1 ? (
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                What Unlocks Next
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                VaultedShield already has one policy to interpret. The next improvements come from stronger statement history, clearer charge support, and eventually a second policy for comparison.
+              </div>
+              <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                {singlePolicyNextSteps.map((item) => (
+                  <li key={item} style={{ lineHeight: "1.7" }}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
               type="button"
@@ -872,6 +1000,18 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       {showPortfolioReport ? (
         <PortfolioReportView report={portfolioReport} onPrint={handlePrintPortfolioReport} isCompact={isTablet} />
       ) : null}
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "12px",
+        }}
+      >
+        {portfolioSignalStrip.map((item) => (
+          <div key={item.label}>{renderSignalCard(item)}</div>
+        ))}
+      </section>
 
       <section
         style={{
@@ -1638,9 +1778,19 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         }}
       >
         <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>System Insight</div>
-        <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#475569" }}>{systemInsight.summary}</div>
+        <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#475569" }}>
+          {rankedPolicies.length === 1
+            ? "This first saved policy is enough to start an in-force read, but the portfolio story is still early. Statement continuity, charge support, and a second comparable policy will make this hub much more useful."
+            : systemInsight.summary}
+        </div>
         <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#0f172a" }}>
-          {systemInsight.bullets.map((bullet) => (
+          {(rankedPolicies.length === 1
+            ? [
+                "One saved policy now supports baseline health, continuity, and charge interpretation.",
+                "Comparison becomes much stronger after a second policy or deeper statement history is added.",
+                "Missing statement dates, limited COI visibility, and partial strategy detail still weaken confidence where present.",
+              ]
+            : systemInsight.bullets).map((bullet) => (
             <li key={bullet} style={{ lineHeight: "1.7" }}>
               {bullet}
             </li>

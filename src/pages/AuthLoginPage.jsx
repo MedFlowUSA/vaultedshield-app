@@ -1,25 +1,8 @@
 import { useState } from "react";
-import AccessValuePreview from "../components/auth/AccessValuePreview";
-import PageHeader from "../components/layout/PageHeader";
-import SectionCard from "../components/shared/SectionCard";
+import AuthPortalLayout, { AuthPrimaryShell, AuthSupportTiles } from "../components/auth/AuthPortalLayout";
+import { authActionStyle, authInputStyle } from "../components/auth/authPortalStyles";
 
-function inputStyle() {
-  return { padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" };
-}
-
-function actionStyle(primary = false) {
-  return {
-    padding: "12px 16px",
-    borderRadius: "10px",
-    border: primary ? "none" : "1px solid #cbd5e1",
-    background: primary ? "#0f172a" : "#fff",
-    color: primary ? "#fff" : "#0f172a",
-    cursor: "pointer",
-    fontWeight: 700,
-  };
-}
-
-export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "/dashboard" }) {
+export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "/insurance" }) {
   const [entering, setEntering] = useState(false);
   const [refreshNote, setRefreshNote] = useState("");
   const [refreshError, setRefreshError] = useState("");
@@ -43,64 +26,71 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
     setEntering(false);
   }
 
-  function handleFreeAccess() {
-    accessPortal?.continueWithFreeAccess();
-    onNavigate(returnPath || "/dashboard");
-  }
-
   return (
-    <div style={{ maxWidth: "1180px", margin: "64px auto", padding: "0 20px", display: "grid", gap: "22px" }}>
-      <PageHeader
-        eyebrow="VaultedShield Access"
-        title="Login"
-        description="Securely enter the platform and continue working inside your existing VaultedShield access tier. Even before login, you can preview how VaultedShield prioritizes the next best move."
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
-        <SectionCard
-          title="Account Login"
-          subtitle="Enter the platform and continue where you left off without needing a storage reset."
-        >
-          <div style={{ display: "grid", gap: "12px" }}>
-            <input
-              value={form.email}
-              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="Email address"
-              style={inputStyle()}
-            />
-            <input
-              value={form.password}
-              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              placeholder="Password"
-              type="password"
-              style={inputStyle()}
-            />
-            <button
-              onClick={handleEnterPlatform}
-              disabled={entering}
-              style={{
-                ...actionStyle(true),
-                cursor: entering ? "progress" : "pointer",
-                opacity: entering ? 0.8 : 1,
-              }}
-            >
-              {entering ? "Opening Workspace..." : "Enter Platform"}
-            </button>
-            <button onClick={() => onNavigate("/signup")} style={actionStyle(false)}>
-              Create Account
-            </button>
-            <button onClick={handleFreeAccess} style={actionStyle(false)}>
-              Continue With Free Access
-            </button>
-            {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
-            {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
-          </div>
-        </SectionCard>
+    <AuthPortalLayout
+      eyebrow="VaultedShield Access"
+      title="Login"
+      description="Securely enter the platform and return to your authenticated workspace. This portal explains what unlocks after sign-in without loading a live household record first."
+      previewTitle="What unlocks after sign in"
+      previewSubtitle="A quick preview of what becomes available once you enter the authenticated workspace."
+      left={
+        <>
+          <AuthPrimaryShell title="Account Login" subtitle="Enter the platform and continue where you left off.">
+            <div style={{ display: "grid", gap: "14px" }}>
+                <div
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(239,246,255,0.92) 100%)",
+                    border: "1px solid #dbeafe",
+                    color: "#334155",
+                    lineHeight: "1.7",
+                    fontSize: "14px",
+                  }}
+                >
+                  Sign in to open your protected workspace, policy review flow, and cross-module operating queue.
+                </div>
+                <input
+                  value={form.email}
+                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="Email address"
+                  style={authInputStyle()}
+                />
+                <input
+                  value={form.password}
+                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="Password"
+                  type="password"
+                  style={authInputStyle()}
+                />
+                <button
+                  onClick={handleEnterPlatform}
+                  disabled={entering}
+                  style={{
+                    ...authActionStyle(true),
+                    cursor: entering ? "progress" : "pointer",
+                    opacity: entering ? 0.8 : 1,
+                  }}
+                >
+                  {entering ? "Opening Workspace..." : "Enter Platform"}
+                </button>
+                <button onClick={() => onNavigate("/signup")} style={authActionStyle(false)}>
+                  Create Account
+                </button>
+                {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
+                {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
+            </div>
+          </AuthPrimaryShell>
 
-        <AccessValuePreview
-          title="See the value before you sign in"
-          subtitle="VaultedShield works best when it tells you what matters first. This preview shows the score, priorities, and advisor flow new households grow into."
-        />
-      </div>
-    </div>
+          <AuthSupportTiles
+            items={[
+              { label: "Protected Workspace", value: "Enabled after sign-in" },
+              { label: "Live Household Data", value: "Hidden before auth" },
+              { label: "Cross-Module Review", value: "Available inside platform" },
+            ]}
+          />
+        </>
+      }
+    />
   );
 }

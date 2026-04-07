@@ -945,11 +945,77 @@ export async function getHouseholdIntelligenceBundle(householdId) {
         propertyStackSummary: {
           propertyCount: 0,
         },
+        retirementAccounts: [],
+        retirementDocuments: [],
+        retirementSnapshots: [],
+        retirementAnalytics: [],
+        retirementPositions: [],
+        retirementSummary: {
+          accountCount: 0,
+          documentCount: 0,
+          snapshotCount: 0,
+          analyticsCount: 0,
+          positionCount: 0,
+          retirementDocumentsByAccountId: {},
+          retirementSnapshotsByAccountId: {},
+          retirementAnalyticsByAccountId: {},
+          retirementPositionsByAccountId: {},
+        },
+        autoPolicies: [],
+        autoDocuments: [],
+        autoSnapshots: [],
+        autoAnalytics: [],
+        autoSummary: {
+          policyCount: 0,
+          documentCount: 0,
+          snapshotCount: 0,
+          analyticsCount: 0,
+          autoDocumentsByPolicyId: {},
+          autoSnapshotsByPolicyId: {},
+          autoAnalyticsByPolicyId: {},
+        },
+        healthPlans: [],
+        healthDocuments: [],
+        healthSnapshots: [],
+        healthAnalytics: [],
+        healthSummary: {
+          planCount: 0,
+          documentCount: 0,
+          snapshotCount: 0,
+          analyticsCount: 0,
+          healthDocumentsByPlanId: {},
+          healthSnapshotsByPlanId: {},
+          healthAnalyticsByPlanId: {},
+        },
+        warranties: [],
+        warrantyDocuments: [],
+        warrantySnapshots: [],
+        warrantyAnalytics: [],
+        warrantySummary: {
+          warrantyCount: 0,
+          documentCount: 0,
+          snapshotCount: 0,
+          analyticsCount: 0,
+          warrantyDocumentsById: {},
+          warrantySnapshotsById: {},
+          warrantyAnalyticsById: {},
+        },
+        homeownersDocuments: [],
+        homeownersSnapshots: [],
+        homeownersAnalytics: [],
+        homeownersSummary: {
+          documentCount: 0,
+          snapshotCount: 0,
+          analyticsCount: 0,
+          homeownersDocumentsByPolicyId: {},
+          homeownersSnapshotsByPolicyId: {},
+          homeownersAnalyticsByPolicyId: {},
+        },
       },
       error: null,
     };
   }
-  const [householdsResult, membersResult, contactsResult, assetsResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult, propertiesResult, mortgageLoansResult, homeownersPoliciesResult, propertyStackAnalyticsResult] =
+  const [householdsResult, membersResult, contactsResult, assetsResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult, propertiesResult, mortgageLoansResult, homeownersPoliciesResult, propertyStackAnalyticsResult, retirementAccountsResult, autoPoliciesResult, healthPlansResult, warrantiesResult] =
     await Promise.all([
       listRecords("households", [{ column: "id", value: householdId }], {
         orderBy: "updated_at",
@@ -968,6 +1034,26 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       listRecords("property_stack_analytics", [{ column: "household_id", value: householdId }], {
         orderBy: "updated_at",
       }),
+      listRecords("retirement_accounts", [{ column: "household_id", value: householdId }], {
+        select:
+          "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+        orderBy: "updated_at",
+      }),
+      listRecords("auto_policies", [{ column: "household_id", value: householdId }], {
+        select:
+          "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+        orderBy: "updated_at",
+      }),
+      listRecords("health_plans", [{ column: "household_id", value: householdId }], {
+        select:
+          "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+        orderBy: "updated_at",
+      }),
+      listRecords("warranties", [{ column: "household_id", value: householdId }], {
+        select:
+          "*, assets(id, household_id, asset_name, asset_category, asset_subcategory, institution_name, institution_key, status, summary, metadata)",
+        orderBy: "updated_at",
+      }),
     ]);
 
   const error =
@@ -984,6 +1070,10 @@ export async function getHouseholdIntelligenceBundle(householdId) {
     mortgageLoansResult.error ||
     homeownersPoliciesResult.error ||
     propertyStackAnalyticsResult.error ||
+    retirementAccountsResult.error ||
+    autoPoliciesResult.error ||
+    healthPlansResult.error ||
+    warrantiesResult.error ||
     null;
 
   const household = householdsResult.data?.[0] || null;
@@ -998,6 +1088,10 @@ export async function getHouseholdIntelligenceBundle(householdId) {
   const mortgageLoans = mortgageLoansResult.data || [];
   const homeownersPolicies = homeownersPoliciesResult.data || [];
   const propertyStackAnalytics = propertyStackAnalyticsResult.data || [];
+  const retirementAccounts = retirementAccountsResult.data || [];
+  const autoPolicies = autoPoliciesResult.data || [];
+  const healthPlans = healthPlansResult.data || [];
+  const warranties = warrantiesResult.data || [];
 
   const emergencyMemberRoles = ["self", "spouse", "partner", "guardian", "executor", "trustee"];
   const professionalContactTypes = [
@@ -1048,10 +1142,223 @@ export async function getHouseholdIntelligenceBundle(householdId) {
   }, {});
 
   const propertyIds = properties.map((item) => item.id);
-  const [propertyMortgageLinksResult, propertyHomeownersLinksResult] = await Promise.all([
+  const retirementAccountIds = retirementAccounts.map((item) => item.id).filter(Boolean);
+  const homeownersPolicyIds = homeownersPolicies.map((item) => item.id).filter(Boolean);
+  const autoPolicyIds = autoPolicies.map((item) => item.id).filter(Boolean);
+  const healthPlanIds = healthPlans.map((item) => item.id).filter(Boolean);
+  const warrantyIds = warranties.map((item) => item.id).filter(Boolean);
+  const [propertyMortgageLinksResult, propertyHomeownersLinksResult, retirementDocumentsResult, retirementSnapshotsResult, retirementAnalyticsResult, retirementPositionsResult, homeownersDocumentsResult, homeownersSnapshotsResult, homeownersAnalyticsResult, autoDocumentsResult, autoSnapshotsResult, autoAnalyticsResult, healthDocumentsResult, healthSnapshotsResult, healthAnalyticsResult, warrantyDocumentsResult, warrantySnapshotsResult, warrantyAnalyticsResult] = await Promise.all([
     listRowsByIds("property_mortgage_links", "property_id", propertyIds),
     listRowsByIds("property_homeowners_links", "property_id", propertyIds),
+    listRowsByIds(
+      "retirement_documents",
+      "retirement_account_id",
+      retirementAccountIds,
+      "*, asset_documents(id, asset_id, household_id, file_name, document_role, document_type, processing_status, storage_bucket, storage_path, created_at)"
+    ),
+    listRowsByIds(
+      "retirement_snapshots",
+      "retirement_account_id",
+      retirementAccountIds,
+      "*, retirement_documents(id, document_class_key, statement_date, provider_key, asset_document_id)"
+    ),
+    listRowsByIds(
+      "retirement_analytics",
+      "retirement_account_id",
+      retirementAccountIds,
+      "*, retirement_snapshots(id, snapshot_type, snapshot_date)"
+    ),
+    listRowsByIds(
+      "retirement_positions",
+      "retirement_account_id",
+      retirementAccountIds,
+      "*, retirement_snapshots(id, snapshot_type, snapshot_date)"
+    ),
+    listRowsByIds(
+      "homeowners_documents",
+      "homeowners_policy_id",
+      homeownersPolicyIds,
+      "*, asset_documents(id, asset_id, household_id, file_name, document_role, document_type, processing_status, storage_bucket, storage_path, created_at)"
+    ),
+    listRowsByIds(
+      "homeowners_snapshots",
+      "homeowners_policy_id",
+      homeownersPolicyIds,
+      "*, homeowners_documents(id, document_class_key, document_date, carrier_key, asset_document_id)"
+    ),
+    listRowsByIds(
+      "homeowners_analytics",
+      "homeowners_policy_id",
+      homeownersPolicyIds,
+      "*, homeowners_snapshots(id, snapshot_type, snapshot_date)"
+    ),
+    listRowsByIds(
+      "auto_documents",
+      "auto_policy_id",
+      autoPolicyIds,
+      "*, asset_documents(id, asset_id, household_id, file_name, document_role, document_type, processing_status, storage_bucket, storage_path, created_at)"
+    ),
+    listRowsByIds(
+      "auto_snapshots",
+      "auto_policy_id",
+      autoPolicyIds,
+      "*, auto_documents(id, document_class_key, document_date, carrier_key, asset_document_id)"
+    ),
+    listRowsByIds(
+      "auto_analytics",
+      "auto_policy_id",
+      autoPolicyIds,
+      "*, auto_snapshots(id, snapshot_type, snapshot_date)"
+    ),
+    listRowsByIds(
+      "health_documents",
+      "health_plan_id",
+      healthPlanIds,
+      "*, asset_documents(id, asset_id, household_id, file_name, document_role, document_type, processing_status, storage_bucket, storage_path, created_at)"
+    ),
+    listRowsByIds(
+      "health_snapshots",
+      "health_plan_id",
+      healthPlanIds,
+      "*, health_documents(id, document_class_key, document_date, carrier_key, asset_document_id)"
+    ),
+    listRowsByIds(
+      "health_analytics",
+      "health_plan_id",
+      healthPlanIds,
+      "*, health_snapshots(id, snapshot_type, snapshot_date)"
+    ),
+    listRowsByIds(
+      "warranty_documents",
+      "warranty_id",
+      warrantyIds,
+      "*, asset_documents(id, asset_id, household_id, file_name, document_role, document_type, processing_status, storage_bucket, storage_path, created_at)"
+    ),
+    listRowsByIds(
+      "warranty_snapshots",
+      "warranty_id",
+      warrantyIds,
+      "*, warranty_documents(id, document_class_key, document_date, provider_key, asset_document_id)"
+    ),
+    listRowsByIds(
+      "warranty_analytics",
+      "warranty_id",
+      warrantyIds,
+      "*, warranty_snapshots(id, snapshot_type, snapshot_date)"
+    ),
   ]);
+  const retirementDocuments = retirementDocumentsResult.data || [];
+  const retirementSnapshots = retirementSnapshotsResult.data || [];
+  const retirementAnalytics = retirementAnalyticsResult.data || [];
+  const retirementPositions = retirementPositionsResult.data || [];
+  const homeownersDocuments = homeownersDocumentsResult.data || [];
+  const homeownersSnapshots = homeownersSnapshotsResult.data || [];
+  const homeownersAnalytics = homeownersAnalyticsResult.data || [];
+  const autoDocuments = autoDocumentsResult.data || [];
+  const autoSnapshots = autoSnapshotsResult.data || [];
+  const autoAnalytics = autoAnalyticsResult.data || [];
+  const healthDocuments = healthDocumentsResult.data || [];
+  const healthSnapshots = healthSnapshotsResult.data || [];
+  const healthAnalytics = healthAnalyticsResult.data || [];
+  const warrantyDocuments = warrantyDocumentsResult.data || [];
+  const warrantySnapshots = warrantySnapshotsResult.data || [];
+  const warrantyAnalytics = warrantyAnalyticsResult.data || [];
+  const retirementDocumentsByAccountId = retirementDocuments.reduce((accumulator, row) => {
+    if (!row?.retirement_account_id) return accumulator;
+    if (!accumulator[row.retirement_account_id]) accumulator[row.retirement_account_id] = [];
+    accumulator[row.retirement_account_id].push(row);
+    return accumulator;
+  }, {});
+  const retirementSnapshotsByAccountId = retirementSnapshots.reduce((accumulator, row) => {
+    if (!row?.retirement_account_id) return accumulator;
+    if (!accumulator[row.retirement_account_id]) accumulator[row.retirement_account_id] = [];
+    accumulator[row.retirement_account_id].push(row);
+    return accumulator;
+  }, {});
+  const retirementAnalyticsByAccountId = retirementAnalytics.reduce((accumulator, row) => {
+    if (!row?.retirement_account_id) return accumulator;
+    if (!accumulator[row.retirement_account_id]) accumulator[row.retirement_account_id] = [];
+    accumulator[row.retirement_account_id].push(row);
+    return accumulator;
+  }, {});
+  const retirementPositionsByAccountId = retirementPositions.reduce((accumulator, row) => {
+    if (!row?.retirement_account_id) return accumulator;
+    if (!accumulator[row.retirement_account_id]) accumulator[row.retirement_account_id] = [];
+    accumulator[row.retirement_account_id].push(row);
+    return accumulator;
+  }, {});
+  const homeownersDocumentsByPolicyId = homeownersDocuments.reduce((accumulator, row) => {
+    if (!row?.homeowners_policy_id) return accumulator;
+    if (!accumulator[row.homeowners_policy_id]) accumulator[row.homeowners_policy_id] = [];
+    accumulator[row.homeowners_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const homeownersSnapshotsByPolicyId = homeownersSnapshots.reduce((accumulator, row) => {
+    if (!row?.homeowners_policy_id) return accumulator;
+    if (!accumulator[row.homeowners_policy_id]) accumulator[row.homeowners_policy_id] = [];
+    accumulator[row.homeowners_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const homeownersAnalyticsByPolicyId = homeownersAnalytics.reduce((accumulator, row) => {
+    if (!row?.homeowners_policy_id) return accumulator;
+    if (!accumulator[row.homeowners_policy_id]) accumulator[row.homeowners_policy_id] = [];
+    accumulator[row.homeowners_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const autoDocumentsByPolicyId = autoDocuments.reduce((accumulator, row) => {
+    if (!row?.auto_policy_id) return accumulator;
+    if (!accumulator[row.auto_policy_id]) accumulator[row.auto_policy_id] = [];
+    accumulator[row.auto_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const autoSnapshotsByPolicyId = autoSnapshots.reduce((accumulator, row) => {
+    if (!row?.auto_policy_id) return accumulator;
+    if (!accumulator[row.auto_policy_id]) accumulator[row.auto_policy_id] = [];
+    accumulator[row.auto_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const autoAnalyticsByPolicyId = autoAnalytics.reduce((accumulator, row) => {
+    if (!row?.auto_policy_id) return accumulator;
+    if (!accumulator[row.auto_policy_id]) accumulator[row.auto_policy_id] = [];
+    accumulator[row.auto_policy_id].push(row);
+    return accumulator;
+  }, {});
+  const healthDocumentsByPlanId = healthDocuments.reduce((accumulator, row) => {
+    if (!row?.health_plan_id) return accumulator;
+    if (!accumulator[row.health_plan_id]) accumulator[row.health_plan_id] = [];
+    accumulator[row.health_plan_id].push(row);
+    return accumulator;
+  }, {});
+  const healthSnapshotsByPlanId = healthSnapshots.reduce((accumulator, row) => {
+    if (!row?.health_plan_id) return accumulator;
+    if (!accumulator[row.health_plan_id]) accumulator[row.health_plan_id] = [];
+    accumulator[row.health_plan_id].push(row);
+    return accumulator;
+  }, {});
+  const healthAnalyticsByPlanId = healthAnalytics.reduce((accumulator, row) => {
+    if (!row?.health_plan_id) return accumulator;
+    if (!accumulator[row.health_plan_id]) accumulator[row.health_plan_id] = [];
+    accumulator[row.health_plan_id].push(row);
+    return accumulator;
+  }, {});
+  const warrantyDocumentsById = warrantyDocuments.reduce((accumulator, row) => {
+    if (!row?.warranty_id) return accumulator;
+    if (!accumulator[row.warranty_id]) accumulator[row.warranty_id] = [];
+    accumulator[row.warranty_id].push(row);
+    return accumulator;
+  }, {});
+  const warrantySnapshotsById = warrantySnapshots.reduce((accumulator, row) => {
+    if (!row?.warranty_id) return accumulator;
+    if (!accumulator[row.warranty_id]) accumulator[row.warranty_id] = [];
+    accumulator[row.warranty_id].push(row);
+    return accumulator;
+  }, {});
+  const warrantyAnalyticsById = warrantyAnalytics.reduce((accumulator, row) => {
+    if (!row?.warranty_id) return accumulator;
+    if (!accumulator[row.warranty_id]) accumulator[row.warranty_id] = [];
+    accumulator[row.warranty_id].push(row);
+    return accumulator;
+  }, {});
 
   const linkedMortgageIds = new Set((propertyMortgageLinksResult.data || []).map((link) => link.mortgage_loan_id));
   const linkedHomeownersIds = new Set((propertyHomeownersLinksResult.data || []).map((link) => link.homeowners_policy_id));
@@ -1123,7 +1430,27 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       properties,
       mortgageLoans,
       homeownersPolicies,
+      autoPolicies,
+      autoDocuments,
+      autoSnapshots,
+      autoAnalytics,
+      healthPlans,
+      healthDocuments,
+      healthSnapshots,
+      healthAnalytics,
+      warranties,
+      warrantyDocuments,
+      warrantySnapshots,
+      warrantyAnalytics,
+      homeownersDocuments,
+      homeownersSnapshots,
+      homeownersAnalytics,
       propertyStackAnalytics,
+      retirementAccounts,
+      retirementDocuments,
+      retirementSnapshots,
+      retirementAnalytics,
+      retirementPositions,
       propertyMortgageLinks: propertyMortgageLinksResult.data || [],
       propertyHomeownersLinks: propertyHomeownersLinksResult.data || [],
       propertyStackSummary: {
@@ -1149,6 +1476,52 @@ export async function getHouseholdIntelligenceBundle(householdId) {
         highQualityPropertyReviewAvailable,
         analyticsByPropertyId,
       },
+      retirementSummary: {
+        accountCount: retirementAccounts.length,
+        documentCount: retirementDocuments.length,
+        snapshotCount: retirementSnapshots.length,
+        analyticsCount: retirementAnalytics.length,
+        positionCount: retirementPositions.length,
+        retirementDocumentsByAccountId,
+        retirementSnapshotsByAccountId,
+        retirementAnalyticsByAccountId,
+        retirementPositionsByAccountId,
+      },
+      autoSummary: {
+        policyCount: autoPolicies.length,
+        documentCount: autoDocuments.length,
+        snapshotCount: autoSnapshots.length,
+        analyticsCount: autoAnalytics.length,
+        autoDocumentsByPolicyId,
+        autoSnapshotsByPolicyId,
+        autoAnalyticsByPolicyId,
+      },
+      healthSummary: {
+        planCount: healthPlans.length,
+        documentCount: healthDocuments.length,
+        snapshotCount: healthSnapshots.length,
+        analyticsCount: healthAnalytics.length,
+        healthDocumentsByPlanId,
+        healthSnapshotsByPlanId,
+        healthAnalyticsByPlanId,
+      },
+      warrantySummary: {
+        warrantyCount: warranties.length,
+        documentCount: warrantyDocuments.length,
+        snapshotCount: warrantySnapshots.length,
+        analyticsCount: warrantyAnalytics.length,
+        warrantyDocumentsById,
+        warrantySnapshotsById,
+        warrantyAnalyticsById,
+      },
+      homeownersSummary: {
+        documentCount: homeownersDocuments.length,
+        snapshotCount: homeownersSnapshots.length,
+        analyticsCount: homeownersAnalytics.length,
+        homeownersDocumentsByPolicyId,
+        homeownersSnapshotsByPolicyId,
+        homeownersAnalyticsByPolicyId,
+      },
       openAlerts,
       openTasks,
       reports,
@@ -1165,6 +1538,22 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       error ||
       propertyMortgageLinksResult.error ||
       propertyHomeownersLinksResult.error ||
+      retirementDocumentsResult.error ||
+      retirementSnapshotsResult.error ||
+      retirementAnalyticsResult.error ||
+      retirementPositionsResult.error ||
+      autoDocumentsResult.error ||
+      autoSnapshotsResult.error ||
+      autoAnalyticsResult.error ||
+      healthDocumentsResult.error ||
+      healthSnapshotsResult.error ||
+      healthAnalyticsResult.error ||
+      warrantyDocumentsResult.error ||
+      warrantySnapshotsResult.error ||
+      warrantyAnalyticsResult.error ||
+      homeownersDocumentsResult.error ||
+      homeownersSnapshotsResult.error ||
+      homeownersAnalyticsResult.error ||
       null,
   };
 }

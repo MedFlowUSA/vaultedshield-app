@@ -5,6 +5,7 @@ export const ROUTES = {
   privacyPolicy: { path: "/privacy-policy", title: "Privacy Policy", section: "Legal", minimumTier: "free" },
   termsOfService: { path: "/terms-of-service", title: "Terms of Service", section: "Legal", minimumTier: "free" },
   dashboard: { path: "/dashboard", title: "Dashboard", section: "Core", minimumTier: "free" },
+  reviewWorkspace: { path: "/review-workspace", title: "Review Workspace", section: "Core", minimumTier: "free" },
   guidance: { path: "/guidance", title: "Guidance Center", section: "Core", minimumTier: "free" },
   householdGoals: { path: "/household-goals", title: "Household Goals", section: "Core", minimumTier: "professional" },
   vault: { path: "/vault", title: "Vault", section: "Core", minimumTier: "free" },
@@ -45,7 +46,8 @@ export const APP_NAVIGATION = [
   {
     label: "Core",
     items: [
-        { routeKey: "dashboard", label: "Dashboard" },
+      { routeKey: "dashboard", label: "Dashboard" },
+      { routeKey: "reviewWorkspace", label: "Review Workspace" },
         { routeKey: "guidance", label: "Guidance" },
         { routeKey: "householdGoals", label: "Goals" },
         { routeKey: "vault", label: "Vault" },

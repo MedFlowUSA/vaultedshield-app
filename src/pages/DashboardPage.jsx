@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   answerHouseholdQuestion,
-  buildHouseholdRiskContinuityMap,
   buildHouseholdReviewReport,
 } from "../lib/domain/platformIntelligence";
 import {
-  annotateReviewWorkflowItems,
+  buildReviewAssignmentOptions,
   buildHouseholdReviewDigest,
   getHouseholdReviewDigestSnapshot,
   getHouseholdReviewWorkflowState,
@@ -13,6 +12,7 @@ import {
   saveHouseholdReviewDigestSnapshot,
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -617,8 +617,14 @@ export default function DashboardPage({ onNavigate }) {
     );
   }, [reviewScope]);
 
-  const assetCounts = intelligenceBundle?.assetCountsByCategory || {};
-  const propertySummary = intelligenceBundle?.propertyStackSummary || {};
+  const assetCounts = useMemo(
+    () => intelligenceBundle?.assetCountsByCategory || {},
+    [intelligenceBundle?.assetCountsByCategory]
+  );
+  const propertySummary = useMemo(
+    () => intelligenceBundle?.propertyStackSummary || {},
+    [intelligenceBundle?.propertyStackSummary]
+  );
   const continuityPercent = Math.max(
     0,
     Math.min(
@@ -693,9 +699,15 @@ export default function DashboardPage({ onNavigate }) {
       }),
     [intelligenceBundle]
   );
-  const householdMap = useMemo(
-    () => buildHouseholdRiskContinuityMap(intelligenceBundle || {}, intelligence, savedPolicyRows || []),
-    [intelligenceBundle, intelligence, savedPolicyRows]
+  const { householdMap, queueItems } = useMemo(
+    () =>
+      buildHouseholdReviewQueueItems({
+        bundle: intelligenceBundle || {},
+        intelligence,
+        savedPolicyRows: savedPolicyRows || [],
+        reviewWorkflowState,
+      }),
+    [intelligence, intelligenceBundle, reviewWorkflowState, savedPolicyRows]
   );
   const topActions = useMemo(
     () => [
@@ -703,10 +715,6 @@ export default function DashboardPage({ onNavigate }) {
       ...buildActionSignals(savedPolicyRows || [], intelligence?.missing_item_prompts || []),
     ].slice(0, 5),
     [householdMap, savedPolicyRows, intelligence]
-  );
-  const queueItems = useMemo(
-    () => annotateReviewWorkflowItems(householdMap?.review_priorities || [], reviewWorkflowState || {}),
-    [householdMap, reviewWorkflowState]
   );
   const changedSinceReviewItems = queueItems.filter((item) => item.changed_since_review);
   const activeQueueItems = queueItems.filter(
@@ -848,6 +856,7 @@ export default function DashboardPage({ onNavigate }) {
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
   const sectionRadius = isMobile ? "20px" : "24px";
   const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))";
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   function handleReviewWorkflowUpdate(itemId, status) {
     const householdId = householdState.context.householdId;
@@ -856,7 +865,27 @@ export default function DashboardPage({ onNavigate }) {
     const nextState = {
       ...reviewWorkflowState,
       [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
         status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    const householdId = householdState.context.householdId;
+    if (!householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       },
     };
@@ -943,10 +972,10 @@ export default function DashboardPage({ onNavigate }) {
   const demoHouseholdPreview = useMemo(() => buildDemoHouseholdPreview(), []);
   const onboardingQuickActions = [
     {
-      id: "add_property",
-      label: "Add Property",
-      description: "Create the first home or property record and start the asset picture.",
-      route: "/property",
+      id: "add_household_member",
+      label: "Add Household Member",
+      description: "Start with the core person record so the rest of the household can be organized around real relationships.",
+      route: "/contacts",
     },
     {
       id: "upload_insurance",
@@ -955,10 +984,10 @@ export default function DashboardPage({ onNavigate }) {
       route: "/insurance/life/upload",
     },
     {
-      id: "add_contact",
-      label: "Add Contact",
-      description: "Add a family member, advisor, trustee, or emergency contact.",
-      route: "/contacts",
+      id: "add_property",
+      label: "Add Property",
+      description: "Create the first home or property record and start the asset picture.",
+      route: "/property",
     },
     {
       id: "add_retirement",
@@ -1021,8 +1050,8 @@ export default function DashboardPage({ onNavigate }) {
               <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
                 Upload Document
               </button>
-              <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/property")}>
-                Add Property
+              <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/contacts")}>
+                Add Household Member
               </button>
             </div>
           </header>
@@ -1065,7 +1094,7 @@ export default function DashboardPage({ onNavigate }) {
                 Let&apos;s build your household profile
               </div>
               <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
-                VaultedShield becomes more useful as you add household members, properties, insurance, retirement accounts, documents, and key contacts. This setup progress tracks what you&apos;ve actually added without creating fake intelligence.
+                Start with one household member, then add a first asset, upload a document, connect a portal, and round out emergency readiness. This setup progress tracks what you&apos;ve actually added without creating fake intelligence.
               </div>
             </div>
 
@@ -2714,6 +2743,39 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                     <div style={{ marginTop: "8px", fontSize: "14px", lineHeight: "1.7", color: "#cbd5e1" }}>
                       {item.summary}
+                    </div>
+                    <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: item.workflow_assignee_key ? "#93c5fd" : "#94a3b8",
+                          background: item.workflow_assignee_key ? "rgba(59,130,246,0.14)" : "rgba(148,163,184,0.12)",
+                        }}
+                      >
+                        Owner: {item.workflow_assignee_label}
+                      </span>
+                      <select
+                        value={item.workflow_assignee_key || ""}
+                        onChange={(event) => handleReviewAssignmentUpdate(item.id, event.target.value)}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(15,23,42,0.75)",
+                          color: "#e2e8f0",
+                        }}
+                      >
+                        {assigneeChoices.map((option) => (
+                          <option key={option.key || "unassigned"} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {item.changed_since_review && item.change_signal ? (
                       <div style={{ marginTop: "8px", fontSize: "13px", lineHeight: "1.6", color: "#93c5fd" }}>

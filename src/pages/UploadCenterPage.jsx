@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import DocumentTable from "../components/shared/DocumentTable";
 import PageHeader from "../components/layout/PageHeader";
@@ -38,6 +38,124 @@ const DOCUMENT_ROLES = [
   "financial_document",
   "other",
 ];
+
+const CATEGORY_OPTIONS = [
+  {
+    value: "insurance",
+    label: "Insurance",
+    example: "Life policy, declarations page, annual statement",
+    defaultDocumentType: "policy",
+    defaultDocumentRole: "supporting_document",
+  },
+  {
+    value: "banking",
+    label: "Banking",
+    example: "Checking statement, brokerage statement, cash account PDF",
+    defaultDocumentType: "bank_statement",
+    defaultDocumentRole: "financial_document",
+  },
+  {
+    value: "retirement",
+    label: "Retirement",
+    example: "401(k), IRA, pension, beneficiary statement",
+    defaultDocumentType: "retirement_statement",
+    defaultDocumentRole: "financial_document",
+  },
+  {
+    value: "property",
+    label: "Property",
+    example: "Mortgage statement, deed, tax notice, appraisal",
+    defaultDocumentType: "statement",
+    defaultDocumentRole: "supporting_document",
+  },
+  {
+    value: "estate",
+    label: "Estate",
+    example: "Trust, will, power of attorney, healthcare directive",
+    defaultDocumentType: "trust",
+    defaultDocumentRole: "legal_document",
+  },
+  {
+    value: "health",
+    label: "Health",
+    example: "Plan summary, claims packet, provider notice",
+    defaultDocumentType: "statement",
+    defaultDocumentRole: "supporting_document",
+  },
+  {
+    value: "business",
+    label: "Business",
+    example: "Operating agreement, ownership document, tax file",
+    defaultDocumentType: "other",
+    defaultDocumentRole: "supporting_document",
+  },
+  {
+    value: "digital_asset",
+    label: "Digital Asset",
+    example: "Wallet summary, exchange export, access instructions",
+    defaultDocumentType: "other",
+    defaultDocumentRole: "supporting_document",
+  },
+  {
+    value: "misc",
+    label: "Other Household Record",
+    example: "Anything that supports the broader household file",
+    defaultDocumentType: "other",
+    defaultDocumentRole: "uploaded_document",
+  },
+];
+
+const DOCUMENT_TYPE_LABELS = {
+  statement: "Statement",
+  policy: "Policy document",
+  trust: "Trust",
+  will: "Will",
+  POA: "Power of attorney",
+  healthcare_directive: "Healthcare directive",
+  bank_statement: "Bank statement",
+  retirement_statement: "Retirement statement",
+  other: "Other",
+};
+
+const DOCUMENT_ROLE_LABELS = {
+  uploaded_document: "General upload",
+  supporting_document: "Supporting document",
+  annual_statement: "Annual statement",
+  baseline_document: "Baseline document",
+  legal_document: "Legal document",
+  financial_document: "Financial document",
+  other: "Other",
+};
+
+function normalizeCategoryValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getCategoryConfig(category) {
+  return CATEGORY_OPTIONS.find((item) => item.value === category) || CATEGORY_OPTIONS[CATEGORY_OPTIONS.length - 1];
+}
+
+function assetMatchesCategory(asset, category) {
+  const normalizedCategory = normalizeCategoryValue(category);
+  const assetCategory = normalizeCategoryValue(asset?.asset_category);
+  const assetSubcategory = normalizeCategoryValue(asset?.asset_subcategory);
+  const assetName = normalizeCategoryValue(asset?.asset_name);
+  const haystack = `${assetCategory} ${assetSubcategory} ${assetName}`;
+
+  if (!normalizedCategory || normalizedCategory === "misc") return true;
+  if (normalizedCategory === "property") return haystack.includes("property") || haystack.includes("home") || haystack.includes("mortgage");
+  if (normalizedCategory === "health") return haystack.includes("health");
+  if (normalizedCategory === "digital_asset") return haystack.includes("digital") || haystack.includes("crypto") || haystack.includes("wallet");
+  return haystack.includes(normalizedCategory);
+}
+
+function formatDocumentTypeLabel(value) {
+  return DOCUMENT_TYPE_LABELS[value] || value;
+}
+
+function formatDocumentRoleLabel(value) {
+  return DOCUMENT_ROLE_LABELS[value] || value;
+}
 
 function formatDate(value) {
   if (!value) return "Unknown";
@@ -81,6 +199,7 @@ export default function UploadCenterPage() {
   const [queue, setQueue] = useState([]);
   const [assetId, setAssetId] = useState("");
   const [assetCategoryHint, setAssetCategoryHint] = useState("insurance");
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [documentType, setDocumentType] = useState("other");
   const [documentRole, setDocumentRole] = useState("uploaded_document");
   const [notes, setNotes] = useState("");
@@ -122,6 +241,35 @@ export default function UploadCenterPage() {
       active = false;
     };
   }, [householdState.context.householdId]);
+
+  const selectedCategory = useMemo(() => getCategoryConfig(assetCategoryHint), [assetCategoryHint]);
+  const filteredAssets = useMemo(
+    () => assets.filter((asset) => assetMatchesCategory(asset, assetCategoryHint)),
+    [assets, assetCategoryHint]
+  );
+  const selectedAsset = useMemo(
+    () => assets.find((asset) => asset.id === assetId) || null,
+    [assetId, assets]
+  );
+
+  useEffect(() => {
+    if (!assetId && filteredAssets.length === 1) {
+      setAssetId(filteredAssets[0].id);
+    }
+  }, [assetId, filteredAssets]);
+
+  function applyCategoryPreset(nextCategory) {
+    const config = getCategoryConfig(nextCategory);
+    setAssetCategoryHint(nextCategory);
+    setDocumentType(config.defaultDocumentType);
+    setDocumentRole(config.defaultDocumentRole);
+    setAssetId((current) => {
+      const currentStillFits = assets.some((asset) => asset.id === current && assetMatchesCategory(asset, nextCategory));
+      if (currentStillFits) return current;
+      const matchingAssets = assets.filter((asset) => assetMatchesCategory(asset, nextCategory));
+      return matchingAssets.length === 1 ? matchingAssets[0].id : "";
+    });
+  }
 
   function enqueueFiles(fileList) {
     const newEntries = Array.from(fileList || []).map((file) => ({
@@ -231,6 +379,10 @@ export default function UploadCenterPage() {
     updatedAt: formatDate(document.created_at),
   }));
   const uploadRead = summarizeUploadCenterModule({ assets, documents, queue });
+  const queueReadyCount = queue.filter((item) => item.status === "queued").length;
+  const queueUploadingCount = queue.filter((item) => item.status === "uploading").length;
+  const queueSavedCount = queue.filter((item) => item.status === "saved").length;
+  const queueFailedCount = queue.filter((item) => item.status === "failed").length;
 
   return (
     <div style={{ display: "grid", gap: "24px", minWidth: 0, maxWidth: "100%", overflowX: "clip" }}>
@@ -290,8 +442,65 @@ export default function UploadCenterPage() {
           minWidth: 0,
         }}
       >
-        <SectionCard title="Generic Document Intake" subtitle="Upload household documents into the broad platform vault without invoking the specialized IUL parser.">
+        <SectionCard title="Guided Document Intake" subtitle="Start with what you are uploading, then add deeper metadata only if you need it.">
           <div style={{ display: "grid", gap: "18px", minWidth: 0 }}>
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "16px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                Simple Upload Mode
+              </div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+                What kind of document are you uploading?
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                Choose the closest category first. VaultedShield will keep this in the shared household vault and you can add more detailed metadata only when it helps.
+              </div>
+              <div style={{ color: "#64748b", lineHeight: "1.7", fontSize: "14px" }}>
+                Accepted file types: PDF, JPG, PNG, or a quick camera scan. Example: "{selectedCategory.example}".
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "12px",
+                minWidth: 0,
+              }}
+            >
+              {CATEGORY_OPTIONS.map((option) => {
+                const active = option.value === assetCategoryHint;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => applyCategoryPreset(option.value)}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      border: active ? "1px solid #93c5fd" : "1px solid #e2e8f0",
+                      background: active ? "#eff6ff" : "#ffffff",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      display: "grid",
+                      gap: "6px",
+                    }}
+                  >
+                    <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{option.label}</div>
+                    <div style={{ fontSize: "13px", color: active ? "#1d4ed8" : "#64748b", lineHeight: "1.6" }}>{option.example}</div>
+                  </button>
+                );
+              })}
+            </div>
+
             <div
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
@@ -308,7 +517,7 @@ export default function UploadCenterPage() {
             >
               <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop files here</div>
               <p style={{ marginTop: "8px", marginBottom: "14px", color: "#64748b", lineHeight: "1.6" }}>
-                Upload generic household documents to the platform vault. This flow does not replace the specialized life-policy analysis flow.
+                Upload a {selectedCategory.label.toLowerCase()} document to the shared household vault. This flow is for broad intake and does not replace the specialized life-policy analysis flow.
               </p>
               <input
                 ref={fileInputRef}
@@ -348,60 +557,23 @@ export default function UploadCenterPage() {
             </div>
 
             <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
-              <select
-                value={assetId}
-                onChange={(event) => setAssetId(event.target.value)}
-                style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-              >
-                <option value="">No asset selected (household-level document)</option>
-                {assets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.asset_name} ({asset.asset_category}{asset.asset_subcategory ? ` / ${asset.asset_subcategory}` : ""})
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={assetCategoryHint}
-                onChange={(event) => setAssetCategoryHint(event.target.value)}
-                style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-              >
-                <option value="insurance">insurance</option>
-                <option value="banking">banking</option>
-                <option value="retirement">retirement</option>
-                <option value="estate">estate</option>
-                <option value="property">property</option>
-                <option value="health">health</option>
-                <option value="business">business</option>
-                <option value="digital_asset">digital_asset</option>
-                <option value="misc">misc</option>
-              </select>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-                  gap: "12px",
-                  minWidth: 0,
-                }}
-              >
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>Link this document to an existing record</div>
+                <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
+                  {filteredAssets.length === 1
+                    ? `VaultedShield found one likely ${selectedCategory.label.toLowerCase()} match and preselected it for you.`
+                    : "You can leave this as household-level if the file supports the overall family record instead of one specific asset."}
+                </div>
                 <select
-                  value={documentType}
-                  onChange={(event) => setDocumentType(event.target.value)}
+                  value={assetId}
+                  onChange={(event) => setAssetId(event.target.value)}
                   style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
                 >
-                  {DOCUMENT_TYPES.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={documentRole}
-                  onChange={(event) => setDocumentRole(event.target.value)}
-                  style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
-                >
-                  {DOCUMENT_ROLES.map((role) => (
-                    <option key={role} value={role}>{role}</option>
+                  <option value="">Keep this as a household-level document</option>
+                  {filteredAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.asset_name} ({asset.asset_category}{asset.asset_subcategory ? ` / ${asset.asset_subcategory}` : ""})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -410,9 +582,99 @@ export default function UploadCenterPage() {
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 rows={4}
-                placeholder="Notes or tag for this upload batch"
+                placeholder="Optional note, tag, or reminder for this upload batch"
                 style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
               />
+
+              <div
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "14px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  display: "grid",
+                  gap: "6px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  Current Intake Read
+                </div>
+                <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                  {selectedCategory.label} upload
+                  {selectedAsset ? ` linked to ${selectedAsset.asset_name}` : " saved at the household level"}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.7", fontSize: "14px" }}>
+                  Document type: {formatDocumentTypeLabel(documentType)}. Processing role: {formatDocumentRoleLabel(documentRole)}.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvancedOptions((current) => !current)}
+                style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700, width: isMobile ? "100%" : "fit-content" }}
+              >
+                {showAdvancedOptions ? "Hide More Options" : "More Options"}
+              </button>
+
+              {showAdvancedOptions ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "12px",
+                    padding: "16px",
+                    borderRadius: "14px",
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>Advanced metadata</div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                      gap: "12px",
+                      minWidth: 0,
+                    }}
+                  >
+                    <label style={{ display: "grid", gap: "6px", color: "#475569", fontSize: "14px" }}>
+                      <span>Document category</span>
+                      <select
+                        value={assetCategoryHint}
+                        onChange={(event) => applyCategoryPreset(event.target.value)}
+                        style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+                      >
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "6px", color: "#475569", fontSize: "14px" }}>
+                      <span>Document type</span>
+                      <select
+                        value={documentType}
+                        onChange={(event) => setDocumentType(event.target.value)}
+                        style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+                      >
+                        {DOCUMENT_TYPES.map((type) => (
+                          <option key={type} value={type}>{formatDocumentTypeLabel(type)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "6px", color: "#475569", fontSize: "14px" }}>
+                      <span>Processing role</span>
+                      <select
+                        value={documentRole}
+                        onChange={(event) => setDocumentRole(event.target.value)}
+                        style={{ width: "100%", minWidth: 0, maxWidth: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
+                      >
+                        {DOCUMENT_ROLES.map((role) => (
+                          <option key={role} value={role}>{formatDocumentRoleLabel(role)}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
               <button
                 type="button"
@@ -426,7 +688,35 @@ export default function UploadCenterPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Upload Queue" subtitle="Per-file platform upload status.">
+        <SectionCard title="Ready For Upload" subtitle="Selected files, current status, and what will happen next.">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+              gap: "10px",
+              marginBottom: queue.length > 0 ? "14px" : 0,
+            }}
+          >
+            {[
+              { label: "Ready", value: queueReadyCount },
+              { label: "Uploading", value: queueUploadingCount },
+              { label: "Saved", value: queueSavedCount },
+              { label: "Needs Review", value: queueFailedCount },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
           {queue.length > 0 ? (
             <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
               {queue.map((item) => {
@@ -488,8 +778,8 @@ export default function UploadCenterPage() {
             </div>
           ) : (
             <EmptyState
-              title="No files added yet"
-              description="Add one or more files to prepare them for upload into the shared household document pipeline."
+              title="Your upload tray is ready"
+              description="Choose a document category, add one or more files, and VaultedShield will show scanning and save status here."
             />
           )}
         </SectionCard>

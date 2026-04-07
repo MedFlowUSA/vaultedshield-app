@@ -22,6 +22,31 @@ export const REVIEW_WORKFLOW_STATUSES = {
   },
 };
 
+export function buildReviewAssignmentOptions(bundle = {}) {
+  const members = (bundle.householdMembers || [])
+    .filter((member) => member?.id && member?.full_name)
+    .map((member) => ({
+      key: `member:${member.id}`,
+      label: member.full_name,
+      type: "member",
+    }));
+  const contacts = (bundle.contacts || [])
+    .filter((contact) => contact?.id && contact?.full_name)
+    .map((contact) => ({
+      key: `contact:${contact.id}`,
+      label: contact.full_name,
+      type: "contact",
+    }));
+  const seen = new Set();
+
+  return [{ key: "", label: "Unassigned", type: "none" }, ...members, ...contacts].filter((option) => {
+    if (!option.key) return true;
+    if (seen.has(option.key)) return false;
+    seen.add(option.key);
+    return true;
+  });
+}
+
 function safeReadStorage() {
   if (typeof window === "undefined") return {};
   try {
@@ -145,6 +170,9 @@ export function annotateReviewWorkflowItems(items = [], workflowState = {}) {
       workflow_label: REVIEW_WORKFLOW_STATUSES[status].label,
       workflow_updated_at: current.updated_at || null,
       workflow_notes: current.notes || "",
+      workflow_assignee_key: current.assignee_key || "",
+      workflow_assignee_label: current.assignee_label || "Unassigned",
+      workflow_assigned_at: current.assigned_at || null,
       changed_since_review: changedSinceReview,
       changed_since_review_label: changedSinceReview ? "Changed Since Review" : "",
     };
@@ -158,6 +186,8 @@ export function buildHouseholdReviewDigest(items = [], previousSnapshot = null) 
       id: item.id,
       label: item.label,
       workflow_status: item.workflow_status,
+      workflow_assignee_key: item.workflow_assignee_key || "",
+      workflow_assignee_label: item.workflow_assignee_label || "Unassigned",
       changed_since_review: Boolean(item.changed_since_review),
       summary: item.summary,
       change_signal: item.change_signal || "",
@@ -171,9 +201,14 @@ export function buildHouseholdReviewDigest(items = [], previousSnapshot = null) 
   const reopenedItems = [];
   const improvedItems = [];
   const stillOpenItems = [];
+  const assignedItems = [];
 
   currentSnapshot.items.forEach((item) => {
     const previous = previousItemsById[item.id];
+
+    if (item.workflow_assignee_key) {
+      assignedItems.push(item);
+    }
 
     if (item.changed_since_review) {
       reopenedItems.push(item);
@@ -215,9 +250,11 @@ export function buildHouseholdReviewDigest(items = [], previousSnapshot = null) 
     reopened_count: reopenedItems.length,
     improved_count: improvedItems.length,
     active_count: stillOpenItems.length,
+    assigned_count: assignedItems.length,
     reopened_items: reopenedItems,
     improved_items: improvedItems,
     still_open_items: stillOpenItems,
+    assigned_items: assignedItems,
     bullets,
   };
 }

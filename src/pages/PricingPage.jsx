@@ -20,7 +20,7 @@ export default function PricingPage({
   onNavigate,
   accessPortal,
   lockedRouteTitle = "",
-  returnPath = "/dashboard",
+  returnPath = "/insurance",
 }) {
   const currentTier = accessPortal?.currentTier || "free";
   const { isMobile, isTablet } = useResponsiveLayout();
@@ -29,7 +29,7 @@ export default function PricingPage({
   const planColumns = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
   const cardPadding = isMobile ? "18px 16px" : "22px";
   const actionRowDirection = isMobile ? "column" : "row";
-  const resolvedReturnPath = returnPath && returnPath !== "/pricing" ? returnPath : "/dashboard";
+  const resolvedReturnPath = returnPath && returnPath !== "/pricing" ? returnPath : "/insurance";
 
   return (
     <div style={{ maxWidth: "1120px", margin: pageMargin, padding: pagePadding, display: "grid", gap: isMobile ? "18px" : "22px" }}>
@@ -108,7 +108,7 @@ export default function PricingPage({
             minHeight: isMobile ? "46px" : "44px",
           }}
         >
-          Continue To Dashboard
+          Continue To Workspace
         </button>
         <button
           type="button"

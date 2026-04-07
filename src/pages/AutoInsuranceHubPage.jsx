@@ -48,7 +48,9 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
   useEffect(() => {
     if (householdState.loading) return;
     if (!householdState.context.householdId) {
-      setLoading(false);
+      queueMicrotask(() => {
+        setLoading(false);
+      });
       return;
     }
 

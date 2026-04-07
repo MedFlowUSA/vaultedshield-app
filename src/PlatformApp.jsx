@@ -15,6 +15,7 @@ const AuthLoginPage = lazy(() => import("./pages/AuthLoginPage"));
 const AuthSignupPage = lazy(() => import("./pages/AuthSignupPage"));
 const TermsOfServicePage = lazy(() => import("./pages/TermsOfServicePage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ReviewWorkspacePage = lazy(() => import("./pages/ReviewWorkspacePage"));
 const GuidanceCenterPage = lazy(() => import("./pages/GuidanceCenterPage"));
 const HouseholdGoalsDashboardPage = lazy(() => import("./pages/HouseholdGoalsDashboardPage"));
 const VaultPage = lazy(() => import("./pages/VaultPage"));
@@ -220,6 +221,8 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <TermsOfServicePage />;
     case "/dashboard":
       return <DashboardPage onNavigate={navigate} />;
+    case "/review-workspace":
+      return <ReviewWorkspacePage onNavigate={navigate} />;
     case "/guidance":
       return <GuidanceCenterPage onNavigate={navigate} />;
     case "/household-goals":
@@ -290,7 +293,6 @@ export default function PlatformApp() {
   const route = getRouteByPath(resolvedPathname);
   const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup";
   const hasRouteAccess = hasTierAccess(accessPortal.currentTier, route.minimumTier || "free");
-  const intendedPath = !resolvedIsAuthRoute ? resolvedPathname : postAuthHome;
   const useCompactShell = isTablet;
   const handleOpenPricing = () => {
     setSidebarOpen(false);
@@ -300,18 +302,17 @@ export default function PlatformApp() {
   const resolvedPricingReturnPath =
     resolvedPathname === "/pricing" && accessPortal.isAuthenticated
       ? pricingReturnPath || postAuthHome
-      : intendedPath;
+      : postAuthHome;
 
   useEffect(() => {
     clearLegacyScopedStorage(accessPortal.session?.userId || null);
   }, [accessPortal.session?.userId]);
 
   useEffect(() => {
-    if (!useCompactShell) {
+    const closeSidebar = window.setTimeout(() => {
       setSidebarOpen(false);
-      return;
-    }
-    setSidebarOpen(false);
+    }, 0);
+    return () => window.clearTimeout(closeSidebar);
   }, [resolvedPathname, useCompactShell]);
 
   useEffect(() => {
@@ -355,7 +356,7 @@ export default function PlatformApp() {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
         <Suspense fallback={<RouteLoadingFallback />}>
-          <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={intendedPath} />
+          <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={postAuthHome} />
         </Suspense>
       </div>
     );
@@ -364,7 +365,7 @@ export default function PlatformApp() {
   if (resolvedIsAuthRoute || (!accessPortal.isAuthenticated && isPublicRoute)) {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
-        {renderLazyRoute(resolvedPathname, navigate, accessPortal, resolvedIsAuthRoute ? postAuthHome : intendedPath)}
+        {renderLazyRoute(resolvedPathname, navigate, accessPortal, postAuthHome)}
       </div>
     );
   }

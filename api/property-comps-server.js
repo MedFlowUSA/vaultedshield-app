@@ -1,3 +1,5 @@
+import process from "node:process";
+
 function toNumber(value, fallback = null) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;

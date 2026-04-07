@@ -9,6 +9,8 @@ import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataConte
 import { createAsset, listAssets } from "../lib/supabase/platformData";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
+const EMPTY_ASSETS = [];
+
 const ASSET_CATEGORIES = [
   "insurance",
   "banking",
@@ -41,7 +43,9 @@ export default function AssetsHomePage({ onNavigate }) {
 
   useEffect(() => {
     if (!householdState.context.householdId) {
-      setAssets([]);
+      queueMicrotask(() => {
+        setAssets(EMPTY_ASSETS);
+      });
       return;
     }
 

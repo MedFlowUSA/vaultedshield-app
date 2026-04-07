@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
@@ -39,6 +39,14 @@ import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listMortgageLoans } from "../lib/supabase/mortgageData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildPropertyCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import {
+  annotateReviewWorkflowItems,
+  buildReviewAssignmentOptions,
+  getHouseholdReviewWorkflowState,
+  REVIEW_WORKFLOW_STATUSES,
+  saveHouseholdReviewWorkflowState,
+} from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { buildPropertyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 
@@ -352,7 +360,7 @@ function buildPropertyFactsDraft(property) {
 
 export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
-  const { householdState, debug: shellDebug } = usePlatformShellData();
+  const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
   const [bundle, setBundle] = useState(null);
@@ -389,6 +397,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantHistory, setAssistantHistory] = useState([]);
   const [showPropertyReport, setShowPropertyReport] = useState(false);
+  const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
       householdId: householdState.context.householdId || null,
@@ -405,8 +414,19 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     ]
   );
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
+  const reviewScope = useMemo(
+    () => ({
+      householdId: householdState.context.householdId,
+      userId: shellDebug.authUserId || null,
+    }),
+    [householdState.context.householdId, shellDebug.authUserId]
+  );
 
-  async function loadPropertyBundle(targetPropertyId, options = {}) {
+  useEffect(() => {
+    setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
+  }, [reviewScope]);
+
+  const loadPropertyBundle = useCallback(async (targetPropertyId, options = {}) => {
     const result = await getPropertyBundle(targetPropertyId, platformScope);
     if (result.error || !result.data?.property) {
       if (!options.silent) {
@@ -454,7 +474,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     }
 
     return { data: result.data, error: null };
-  }
+  }, [platformScope]);
 
   useEffect(() => {
     if (!propertyId || householdState.loading || !platformScope.householdId) return;
@@ -469,7 +489,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     return () => {
       active = false;
     };
-  }, [householdState.loading, platformScope.householdId, propertyId, scopeKey]);
+  }, [householdState.loading, loadPropertyBundle, platformScope.householdId, propertyId, scopeKey]);
 
   useEffect(() => {
     setBundle(null);
@@ -515,8 +535,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const property = bundle?.property || null;
   const propertyType = property ? getPropertyType(property.property_type_key) : null;
   const linkedAsset = property?.assets || null;
-  const linkedMortgages = bundle?.linkedMortgages || [];
-  const linkedHomeownersPolicies = bundle?.linkedHomeownersPolicies || [];
+  const linkedMortgages = useMemo(() => bundle?.linkedMortgages || [], [bundle?.linkedMortgages]);
+  const linkedHomeownersPolicies = useMemo(
+    () => bundle?.linkedHomeownersPolicies || [],
+    [bundle?.linkedHomeownersPolicies]
+  );
   const propertyStackAnalytics = bundle?.propertyStackAnalytics || null;
   const latestPropertyValuation = bundle?.latestPropertyValuation || null;
   const valuationMetadata = latestPropertyValuation?.metadata || {};
@@ -536,7 +559,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const actionStackStyle = { display: "flex", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" };
   const actionButtonLayoutStyle = isMobile ? { width: "100%", justifyContent: "center" } : null;
   const wrapTextStyle = { minWidth: 0, wordBreak: "break-word", overflowWrap: "anywhere" };
-  const officialMarketSignalCount = valuationMetadata.official_source_count ?? 0;
   const officialMarketSupportLabel =
     valuationMetadata.official_market_support === "aligned"
       ? "Aligned"
@@ -567,13 +589,19 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   ]
     .filter(Boolean)
     .join(", ");
-  const propertyValuationHistory = bundle?.propertyValuationHistory || [];
+  const propertyValuationHistory = useMemo(
+    () => bundle?.propertyValuationHistory || [],
+    [bundle?.propertyValuationHistory]
+  );
   const valuationChangeSummary = useMemo(
     () => buildValuationChangeSummary(propertyValuationHistory),
     [propertyValuationHistory]
   );
   const valuationMarketProfile = valuationMetadata.market_profile || {};
-  const analyzedCompRows = valuationMetadata.analyzed_comps || [];
+  const analyzedCompRows = useMemo(
+    () => valuationMetadata.analyzed_comps || [],
+    [valuationMetadata.analyzed_comps]
+  );
   const bestComp = analyzedCompRows[0] || null;
   const strongCompCount = valuationMetadata.strong_comp_count ?? 0;
   const usableCompCount = valuationMetadata.usable_comp_count ?? 0;
@@ -592,7 +620,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     if (!topComps.length) return null;
     return topComps.reduce((sum, value) => sum + value, 0) / topComps.length;
   }, [analyzedCompRows]);
-  const propertyComps = bundle?.propertyComps || [];
+  const propertyComps = useMemo(() => bundle?.propertyComps || [], [bundle?.propertyComps]);
   const latestAssistantEntry = assistantHistory[0] || null;
   const propertyEquityPosition = bundle?.propertyEquityPosition || null;
   const propertyStackLinkageStatus = bundle?.propertyStackLinkageStatus || "property_only";
@@ -674,6 +702,36 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       valuationChangeSummary,
     ]
   );
+  const propertyReviewQueueItems = useMemo(
+    () =>
+      annotateReviewWorkflowItems(
+        buildPropertyDetailReviewQueueItems({
+          property,
+          propertyBundle: {
+            ...(bundle || {}),
+            valuationChangeSummary,
+            latestPropertyValuation,
+          },
+          assetBundle,
+          propertyCommandCenter,
+        }),
+        reviewWorkflowState || {}
+      ),
+    [
+      assetBundle,
+      bundle,
+      latestPropertyValuation,
+      property,
+      propertyCommandCenter,
+      reviewWorkflowState,
+      valuationChangeSummary,
+    ]
+  );
+  const propertyReviewItemsById = useMemo(
+    () => Object.fromEntries(propertyReviewQueueItems.map((item) => [item.id, item])),
+    [propertyReviewQueueItems]
+  );
+  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
     if (!property) return [];
@@ -685,6 +743,40 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       { label: "Virtual Valuation", value: latestPropertyValuation?.confidence_label || "none", helper: latestPropertyValuation?.midpoint_estimate ? formatCurrency(latestPropertyValuation.midpoint_estimate) : "No value analysis yet" },
     ];
   }, [bundle, latestPropertyValuation, property, propertyType]);
+
+  function handleReviewWorkflowUpdate(itemId, status) {
+    if (!reviewScope.householdId || !itemId) return;
+
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        status,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
+
+  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
+    if (!reviewScope.householdId || !itemId) return;
+    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
+    const nextState = {
+      ...reviewWorkflowState,
+      [itemId]: {
+        ...(reviewWorkflowState[itemId] || {}),
+        assignee_key: assignee?.key || "",
+        assignee_label: assignee?.label || "Unassigned",
+        assigned_at: assignee?.key ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    setReviewWorkflowState(nextState);
+    saveHouseholdReviewWorkflowState(reviewScope, nextState);
+  }
 
   const primaryMortgageSummary = useMemo(() => {
     if (!propertyStackAnalytics?.primary_mortgage_loan_id) return null;
@@ -1107,11 +1199,29 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                           gap: "8px",
                         }}
                       >
+                        {(() => {
+                          const workflowItem = propertyReviewItemsById[`property:${property?.id}:${item.id}`] || null;
+                          return (
+                            <>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
                           <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
                             <StatusBadge label={item.staleLabel} tone="info" />
+                            {workflowItem ? (
+                              <StatusBadge
+                                label={workflowItem.workflow_label}
+                                tone={
+                                  workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                    ? "good"
+                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                      ? "warning"
+                                      : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                        ? "alert"
+                                        : "info"
+                                }
+                              />
+                            ) : null}
                           </div>
                         </div>
                         <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
@@ -1123,6 +1233,53 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                         <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
                           Next action: {item.nextAction}
                         </div>
+                        {workflowItem ? (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                              <StatusBadge
+                                label={`Owner: ${workflowItem.workflow_assignee_label}`}
+                                tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
+                              />
+                              <select
+                                value={workflowItem.workflow_assignee_key || ""}
+                                onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                                style={actionButtonStyle(false)}
+                              >
+                                {assigneeChoices.map((option) => (
+                                  <option key={option.key || "unassigned"} value={option.key}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                              style={actionButtonStyle(false)}
+                            >
+                              Pending Docs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                              style={actionButtonStyle(false)}
+                            >
+                              Follow Up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                              style={actionButtonStyle(true)}
+                            >
+                              {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                            </button>
+                            </div>
+                          </div>
+                        ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

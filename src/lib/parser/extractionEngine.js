@@ -270,6 +270,11 @@ function normalizeText(value) {
   return value.replace(/\s+/g, " ").replace(/^[:\-]+/, "").trim();
 }
 
+function stripMatchedLabel(line, alias) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(alias)}\\s*[:\\-]?\\s*`, "i");
+  return normalizeText(String(line || "").replace(pattern, ""));
+}
+
 function normalizeFreeText(value) {
   return String(value || "").replace(/\s+/g, " ").replace(/^[\s:,\-]+/, "").trim();
 }
@@ -3348,7 +3353,7 @@ function collectCandidates({
 
         if (!hasAlias) return;
 
-        const exactRemainder = normalizeText(line.replace(new RegExp(escapeRegExp(alias), "ig"), ""));
+        const exactRemainder = stripMatchedLabel(line, alias);
 
         const sameLineMethods = [];
         if (

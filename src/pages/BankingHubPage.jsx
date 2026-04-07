@@ -9,6 +9,8 @@ import { buildBankingHubCommand } from "../lib/domain/platformIntelligence/conti
 import { getPortalHubBundle, listAssets, listContacts } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 
+const EMPTY_BANKING_BUNDLE = { assets: [], contacts: [], portalBundle: null };
+
 function getTone(status) {
   if (status === "Ready") return "good";
   if (status === "Building") return "warning";
@@ -17,15 +19,17 @@ function getTone(status) {
 
 export default function BankingHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
-  const [bundle, setBundle] = useState({ assets: [], contacts: [], portalBundle: null });
+  const [bundle, setBundle] = useState(EMPTY_BANKING_BUNDLE);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (householdState.loading) return;
     if (!householdState.context.householdId) {
-      setBundle({ assets: [], contacts: [], portalBundle: null });
-      setLoading(false);
+      queueMicrotask(() => {
+        setBundle(EMPTY_BANKING_BUNDLE);
+        setLoading(false);
+      });
       return;
     }
 

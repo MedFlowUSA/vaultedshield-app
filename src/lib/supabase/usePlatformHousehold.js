@@ -39,36 +39,38 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
     },
       error: "",
   });
-  const authUser = useMemo(() => {
-    if (accessSession) {
-      return buildPseudoAuthUser(accessSession);
-    }
-    return resolvedAuthUser;
-  }, [accessSession, resolvedAuthUser]);
+  const authUser = useMemo(
+    () => (accessSession ? buildPseudoAuthUser(accessSession) : resolvedAuthUser),
+    [accessSession, resolvedAuthUser]
+  );
   const isAuthResolved = accessSession ? Boolean(authReady) : resolvedAuthReady;
 
   useEffect(() => {
-    if (accessSession) {
-      setResolvedAuthUser(buildPseudoAuthUser(accessSession));
-      setResolvedAuthReady(Boolean(authReady));
-      return undefined;
-    }
+    if (accessSession) return undefined;
 
     if (!isSupabaseConfigured()) {
-      setResolvedAuthUser(null);
-      setResolvedAuthReady(true);
+      queueMicrotask(() => {
+        setResolvedAuthUser(null);
+        setResolvedAuthReady(true);
+      });
       return undefined;
     }
 
     let active = true;
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setResolvedAuthUser(null);
-      setResolvedAuthReady(true);
+      queueMicrotask(() => {
+        if (!active) return;
+        setResolvedAuthUser(null);
+        setResolvedAuthReady(true);
+      });
       return undefined;
     }
 
-    setResolvedAuthReady(false);
+    queueMicrotask(() => {
+      if (!active) return;
+      setResolvedAuthReady(false);
+    });
 
     supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
@@ -94,18 +96,21 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
     let active = true;
     const nextOwnershipMode = authUser?.id ? "authenticated_owned" : "unauthenticated";
 
-    setState({
-      loading: true,
-      household: null,
-      context: {
-        householdId: null,
+    queueMicrotask(() => {
+      if (!active) return;
+      setState({
+        loading: true,
+        household: null,
+        context: {
+          householdId: null,
           source: isAuthResolved ? "loading" : "awaiting_auth",
           bootstrapped: false,
           currentAuthUserId: authUser?.id || null,
           ownershipMode: nextOwnershipMode,
           guestFallbackActive: false,
         },
-      error: "",
+        error: "",
+      });
     });
 
     if (!isAuthResolved) {
@@ -138,7 +143,6 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
           ownershipMode: resolvedAuthUser?.id ? "authenticated_owned" : "unauthenticated",
           guestFallbackActive: false,
           ...(result.context || {}),
-          currentAuthUserId: resolvedAuthUser?.id || null,
         },
         error: result.error?.message || "",
       });
@@ -149,7 +153,7 @@ export function usePlatformHousehold(accessSession = null, authReady = true) {
     return () => {
       active = false;
     };
-  }, [isAuthResolved, authUser?.email, authUser?.id, authUser?.user_metadata?.household_name]);
+  }, [authUser, isAuthResolved]);
 
   return state;
 }
