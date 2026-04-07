@@ -605,7 +605,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         headline: "Upload one baseline life policy to unlock plain-English insurance review.",
         narrative:
           "The insurance workspace becomes most useful after one policy illustration or statement packet is saved. That first upload activates ranking, continuity review, charge visibility, and household protection reads.",
-        nextAction: "Open Upload Workspace",
+        nextAction: "Upload First Policy",
         route: "/insurance/life/upload",
       };
     }
@@ -618,7 +618,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         narrative:
           firstPolicy?.interpretation?.bottom_line_summary ||
           "VaultedShield can now surface baseline policy understanding, charge visibility, continuity support, and policy health. The next gain comes from adding statement history or a second policy for comparison.",
-        nextAction: firstPolicy?.policy_id ? "Open Policy Detail" : "Open Upload Workspace",
+        nextAction: firstPolicy?.policy_id ? "Open Policy Detail" : "Upload Another Policy",
         route: firstPolicy?.policy_id ? `/insurance/${firstPolicy.policy_id}` : "/insurance/life/upload",
       };
     }
@@ -630,7 +630,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       narrative:
         topPriority?.reviewReason ||
         "The portfolio is strongest where statement freshness, charge visibility, and policy identity are complete, and weakest where evidence is still partial.",
-      nextAction: topPriority ? "Review top flagged policy" : "Open Upload Workspace",
+      nextAction: topPriority ? "Review Top Policy" : "Upload Another Policy",
       route: topPriority?.policy_id ? `/insurance/${topPriority.policy_id}` : "/insurance/life/upload",
     };
   }, [portfolioBrief, rankedPolicies]);
@@ -833,7 +833,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               gap: "12px",
             }}
           >
-            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>No portfolio analysis yet</div>
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Insurance intelligence activates with the first policy</div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
               Add your first policy illustration, declaration, or annual statement to begin comparison and continuity analysis. VaultedShield will start generating policy-level insights after real records are saved.
             </div>
@@ -991,7 +991,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               Print Report
             </button>
             <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-              Open Upload Workspace
+              Upload Another Policy
             </button>
           </div>
         </div>

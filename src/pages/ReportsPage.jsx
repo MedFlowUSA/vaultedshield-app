@@ -500,7 +500,7 @@ export default function ReportsPage({ onNavigate }) {
               Reports and Exports
             </div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
-              No household analysis is visible yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support trustworthy output.
+              No household report is ready yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support a trustworthy output.
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>

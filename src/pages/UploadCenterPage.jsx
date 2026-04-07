@@ -785,13 +785,13 @@ export default function UploadCenterPage() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Recent Generic Uploads" subtitle="These household documents will appear in the Vault view on refresh or navigation.">
+      <SectionCard title="Recent Household Uploads" subtitle="These documents will appear in the Vault view on refresh or navigation.">
         {documentRows.length > 0 ? (
           <DocumentTable rows={documentRows} />
         ) : (
           <EmptyState
-            title="No uploaded household documents yet"
-            description="Upload generic documents here to populate the broader platform vault without affecting the specialized insurance workflow."
+            title="No household documents uploaded yet"
+            description="Upload shared household documents here to populate the broader platform vault without affecting the specialized insurance workflow."
           />
         )}
       </SectionCard>

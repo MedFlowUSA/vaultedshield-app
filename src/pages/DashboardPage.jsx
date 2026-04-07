@@ -1716,7 +1716,7 @@ export default function DashboardPage({ onNavigate }) {
               }}
             >
               <div style={{ display: "grid", gap: "8px" }}>
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>What Needs Attention First</div>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
                 <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
               </div>

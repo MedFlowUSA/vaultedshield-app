@@ -140,7 +140,7 @@ export default function PolicyAiAssistantCard({
               onChange={(event) => setSelectedComparisonId(event.target.value)}
               style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}
             >
-              <option value="">No comparison policy selected</option>
+              <option value="">Select a second policy for comparison</option>
               {comparisonOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}

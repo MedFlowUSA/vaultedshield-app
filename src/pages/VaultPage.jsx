@@ -49,7 +49,7 @@ export default function VaultPage() {
       document.document_type,
     ]
       .filter(Boolean)
-      .join(" / ") || "Generic asset document",
+      .join(" / ") || "Household asset document",
     status: document.processing_status || "uploaded",
     updatedAt: document.created_at
       ? new Date(document.created_at).toLocaleDateString("en-US", {
@@ -68,12 +68,12 @@ export default function VaultPage() {
       <PageHeader
         eyebrow="Vault"
         title="Household Vault"
-        description="The vault shell now reads generic household asset documents while the deep life-policy document workflow remains under Insurance > Life."
+        description="The vault now holds shared household documents while the deep life-policy document workflow remains under Insurance > Life."
       />
       <SummaryPanel
         items={[
           { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Generic Documents", value: documents.length, helper: "Asset-linked platform documents" },
+          { label: "Household Documents", value: documents.length, helper: "Asset-linked platform documents" },
           { label: "Stored Records", value: documents.filter((item) => item.storage_path).length, helper: "Documents with storage references" },
           { label: "Needs Review", value: documents.filter((item) => item.processing_status === "needs_review").length, helper: "Document processing watchlist" },
           { label: "Vault Status", value: vaultRead.status, helper: "High-level document continuity read" },
@@ -106,7 +106,7 @@ export default function VaultPage() {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: contentRailLayout, gap: "18px" }}>
-        <SectionCard title="Household Document Register" subtitle="Generic platform documents linked to household assets.">
+        <SectionCard title="Household Document Register" subtitle="Shared household documents linked to household assets.">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
           ) : (
@@ -120,7 +120,7 @@ export default function VaultPage() {
         <SectionCard title="Vault Notes">
           <div style={{ color: "#475569", lineHeight: "1.7" }}>
             <p style={{ marginTop: 0 }}>
-              Generic household documents now have a durable home in the platform vault.
+              Shared household documents now have a durable home in the platform vault.
             </p>
             <p>
               Specialized life-policy document intelligence remains preserved in the dedicated IUL path and is not being merged into this table yet.

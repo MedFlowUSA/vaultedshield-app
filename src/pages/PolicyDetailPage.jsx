@@ -1820,8 +1820,8 @@ export default function PolicyDetailPage({ policyId, onNavigate }) {
 
           <div ref={(node) => setSectionRef("policy_ai_assistant", node)} style={getSectionHighlight("policy_ai_assistant")}>
           <SectionCard
-            title="Ask Vault AI"
-            subtitle="These answers are based on the uploaded policy data and visible statement history."
+            title="Policy AI Assistant"
+            subtitle="These answers are grounded in the uploaded policy data and visible statement history."
             accent="#bfdbfe"
           >
             <div style={{ display: "grid", gap: "18px" }}>
