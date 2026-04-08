@@ -99,7 +99,7 @@ export default function GuidanceCenterPage({ onNavigate }) {
         Open Upload Center
       </button>
       <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
-        Open Insurance Intelligence
+        Open Insurance Hub
       </button>
     </div>
   );
@@ -116,7 +116,7 @@ export default function GuidanceCenterPage({ onNavigate }) {
 
       <SectionCard
         title="Start Here"
-        subtitle="Use one clear first step, then let the rest of the guidance work off what your household already has in motion."
+        subtitle="Use one clear next step, then let the rest of the guidance follow the records your household already has in motion."
       >
         <div
           style={{

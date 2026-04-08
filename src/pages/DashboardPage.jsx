@@ -16,6 +16,7 @@ import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligen
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
 import {
   buildHouseholdOnboardingChecklist,
   getHouseholdBlankState,
@@ -120,7 +121,7 @@ function buildActionSignals(policyRows = [], fallbackPrompts = []) {
         id: `${policy.policy_id || label}-financial-gaps`,
         label: `Recover ${keyFinancialGaps.slice(0, 3).join(", ")}`,
         summary: `${label}: recover ${keyFinancialGaps.slice(0, 3).join(", ")}.`,
-        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+        route: getPolicyDetailRoute(policy),
       });
     }
 
@@ -129,7 +130,7 @@ function buildActionSignals(policyRows = [], fallbackPrompts = []) {
         id: `${policy.policy_id || label}-coi-review`,
         label: "Validate COI and charges",
         summary: `${label}: validate COI and charge visibility.`,
-        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+        route: getPolicyDetailRoute(policy),
         action_key: "open_insurance_hub",
       });
     }
@@ -139,7 +140,7 @@ function buildActionSignals(policyRows = [], fallbackPrompts = []) {
         id: `${policy.policy_id || label}-statement-date`,
         label: "Resolve latest statement",
         summary: `${label}: resolve the latest statement date.`,
-        route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
+        route: getPolicyDetailRoute(policy),
         action_key: "open_insurance_hub",
       });
     }

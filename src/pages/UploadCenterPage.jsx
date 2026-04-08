@@ -389,7 +389,7 @@ export default function UploadCenterPage() {
       <PageHeader
         eyebrow="Upload Center"
         title="Unified Upload Center"
-        description="Live generic intake for household documents, separate from the specialized Insurance > Life analysis workflow."
+        description="Bring household documents into VaultedShield quickly, then add deeper metadata only when it helps the review."
       />
 
       <SummaryPanel
@@ -397,8 +397,8 @@ export default function UploadCenterPage() {
           { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
           { label: "Assets Available", value: assets.length, helper: "Optional document attachment targets" },
           { label: "Queued Files", value: queue.length, helper: "Current upload queue" },
-          { label: "Saved Documents", value: documents.length, helper: "Generic household documents" },
-          { label: "Intake Status", value: uploadRead.status, helper: "High-level generic intake readiness" },
+          { label: "Saved Documents", value: documents.length, helper: "Household documents already on file" },
+          { label: "Intake Status", value: uploadRead.status, helper: "Overall upload readiness" },
         ]}
       />
 
@@ -461,7 +461,7 @@ export default function UploadCenterPage() {
                 What kind of document are you uploading?
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                Choose the closest category first. VaultedShield will keep this in the shared household vault and you can add more detailed metadata only when it helps.
+                Choose the closest category first. VaultedShield will place it in the household vault and you can add deeper metadata only when it adds review value.
               </div>
               <div style={{ color: "#64748b", lineHeight: "1.7", fontSize: "14px" }}>
                 Accepted file types: PDF, JPG, PNG, or a quick camera scan. Example: "{selectedCategory.example}".
@@ -517,7 +517,7 @@ export default function UploadCenterPage() {
             >
               <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop files here</div>
               <p style={{ marginTop: "8px", marginBottom: "14px", color: "#64748b", lineHeight: "1.6" }}>
-                Upload a {selectedCategory.label.toLowerCase()} document to the shared household vault. This flow is for broad intake and does not replace the specialized life-policy analysis flow.
+                Upload a {selectedCategory.label.toLowerCase()} document to the household vault. Use the dedicated Insurance {" > "} Life workflow when you want the deeper life-policy review experience.
               </p>
               <input
                 ref={fileInputRef}
@@ -789,12 +789,12 @@ export default function UploadCenterPage() {
         {documentRows.length > 0 ? (
           <DocumentTable rows={documentRows} />
         ) : (
-          <EmptyState
-            title="No household documents uploaded yet"
-            description="Upload shared household documents here to populate the broader platform vault without affecting the specialized insurance workflow."
-          />
-        )}
-      </SectionCard>
+            <EmptyState
+              title="No household documents uploaded yet"
+              description="Upload the first household document here to start building the shared vault and broader review evidence."
+            />
+          )}
+        </SectionCard>
 
       {loadError ? (
         <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>{loadError}</div>

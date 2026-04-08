@@ -21,6 +21,7 @@ import {
   buildProtectionComparisonNarrative,
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
+import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
@@ -1367,12 +1368,12 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             <PolicyCard
               title="Current Policy"
               policy={basePolicy}
-              onOpen={() => onNavigate?.(`/insurance/${basePolicy.policy_id}`)}
+              onOpen={() => onNavigate?.(getPolicyDetailRoute(basePolicy))}
             />
             <PolicyCard
               title="Comparison Policy"
               policy={comparisonPolicy}
-              onOpen={() => onNavigate?.(`/insurance/${comparisonPolicy.policy_id}`)}
+              onOpen={() => onNavigate?.(getPolicyDetailRoute(comparisonPolicy))}
             />
           </div>
 

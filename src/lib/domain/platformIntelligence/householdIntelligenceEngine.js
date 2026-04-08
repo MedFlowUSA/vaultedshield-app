@@ -1,6 +1,7 @@
 import {
   createEmptyHouseholdIntelligenceSchema,
 } from "./householdIntelligenceSchema";
+import { getPolicyDetailRoute, getPolicyEntryLabel } from "../../navigation/insurancePolicyRouting";
 import { getHouseholdBlankState } from "../../onboarding/isHouseholdBlank";
 
 const CRITICAL_ASSET_CATEGORIES = [
@@ -411,8 +412,8 @@ function buildPolicyReviewPriority(policy) {
     id: policy.policy_id || label,
     label,
     priority_score: priorityScore,
-    route: policy.policy_id ? `/insurance/${policy.policy_id}` : "/insurance",
-    action_label: "Open policy review",
+    route: getPolicyDetailRoute(policy),
+    action_label: getPolicyEntryLabel(policy),
     data_updated_at: policy.latest_statement_date || null,
     change_signal:
       policy.latest_statement_date
@@ -1293,7 +1294,7 @@ function buildHouseholdAssistantActions(intent, { queueItems = [], householdMap 
   } else if (intent === "insurance_strength") {
     actions.push({ id: "open-insurance", label: "Open insurance intelligence", route: "/insurance" });
     if (topQueueItem?.route && String(topQueueItem.route).startsWith("/insurance/")) {
-      actions.push({ id: "open-policy-review", label: "Open policy review", route: topQueueItem.route });
+      actions.push({ id: "open-policy-review", label: topQueueItem.action_label || "Open policy review", route: topQueueItem.route });
     }
   } else if (intent === "dependency_alignment") {
     const topDependency = householdMap?.dependency_signals?.priority_issues?.[0];

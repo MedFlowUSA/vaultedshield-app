@@ -8,6 +8,7 @@ import {
 import { useEffect } from "react";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
@@ -234,38 +235,6 @@ function renderSignalCard({ label, value, detail }) {
       {detail ? <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>{detail}</div> : null}
     </div>
   );
-}
-
-function isIulShowcasePolicy(policy) {
-  const normalizedType = String(
-    policy?.policy_type ||
-      policy?.policyType ||
-      policy?.policy_type_label ||
-      policy?.basicAnalysis?.policyType ||
-      ""
-  )
-    .trim()
-    .toLowerCase();
-
-  if (["iul", "indexed_universal_life", "indexed universal life"].includes(normalizedType)) {
-    return true;
-  }
-
-  const displayText = [policy?.product, policy?.product_name, policy?.policy_type_label]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return displayText.includes("iul") || displayText.includes("indexed universal");
-}
-
-function getPolicyDetailRoute(policy) {
-  if (!policy?.policy_id) return "/insurance";
-  return isIulShowcasePolicy(policy) ? `/insurance/iul/${policy.policy_id}` : `/insurance/${policy.policy_id}`;
-}
-
-function getPolicyEntryLabel(policy) {
-  return isIulShowcasePolicy(policy) ? "Open IUL Review Console" : "Open Policy Detail";
 }
 
 function PortfolioReportView({ report, onPrint, isCompact = false }) {
@@ -1065,7 +1034,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button
                 type="button"
-                onClick={() => iulShowcasePolicy.policy_id && onNavigate?.(`/insurance/iul/${iulShowcasePolicy.policy_id}`)}
+                onClick={() => iulShowcasePolicy.policy_id && onNavigate?.(getPolicyDetailRoute(iulShowcasePolicy))}
                 style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
               >
                 Open IUL Review Console

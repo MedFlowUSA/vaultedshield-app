@@ -19,6 +19,7 @@ import {
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
 import {
   buildHouseholdOnboardingChecklist,
   getHouseholdBlankState,
@@ -71,12 +72,12 @@ function parseDisplayNumber(value) {
 }
 
 function formatCurrency(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
   return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 function displayValue(value) {
-  return value === null || value === undefined || value === "" ? "—" : value;
+  return value === null || value === undefined || value === "" ? "-" : value;
 }
 
 function renderReportFactsGrid(items = [], columns = 3) {
@@ -448,7 +449,7 @@ export default function ReportsPage({ onNavigate }) {
     {
       id: "reports-upload-document",
       label: "Upload Document",
-      description: "Add the first household file to begin report-ready evidence collection.",
+      description: "Add the first household file to begin building report evidence.",
       route: "/upload-center",
     },
     {
@@ -500,12 +501,12 @@ export default function ReportsPage({ onNavigate }) {
               Reports and Exports
             </div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
-              No household report is ready yet. Reports become available once real household records are added, so this screen stays neutral until your setup has enough evidence to support a trustworthy output.
+              Reports unlock once the household has enough real records to support a trustworthy read. Until then, this page stays focused on the setup steps that create report-ready evidence.
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" onClick={() => onNavigate?.("/dashboard")} style={buttonStyle(true)}>
-              Open Dashboard
+              Open Guided Dashboard
             </button>
             <button type="button" onClick={() => onNavigate?.("/upload-center")} style={buttonStyle(false)}>
               Upload First Document
@@ -526,7 +527,7 @@ export default function ReportsPage({ onNavigate }) {
           <div style={{ display: "grid", gap: "8px" }}>
             <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Report readiness starts with setup progress</div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
-              VaultedShield will start generating household and insurance reports after you add meaningful records like properties, policies, documents, and contacts. Until then, setup progress is the right signal to show.
+              VaultedShield starts producing stronger household and insurance reporting after you add meaningful records like policies, documents, contacts, and core assets. Until then, setup progress is the clearest signal to show.
             </div>
           </div>
           <div
@@ -574,7 +575,7 @@ export default function ReportsPage({ onNavigate }) {
           <QuickActionGrid
             actions={onboardingQuickActions}
             title="Use the fastest setup paths"
-            subtitle="Jump into the live creation flows that move the household from blank to report-ready."
+            subtitle="Jump into the live creation flows that move the household from blank to evidence-ready."
             onAction={(action) => action.route && onNavigate?.(action.route)}
           />
         </section>
@@ -589,7 +590,7 @@ export default function ReportsPage({ onNavigate }) {
       status: bundle ? "Live" : "Loading",
       description: "Top-line household read, review pressure, module watchpoints, and insurance visibility in one export-oriented surface.",
       metrics: [
-        { label: "Bottom Line", value: householdMap?.overall_score ?? "—" },
+        { label: "Bottom Line", value: householdMap?.overall_score ?? "-" },
         { label: "Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
         { label: "Modules Needing Review", value: moduleReadinessCounts.needsReview },
       ],
@@ -612,19 +613,21 @@ export default function ReportsPage({ onNavigate }) {
       description: "Continuity-ranked policy portfolio summary with focus areas and priority review queue.",
       metrics: [
         { label: "Policies", value: rankedPolicies.length },
-        { label: "Coverage", value: totalCoverage > 0 ? formatCurrency(totalCoverage) : "—" },
-        { label: "COI Exposure", value: totalCoi > 0 ? formatCurrency(totalCoi) : "—" },
+        { label: "Coverage", value: totalCoverage > 0 ? formatCurrency(totalCoverage) : "-" },
+        { label: "COI Exposure", value: totalCoi > 0 ? formatCurrency(totalCoi) : "-" },
       ],
     },
     {
       key: "policy_detail",
-      title: "Single Policy Reviews",
-      status: rankedPolicies.length > 0 ? "Live in policy detail" : "Waiting",
-      description: "Open any policy detail page for interpretation, AI assistant, annual review, and printable policy report.",
+      title: isIulShowcasePolicy(rankedPolicies[0]) ? "IUL Review Console" : "Single Policy Reviews",
+      status: rankedPolicies.length > 0 ? (isIulShowcasePolicy(rankedPolicies[0]) ? "Flagship console live" : "Live in policy detail") : "Waiting",
+      description: isIulShowcasePolicy(rankedPolicies[0])
+        ? "Open the flagship IUL review console for verdict, proof, evidence ledger, annual review, and printable policy reporting."
+        : "Open any policy detail page for interpretation, AI assistant, annual review, and printable policy report.",
       metrics: [
-        { label: "Top Policy", value: rankedPolicies[0]?.product || "—" },
-        { label: "Status", value: rankedPolicies[0]?.ranking?.status || "—" },
-        { label: "Route", value: rankedPolicies[0]?.policy_id ? `/insurance/${rankedPolicies[0].policy_id}` : "—" },
+        { label: "Top Policy", value: rankedPolicies[0]?.product || "-" },
+        { label: "Status", value: rankedPolicies[0]?.ranking?.status || "-" },
+        { label: "Route", value: rankedPolicies[0]?.policy_id ? getPolicyDetailRoute(rankedPolicies[0]) : "-" },
       ],
     },
   ];
@@ -774,10 +777,10 @@ export default function ReportsPage({ onNavigate }) {
 
         {renderReportFactsGrid(
           [
-            { label: "Household Score", value: householdScorecard.overallScore ?? "—" },
+            { label: "Household Score", value: householdScorecard.overallScore ?? "-" },
             { label: "Status", value: householdScorecard.overallStatus || "Starter" },
-            { label: "Weakest Dimension", value: householdScorecard.weakestDimension?.label || "—" },
-            { label: "Strongest Dimension", value: householdScorecard.strongestDimension?.label || "—" },
+            { label: "Weakest Dimension", value: householdScorecard.weakestDimension?.label || "-" },
+            { label: "Strongest Dimension", value: householdScorecard.strongestDimension?.label || "-" },
           ],
           4
         )}
@@ -785,7 +788,7 @@ export default function ReportsPage({ onNavigate }) {
         {renderReportFactsGrid(
           householdScorecard.dimensions.map((dimension) => ({
             label: dimension.label,
-            value: `${dimension.score ?? "—"} · ${dimension.status}`,
+            value: `${dimension.score ?? "-"} · ${dimension.status}`,
           })),
           5
         )}
@@ -962,7 +965,7 @@ export default function ReportsPage({ onNavigate }) {
             type="button"
             onClick={() => {
               if (card.key === "policy_detail" && rankedPolicies[0]?.policy_id) {
-                onNavigate?.(`/insurance/${rankedPolicies[0].policy_id}`);
+                onNavigate?.(getPolicyDetailRoute(rankedPolicies[0]));
                 return;
               }
               setActiveReport(card.key);
@@ -1130,10 +1133,10 @@ export default function ReportsPage({ onNavigate }) {
           </button>
           <button
             type="button"
-            onClick={() => onNavigate?.(rankedPolicies[0]?.policy_id ? `/insurance/${rankedPolicies[0].policy_id}` : "/insurance")}
+            onClick={() => onNavigate?.(rankedPolicies[0]?.policy_id ? getPolicyDetailRoute(rankedPolicies[0]) : "/insurance")}
             style={reportButtonStyle(false)}
           >
-            Open Policy Review
+            {rankedPolicies[0] ? getPolicyEntryLabel(rankedPolicies[0]) : "Open Insurance Hub"}
           </button>
         </div>
 
@@ -1374,7 +1377,7 @@ export default function ReportsPage({ onNavigate }) {
       </section>
 
       {loadingStates.householdData || loadingStates.insurancePortfolio ? (
-        <div style={{ color: "#475569", fontSize: "14px" }}>Loading report-ready household signals...</div>
+        <div style={{ color: "#475569", fontSize: "14px" }}>Loading household reporting signals...</div>
       ) : null}
 
       {loadError ? (
@@ -1389,3 +1392,4 @@ export default function ReportsPage({ onNavigate }) {
     </div>
   );
 }
+

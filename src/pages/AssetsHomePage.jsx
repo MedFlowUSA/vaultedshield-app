@@ -102,14 +102,14 @@ export default function AssetsHomePage({ onNavigate }) {
     <div>
       <PageHeader
         eyebrow="Assets"
-        title="Household Asset Modules"
-        description="The asset shell now reads and writes live household assets while the deep life-policy workflow stays preserved under Insurance > Life."
+        title="Household Asset Map"
+        description="Track the core accounts, policies, properties, and records that make up the household so the rest of VaultedShield has real structure to work from."
       />
       <SummaryPanel
         items={[
           { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Tracked Assets", value: assets.length, helper: "Live generic asset records" },
-          { label: "Insurance Assets", value: assets.filter((item) => item.asset_category === "insurance").length, helper: "Generic insurance asset shells" },
+          { label: "Tracked Assets", value: assets.length, helper: "Visible household asset records" },
+          { label: "Insurance Assets", value: assets.filter((item) => item.asset_category === "insurance").length, helper: "Policies and insurance-linked records" },
           { label: "Active Assets", value: assets.filter((item) => item.status === "active").length, helper: "Current active records" },
           { label: "Readiness", value: assetRead.status, helper: "How usable the household asset map looks right now" },
         ]}
@@ -140,7 +140,7 @@ export default function AssetsHomePage({ onNavigate }) {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: contentRailLayout, gap: "18px" }}>
-        <SectionCard title="Add Asset" subtitle="Minimal create flow for the broad household asset registry.">
+        <SectionCard title="Add Asset" subtitle="Create a simple household record first. You can deepen the details later.">
           <form onSubmit={handleCreateAsset} style={{ display: "grid", gap: "12px" }}>
             <input
               value={form.asset_name}
@@ -160,7 +160,7 @@ export default function AssetsHomePage({ onNavigate }) {
             <input
               value={form.asset_subcategory}
               onChange={(event) => setForm((current) => ({ ...current, asset_subcategory: event.target.value }))}
-              placeholder="Subcategory"
+              placeholder="Type or subtype"
               style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }}
             />
             <input
@@ -189,7 +189,7 @@ export default function AssetsHomePage({ onNavigate }) {
           </form>
         </SectionCard>
 
-        <SectionCard title="Live Asset Registry" subtitle="Current household assets from the broad platform schema.">
+        <SectionCard title="Household Asset Registry" subtitle="The current records shaping your household map.">
           {assets.length > 0 ? (
             <div style={{ display: "grid", gap: "14px" }}>
               {assets.map((asset) => (
@@ -234,7 +234,7 @@ export default function AssetsHomePage({ onNavigate }) {
           ) : (
             <EmptyState
               title="No assets yet"
-              description="Add the first insurance, banking, retirement, estate, or household asset to activate the broader platform shell."
+              description="Add the first policy, account, property, or household record to start building a usable asset map."
             />
           )}
         </SectionCard>

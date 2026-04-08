@@ -68,12 +68,12 @@ export default function VaultPage() {
       <PageHeader
         eyebrow="Vault"
         title="Household Vault"
-        description="The vault now holds shared household documents while the deep life-policy document workflow remains under Insurance > Life."
+        description="Keep the household's shared documents, supporting records, and review evidence in one durable place."
       />
       <SummaryPanel
         items={[
           { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Household Documents", value: documents.length, helper: "Asset-linked platform documents" },
+          { label: "Household Documents", value: documents.length, helper: "Shared records across the household" },
           { label: "Stored Records", value: documents.filter((item) => item.storage_path).length, helper: "Documents with storage references" },
           { label: "Needs Review", value: documents.filter((item) => item.processing_status === "needs_review").length, helper: "Document processing watchlist" },
           { label: "Vault Status", value: vaultRead.status, helper: "High-level document continuity read" },
@@ -106,13 +106,13 @@ export default function VaultPage() {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: contentRailLayout, gap: "18px" }}>
-        <SectionCard title="Household Document Register" subtitle="Shared household documents linked to household assets.">
+        <SectionCard title="Household Document Register" subtitle="The records currently shaping the household vault.">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
           ) : (
             <EmptyState
               title="No household documents uploaded yet"
-              description="Upload household documents through the shared upload center to populate this vault view. Specialized insurance documents still remain in the deeper insurance workflow."
+              description="Upload the first shared household document through the Upload Center to start populating this vault view."
             />
           )}
         </SectionCard>
