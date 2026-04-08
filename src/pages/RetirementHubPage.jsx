@@ -363,7 +363,7 @@ export default function RetirementHubPage({ onNavigate }) {
           ) : accounts.length === 0 ? (
             <EmptyState
               title="No retirement accounts yet"
-              description="Create the first retirement account to activate the Retirement Hub and prepare the module for documents, snapshots, analytics, and positions."
+              description="Create the first retirement account to start building a usable retirement view with statements, positions, and future planning context."
             />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
@@ -551,7 +551,7 @@ export default function RetirementHubPage({ onNavigate }) {
             )}
           </SectionCard>
 
-          <SectionCard title="Create Retirement Account" subtitle="Minimal live create flow that writes both the generic asset row and the linked retirement account row.">
+          <SectionCard title="Create Retirement Account" subtitle="Start with the core account record, then add documents, positions, and deeper review detail over time.">
             <form onSubmit={handleCreateAccount} style={{ display: "grid", gap: "12px" }}>
               <select
                 value={form.retirement_type_key}
@@ -653,7 +653,7 @@ export default function RetirementHubPage({ onNavigate }) {
                       "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",
                     ]
                   : [
-                      "Retirement account creation now writes both the generic asset row and the deep retirement row.",
+                      "Retirement account creation now establishes the core record and its linked retirement detail view.",
                       `Pension-style accounts detected: ${starterInsightCounts.pensionStyle}`,
                       `Starter rollover review candidates: ${starterInsightCounts.rolloverCandidates}`,
                       "Loan and beneficiary visibility will strengthen as retirement documents are parsed into analytics records.",

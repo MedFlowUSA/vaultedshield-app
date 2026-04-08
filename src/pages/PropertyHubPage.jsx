@@ -228,7 +228,7 @@ export default function PropertyHubPage({ onNavigate }) {
           ) : properties.length === 0 ? (
             <EmptyState
               title="No properties yet"
-              description="Create the first property record to activate the module and prepare it for tax, title, deed, snapshot, and later cross-module linkage work."
+              description="Create the first property record to start building a stronger household picture around value, protection, financing, and continuity."
             />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
@@ -274,7 +274,7 @@ export default function PropertyHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Property" subtitle="Minimal live create flow that writes both the generic asset row and the linked property row.">
+          <SectionCard title="Create Property" subtitle="Start with the core property record, then add documents, valuation work, and linked financing or coverage over time.">
             <form onSubmit={handleCreateProperty} style={{ display: "grid", gap: "12px" }}>
               <select value={form.property_type_key} onChange={(event) => setForm((current) => ({ ...current, property_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {PROPERTY_TYPES.map((type) => (
@@ -318,12 +318,12 @@ export default function PropertyHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 properties.length > 0
-                  ? "Property records are now live in the platform shell and ready for document intake, snapshots, analytics placeholders, and later linkage to mortgage, homeowners, and cross-module intelligence."
+                  ? "Property records are now live in VaultedShield and ready for documents, snapshots, valuation work, and linked mortgage or homeowners review."
                   : "The property module is live-ready but still waiting for its first property record."
               }
               bullets={[
-                "Property creation now writes both the generic asset row and the deep property row.",
-                "Property detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
+                "Property creation now establishes the core record and its linked property detail view.",
+                "Property detail pages are ready for linked documents, snapshots, and broader continuity context.",
               ]}
             />
           </SectionCard>

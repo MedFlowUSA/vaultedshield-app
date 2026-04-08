@@ -175,7 +175,7 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
           ) : autoPolicies.length === 0 ? (
             <EmptyState
               title="No auto policies yet"
-              description="Create the first auto policy to activate the module and prepare it for declarations documents, snapshots, analytics, and later auto-policy parsing."
+              description="Create the first auto policy to start building a real auto-insurance view with documents, renewal visibility, and ongoing review support."
             />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
@@ -221,7 +221,7 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Auto Policy" subtitle="Minimal live create flow that writes both the generic asset row and the linked auto policy row.">
+          <SectionCard title="Create Auto Policy" subtitle="Start with the core policy record, then deepen the file with documents and review details.">
             <form onSubmit={handleCreateAutoPolicy} style={{ display: "grid", gap: "12px" }}>
               <select value={form.auto_policy_type_key} onChange={(event) => setForm((current) => ({ ...current, auto_policy_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {AUTO_POLICY_TYPES.map((type) => (
@@ -261,12 +261,12 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 autoPolicies.length > 0
-                  ? "Auto policies are now live in the platform shell and ready for document intake, snapshots, analytics placeholders, and later declarations parsing."
+                  ? "Auto policies are now live in VaultedShield and ready for documents, snapshots, and deeper review as the file grows."
                   : "The auto-insurance module is live-ready but still waiting for its first policy record."
               }
               bullets={[
-                "Auto policy creation now writes both the generic asset row and the deep auto policy row.",
-                "Auto detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
+                "Auto policy creation now establishes the core record and its linked insurance detail view.",
+                "Auto detail pages are ready for linked documents, snapshots, and broader continuity context.",
               ]}
             />
           </SectionCard>

@@ -239,7 +239,7 @@ export default function HomeownersHubPage({ onNavigate }) {
           ) : policies.length === 0 ? (
             <EmptyState
               title="No homeowners policies yet"
-              description="Create the first homeowners policy to activate the module and prepare it for documents, snapshots, analytics, and later declarations parsing."
+              description="Create the first homeowners policy to start building a real protection view with declarations, renewals, and linked property context."
             />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
@@ -285,7 +285,7 @@ export default function HomeownersHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Homeowners Policy" subtitle="Minimal live create flow that writes both the generic asset row and the linked homeowners policy row.">
+          <SectionCard title="Create Homeowners Policy" subtitle="Start with the core policy record, then connect documents, property context, and deeper review details.">
             <form onSubmit={handleCreatePolicy} style={{ display: "grid", gap: "12px" }}>
               <select value={form.homeowners_policy_type_key} onChange={(event) => setForm((current) => ({ ...current, homeowners_policy_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {HOMEOWNERS_POLICY_TYPES.map((type) => (
@@ -327,12 +327,12 @@ export default function HomeownersHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 policies.length > 0
-                  ? "Homeowners records are now live in the platform shell and ready for document intake, snapshots, analytics, and later declarations parsing."
+                  ? "Homeowners records are now live in VaultedShield and ready for documents, snapshots, and deeper review as the file grows."
                   : "The homeowners module is live-ready but still waiting for its first policy record."
               }
               bullets={[
-                "Homeowners policy creation now writes both the generic asset row and the deep homeowners policy row.",
-                "Policy detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
+                "Homeowners policy creation now establishes the core record and its linked protection detail view.",
+                "Policy detail pages are ready for linked documents, snapshots, and broader continuity context.",
               ]}
             />
           </SectionCard>

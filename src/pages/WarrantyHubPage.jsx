@@ -183,7 +183,7 @@ export default function WarrantyHubPage({ onNavigate }) {
           ) : warranties.length === 0 ? (
             <EmptyState
               title="No warranties yet"
-              description="Create the first warranty or service contract to activate the module and prepare it for document intake, snapshots, analytics placeholders, and later warranty parsing."
+              description="Create the first warranty or service contract to start building a usable protection record with documents, renewal visibility, and later review support."
             />
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
@@ -229,7 +229,7 @@ export default function WarrantyHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Warranty Contract" subtitle="Minimal live create flow that writes both the generic asset row and the linked warranty row.">
+          <SectionCard title="Create Warranty Contract" subtitle="Start with the core contract record, then deepen it with documents and later review details.">
             <form onSubmit={handleCreateWarranty} style={{ display: "grid", gap: "12px" }}>
               <select value={form.warranty_type_key} onChange={(event) => setForm((current) => ({ ...current, warranty_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {WARRANTY_TYPES.map((type) => (
@@ -270,12 +270,12 @@ export default function WarrantyHubPage({ onNavigate }) {
               title="Foundation Readiness"
               summary={
                 warranties.length > 0
-                  ? "Warranty and service-contract records are now live in the platform shell and ready for document intake, snapshots, analytics placeholders, and later warranty parsing."
+                  ? "Warranty and service-contract records are now live in VaultedShield and ready for documents, snapshots, and deeper review as the file grows."
                   : "The warranty module is live-ready but still waiting for its first contract record."
               }
               bullets={[
-                "Warranty creation now writes both the generic asset row and the deep warranty contract row.",
-                "Warranty detail pages are ready for linked documents, snapshots, analytics placeholders, and platform continuity context.",
+                "Warranty creation now establishes the core record and its linked contract detail view.",
+                "Warranty detail pages are ready for linked documents, snapshots, and broader continuity context.",
               ]}
             />
           </SectionCard>
