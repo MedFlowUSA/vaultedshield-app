@@ -239,7 +239,29 @@ export default function GuidanceCenterPage({ onNavigate }) {
           title="Sample Household Preview"
           subtitle="This is a safe preview of what VaultedShield starts surfacing once real household records are added."
         >
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 0.82fr) minmax(0, 1.18fr)", gap: "14px" }}>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <div
+              style={{
+                padding: "16px 18px",
+                borderRadius: "16px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                Best First Records
+              </div>
+              <div style={{ color: "#0f172a", fontWeight: 800, fontSize: "18px" }}>
+                One member, one policy, one supporting document, one core asset
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                That combination is usually enough to make the dashboard, insurance, vault, and reports screens feel meaningfully alive without overloading the first walkthrough.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 0.82fr) minmax(0, 1.18fr)", gap: "14px" }}>
             <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "12px" }}>
               <div>
                 <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{demoHouseholdPreview.householdLabel}</div>
@@ -282,6 +304,7 @@ export default function GuidanceCenterPage({ onNavigate }) {
                   </div>
                 ))}
               </div>
+            </div>
             </div>
           </div>
         </SectionCard>

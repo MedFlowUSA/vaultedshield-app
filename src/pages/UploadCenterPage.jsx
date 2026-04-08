@@ -780,7 +780,18 @@ export default function UploadCenterPage() {
             <EmptyState
               title="Your upload tray is ready"
               description="Choose a document category, add one or more files, and VaultedShield will show scanning and save status here."
-            />
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                  Strong first upload packets:
+                </div>
+                <div style={{ display: "grid", gap: "8px", color: "#64748b", fontSize: "14px" }}>
+                  <div>Insurance: illustration plus recent annual statement</div>
+                  <div>Property: deed, mortgage statement, or tax record</div>
+                  <div>Estate: trust, will, or power-of-attorney file</div>
+                </div>
+              </div>
+            </EmptyState>
           )}
         </SectionCard>
       </div>
@@ -792,7 +803,11 @@ export default function UploadCenterPage() {
             <EmptyState
               title="No household documents uploaded yet"
               description="Upload the first household document here to start building the shared vault and broader review evidence."
-            />
+            >
+              <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                After the first upload, this list becomes the handoff point into the vault and the broader household review flow.
+              </div>
+            </EmptyState>
           )}
         </SectionCard>
 
