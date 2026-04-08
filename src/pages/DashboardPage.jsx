@@ -1290,6 +1290,59 @@ export default function DashboardPage({ onNavigate }) {
               background: "rgba(255,255,255,0.03)",
               border: "1px solid rgba(255,255,255,0.05)",
               display: "grid",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+                Demo Path
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 800 }}>A strong first walkthrough</div>
+              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                If you want the dashboard to come alive quickly, this is the cleanest setup order for a household demo.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "12px",
+              }}
+            >
+              {[
+                "Add one household member",
+                "Upload one life policy",
+                "Add one property or account",
+                "Upload one shared household document",
+              ].map((item, index) => (
+                <div
+                  key={item}
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "18px",
+                    background: "rgba(15,23,42,0.32)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    display: "grid",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 800 }}>
+                    Step {index + 1}
+                  </div>
+                  <div style={{ color: "#f8fafc", fontWeight: 700, lineHeight: "1.6" }}>{item}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              padding: sectionPadding,
+              borderRadius: sectionRadius,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              display: "grid",
               gap: "18px",
             }}
           >

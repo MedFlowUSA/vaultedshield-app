@@ -579,6 +579,54 @@ export default function ReportsPage({ onNavigate }) {
             onAction={(action) => action.route && onNavigate?.(action.route)}
           />
         </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: "18px",
+          }}
+        >
+          <div
+            style={{
+              padding: "26px 28px",
+              borderRadius: "24px",
+              background: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              display: "grid",
+              gap: "12px",
+            }}
+          >
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Best first reporting packet</div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              One good policy, one property or account, one shared document, and one key household contact are usually enough to make the reporting side feel real.
+            </div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+              <li style={{ lineHeight: "1.7" }}>Life policy illustration or annual statement</li>
+              <li style={{ lineHeight: "1.7" }}>Property, banking, or retirement record</li>
+              <li style={{ lineHeight: "1.7" }}>Household document in the vault</li>
+              <li style={{ lineHeight: "1.7" }}>Primary contact or advisor record</li>
+            </ul>
+          </div>
+
+          <div
+            style={{
+              padding: "26px 28px",
+              borderRadius: "24px",
+              background: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.08)",
+              display: "grid",
+              gap: "12px",
+            }}
+          >
+            <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What appears first</div>
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+              <li style={{ lineHeight: "1.7" }}>Executive summary framing and household score</li>
+              <li style={{ lineHeight: "1.7" }}>Insurance portfolio review and top-policy routing</li>
+              <li style={{ lineHeight: "1.7" }}>A cleaner priority queue for follow-up items</li>
+            </ul>
+          </div>
+        </section>
       </div>
     );
   }

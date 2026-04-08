@@ -12,7 +12,7 @@ import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_DOCUMENTS = [];
 
-export default function VaultPage() {
+export default function VaultPage({ onNavigate }) {
   const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [documents, setDocuments] = useState([]);
@@ -113,7 +113,36 @@ export default function VaultPage() {
             <EmptyState
               title="No household documents uploaded yet"
               description="Upload the first shared household document through the Upload Center to start populating this vault view."
-            />
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                  Good first vault documents:
+                </div>
+                <div style={{ display: "grid", gap: "8px", color: "#64748b", fontSize: "14px" }}>
+                  <div>Trust or estate document</div>
+                  <div>Mortgage or property statement</div>
+                  <div>Annual insurance statement or declaration page</div>
+                </div>
+                {onNavigate ? (
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("/upload-center")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Upload Center
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("/insurance/life/upload")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Upload Policy Files
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </EmptyState>
           )}
         </SectionCard>
 

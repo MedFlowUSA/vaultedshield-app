@@ -235,7 +235,34 @@ export default function AssetsHomePage({ onNavigate }) {
             <EmptyState
               title="No assets yet"
               description="Add the first policy, account, property, or household record to start building a usable asset map."
-            />
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                  Strong first records for a demo household:
+                </div>
+                <div style={{ display: "grid", gap: "8px", color: "#64748b", fontSize: "14px" }}>
+                  <div>Life insurance policy</div>
+                  <div>Primary residence or property</div>
+                  <div>Retirement account or banking relationship</div>
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/insurance/life/upload")}
+                    style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                  >
+                    Upload First Policy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/upload-center")}
+                    style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}
+                  >
+                    Add Household Document
+                  </button>
+                </div>
+              </div>
+            </EmptyState>
           )}
         </SectionCard>
       </div>

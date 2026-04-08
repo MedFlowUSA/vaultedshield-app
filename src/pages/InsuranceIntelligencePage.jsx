@@ -803,6 +803,53 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             ))}
           </div>
 
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isTablet ? "1fr" : "1.05fr 0.95fr",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                padding: sectionPadding,
+                borderRadius: sectionRadius,
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Best first insurance packet</div>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
+                The strongest first demo file is usually one policy with a baseline illustration and a recent in-force statement.
+              </div>
+              <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                <li style={{ lineHeight: "1.7" }}>Original illustration or policy packet</li>
+                <li style={{ lineHeight: "1.7" }}>Most recent annual statement</li>
+                <li style={{ lineHeight: "1.7" }}>One prior annual statement if available</li>
+              </ul>
+            </div>
+
+            <div
+              style={{
+                padding: sectionPadding,
+                borderRadius: sectionRadius,
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "12px",
+              }}
+            >
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What the first policy unlocks</div>
+              <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                <li style={{ lineHeight: "1.7" }}>Carrier and policy-type normalization</li>
+                <li style={{ lineHeight: "1.7" }}>Policy health, charge drag, and plain-English interpretation</li>
+                <li style={{ lineHeight: "1.7" }}>A path into the IUL Review Console when the file supports it</li>
+              </ul>
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
               type="button"

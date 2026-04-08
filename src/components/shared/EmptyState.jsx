@@ -1,4 +1,4 @@
-export default function EmptyState({ title, description }) {
+export default function EmptyState({ title, description, children }) {
   return (
     <div
       style={{
@@ -14,6 +14,7 @@ export default function EmptyState({ title, description }) {
       <p style={{ marginTop: "8px", marginBottom: 0, color: "#64748b", lineHeight: "1.6", maxWidth: "64ch" }}>
         {description}
       </p>
+      {children ? <div style={{ marginTop: "14px" }}>{children}</div> : null}
     </div>
   );
 }
