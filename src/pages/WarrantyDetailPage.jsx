@@ -465,7 +465,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   </div>
                 </div>
               ) : (
-                <EmptyState title="No linked asset summary" description="This warranty contract does not currently show a linked generic asset record." />
+                <EmptyState title="No linked household summary" description="This warranty contract is not yet connected to a broader household asset summary." />
               )}
             </SectionCard>
           </div>
@@ -484,7 +484,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                         <div><strong>Provider:</strong> {getWarrantyProvider(document.provider_key)?.display_name || document.provider_key || "Limited visibility"}</div>
                         <div><strong>Document Date:</strong> {formatDate(document.document_date)}</div>
                         <div><strong>Created:</strong> {formatDate(document.created_at)}</div>
-                        <div><strong>Generic Asset Document:</strong> {document.asset_document_id || "Not linked yet"}</div>
+                        <div><strong>Household Document Link:</strong> {document.asset_document_id || "Not linked yet"}</div>
                         <div><strong>Asset Document Status:</strong> {document.asset_documents?.processing_status || "Not available"}</div>
                       </div>
                     </div>
@@ -500,7 +500,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                 <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: "20px", background: "#f8fafc" }}>
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop warranty documents here</div>
                   <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
-                    Upload contracts, protection plans, proofs of purchase, renewal notices, and related warranty documents into this contract. The original file is saved as a generic asset document and then linked into the warranty module.
+                    Upload contracts, protection plans, proofs of purchase, renewal notices, and related warranty documents into this contract. The original file is saved in the household vault and then linked into the warranty module.
                   </p>
                   <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(event) => enqueueFiles(event.target.files)} />
                   <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}>
@@ -543,7 +543,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                         </div>
                         <div style={{ marginTop: "8px", color: "#475569" }}>
                           Status: {item.status}
-                          {item.duplicate ? " | Existing generic upload reused" : ""}
+                          {item.duplicate ? " | Existing household upload reused" : ""}
                           {item.storagePath ? ` | ${item.storagePath}` : ""}
                         </div>
                         {item.errorSummary ? <div style={{ marginTop: "6px", color: "#991b1b" }}>{item.errorSummary}</div> : null}
@@ -623,13 +623,13 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   title="Platform Linkage"
                   summary="This warranty record can inherit shared continuity context from the linked platform asset without collapsing warranty-specific data into generic tables."
                   bullets={[
-                    `Generic asset documents linked: ${assetBundle.documents?.length || 0}`,
+                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
                     `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
                     `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
                   ]}
                 />
               ) : (
-                <EmptyState title="Shared platform context pending" description="Alerts, tasks, notes, and broader continuity context will surface here through the linked generic asset record." />
+                <EmptyState title="Shared household context pending" description="Alerts, tasks, notes, and broader continuity context will appear here once this contract is linked into the broader household record." />
               )}
             </SectionCard>
           </div>

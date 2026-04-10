@@ -716,7 +716,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               ) : (
                 <EmptyState
                   title="No linked asset summary"
-                  description="This retirement account does not currently show a linked generic asset record."
+                  description="This retirement account is not yet connected to a broader household asset summary."
                 />
               )}
             </SectionCard>
@@ -828,7 +828,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                         <div><strong>Provider:</strong> {getProviderLabel(document.provider_key)}</div>
                         <div><strong>Statement Date:</strong> {formatDate(document.statement_date)}</div>
                         <div><strong>Created:</strong> {formatDate(document.created_at)}</div>
-                        <div><strong>Generic Asset Document:</strong> {document.asset_document_id || "Not linked yet"}</div>
+                        <div><strong>Household Document Link:</strong> {document.asset_document_id || "Not linked yet"}</div>
                         <div><strong>Asset Document Status:</strong> {document.asset_documents?.processing_status || "Not available"}</div>
                       </div>
                     </div>
@@ -859,7 +859,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                 >
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop retirement documents here</div>
                   <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
-                    Upload retirement statements, notices, beneficiary forms, and plan documents into this retirement account. The original file is saved as a generic asset document and then linked into the retirement module.
+                    Upload retirement statements, notices, beneficiary forms, and plan documents into this retirement account. The original file is saved in the household vault and then linked into the retirement module.
                   </p>
                   <input
                     ref={fileInputRef}
@@ -965,7 +965,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                         </div>
                         <div style={{ marginTop: "8px", color: "#475569" }}>
                           Status: {item.status}
-                          {item.duplicate ? " | Existing generic upload reused" : ""}
+                          {item.duplicate ? " | Existing household upload reused" : ""}
                           {item.storagePath ? ` | ${item.storagePath}` : ""}
                         </div>
                         {item.errorSummary ? <div style={{ marginTop: "6px", color: "#991b1b" }}>{item.errorSummary}</div> : null}
@@ -1151,15 +1151,15 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   title="Platform Linkage"
                   summary="This retirement record can inherit shared continuity context from the linked platform asset without collapsing retirement-specific data into generic tables."
                   bullets={[
-                    `Generic asset documents linked: ${assetBundle.documents?.length || 0}`,
+                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
                     `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
                     `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
                   ]}
                 />
               ) : (
                 <EmptyState
-                  title="Shared platform context pending"
-                  description="Alerts, tasks, notes, and broader continuity context will surface here through the linked generic asset record."
+                  title="Shared household context pending"
+                  description="Alerts, tasks, notes, and broader continuity context will appear here once this account is linked into the broader household record."
                 />
               )}
             </SectionCard>
