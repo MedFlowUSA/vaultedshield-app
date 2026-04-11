@@ -5,11 +5,15 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import PropertyActionFeedCard from "../components/property/PropertyActionFeedCard";
+import PropertyLinkedContextCard from "../components/property/PropertyLinkedContextCard";
+import PropertySignalsSummaryCard from "../components/property/PropertySignalsSummaryCard";
 import {
-  answerPropertyQuestion,
   buildPropertyReviewReport,
   buildValuationChangeSummary,
 } from "../lib/domain/propertyValuation";
+import { buildPropertySignals } from "../lib/propertySignals/buildPropertySignals";
+import { buildPropertyActionFeed } from "../lib/propertySignals/buildPropertyActionFeed";
 import {
   getPropertyDocumentClass,
   getPropertyType,
@@ -49,6 +53,7 @@ import {
 import { buildPropertyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
+import { runPropertyAiAssistant } from "../utils/runPropertyAiAssistant";
 
 const PROPERTY_DOCUMENT_CLASSES = listPropertyDocumentClasses();
 const PROPERTY_TYPES = listPropertyTypes();
@@ -66,6 +71,7 @@ const PROPERTY_ASSISTANT_STARTERS = [
   "What official market support is being used?",
   "Is financing and coverage linked cleanly?",
   "What property facts are still missing?",
+  "What should I review first on this property?",
 ];
 
 function actionButtonStyle(primary = false) {
@@ -540,6 +546,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     () => bundle?.linkedHomeownersPolicies || [],
     [bundle?.linkedHomeownersPolicies]
   );
+  const propertyAssetLinks = useMemo(() => bundle?.propertyAssetLinks || [], [bundle?.propertyAssetLinks]);
   const propertyStackAnalytics = bundle?.propertyStackAnalytics || null;
   const latestPropertyValuation = bundle?.latestPropertyValuation || null;
   const valuationMetadata = latestPropertyValuation?.metadata || {};
@@ -648,6 +655,38 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       linkedHomeownersPolicies,
       propertyComps,
     ]
+  );
+  const propertySignals = useMemo(
+    () =>
+      buildPropertySignals({
+        property,
+        latestValuation: latestPropertyValuation,
+        valuationChangeSummary,
+        propertyEquityPosition,
+        propertyStackAnalytics,
+        propertyValuationHistory,
+        linkedMortgages,
+        linkedHomeownersPolicies,
+      }),
+    [
+      property,
+      latestPropertyValuation,
+      valuationChangeSummary,
+      propertyEquityPosition,
+      propertyStackAnalytics,
+      propertyValuationHistory,
+      linkedMortgages,
+      linkedHomeownersPolicies,
+    ]
+  );
+  const propertyActionFeed = useMemo(
+    () =>
+      buildPropertyActionFeed({
+        property,
+        propertySignals,
+        valuationChangeSummary,
+      }),
+    [property, propertySignals, valuationChangeSummary]
   );
 
   const propertyStackPrompts = useMemo(() => {
@@ -1084,8 +1123,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     const cleanQuestion = String(questionText || "").trim();
     if (!cleanQuestion) return;
 
-    const response = answerPropertyQuestion({
-      questionText: cleanQuestion,
+    const response = runPropertyAiAssistant({
+      userQuestion: cleanQuestion,
       property,
       latestValuation: latestPropertyValuation,
       valuationChangeSummary,
@@ -1094,6 +1133,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       linkedMortgages,
       linkedHomeownersPolicies,
       propertyId,
+      propertySignals,
+      propertyActionFeed,
     });
 
     setAssistantHistory((current) => [
@@ -1124,6 +1165,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     if (typeof window !== "undefined") {
       window.setTimeout(() => window.print(), 80);
     }
+  }
+
+  function handlePropertyAction(action) {
+    if (!action?.target) return;
+
+    executeSmartAction(action.target, {
+      navigate: onNavigate,
+      scrollToSection: scrollToPropertySection,
+    });
   }
 
   return (
@@ -1161,6 +1211,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             <button type="button" onClick={handlePrintPropertyReport} style={{ ...reportActionButtonStyle(false, true), ...(actionButtonLayoutStyle || {}) }}>
               Print Report
             </button>
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <PropertySignalsSummaryCard propertySignals={propertySignals} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <PropertyActionFeedCard actions={propertyActionFeed} onAction={handlePropertyAction} />
           </div>
 
           {showPropertyReport ? (
@@ -1786,14 +1844,42 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   </div>
                 </div>
               ) : (
-                <EmptyState
-                  title="No property stack analytics yet"
-                  description="Persisted property stack continuity analytics will appear here once the current link state is evaluated."
-                />
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <AIInsightPanel
+                    title="Live stack read"
+                    summary={`Persisted stack analytics are not stored yet, but the live property signal currently reads ${propertySignals.signalLevel.replace(/_/g, " ")}.`}
+                    bullets={[
+                      `Mortgage links visible: ${linkedMortgages.length}.`,
+                      `Homeowners links visible: ${linkedHomeownersPolicies.length}.`,
+                      ...(propertySignals.reasons || []).slice(0, 3),
+                    ]}
+                  />
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    <strong>Current linkage status:</strong> {propertyStackLinkageStatus}
+                  </div>
+                </div>
               )}
               {analyticsError ? (
                 <div style={{ marginTop: "12px", color: "#991b1b", fontSize: "14px" }}>{analyticsError}</div>
               ) : null}
+            </SectionCard>
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Linked Context"
+              subtitle="See the property as part of one operating system across debt, protection, documents, and access continuity."
+            >
+              <PropertyLinkedContextCard
+                currentAssetId={linkedAsset?.id || null}
+                propertyAssetLinks={propertyAssetLinks}
+                propertyDocuments={bundle.propertyDocuments || []}
+                assetBundle={assetBundle}
+                propertyStackAnalytics={propertyStackAnalytics}
+                onNavigate={onNavigate}
+                isMobile={isMobile}
+                actionButtonLayoutStyle={actionButtonLayoutStyle}
+              />
             </SectionCard>
           </div>
 
@@ -2222,7 +2308,21 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   ))}
                 </div>
               ) : (
-                <EmptyState title="No property analytics yet" description="Property intelligence will appear here after future parsing and review passes are added." />
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <AIInsightPanel
+                    title="Working property intelligence"
+                    summary={`No persisted property analytics rows are stored yet, but the page can still produce a live ${propertySignals.signalLevel.replace(/_/g, " ")} signal from valuation, equity, and linkage inputs.`}
+                    bullets={(propertySignals.reasons || []).slice(0, 4)}
+                  />
+                  {propertyActionFeed[0] ? (
+                    <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Top live next move</div>
+                      <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
+                        {propertyActionFeed[0].summary}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </SectionCard>
           </div>
@@ -2269,7 +2369,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           {import.meta.env.DEV ? (
             <SectionCard title="Property Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
-                property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationCompOrigin={compDataOrigin} | valuationProviderMode={providerMode} | valuationProviderKey={latestPropertyValuation?.metadata?.provider_key || "none"} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}
+                property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | assetLinkCount={propertyAssetLinks.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationCompOrigin={compDataOrigin} | valuationProviderMode={providerMode} | valuationProviderKey={latestPropertyValuation?.metadata?.provider_key || "none"} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}
               </div>
             </SectionCard>
           ) : null}

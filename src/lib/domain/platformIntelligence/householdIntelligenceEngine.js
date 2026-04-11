@@ -1,6 +1,7 @@
 import {
   createEmptyHouseholdIntelligenceSchema,
 } from "./householdIntelligenceSchema";
+import { buildPropertyOperatingGraphSummary } from "../../assetLinks/linkedContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel } from "../../navigation/insurancePolicyRouting";
 import { getHouseholdBlankState } from "../../onboarding/isHouseholdBlank";
 
@@ -235,6 +236,7 @@ function buildPrompts(bundle, assetCounts, documentCounts, portalContinuity, mod
   const prompts = [];
   const flags = [];
   const propertyStack = bundle.propertyStackSummary || {};
+  const propertyAssetGraph = propertyStack.assetGraphSummary || {};
   const propertyStackAnalytics = bundle.propertyStackAnalytics || [];
 
   if (assetCounts.mortgage && !assetCounts.homeowners) {
@@ -325,6 +327,23 @@ function buildPrompts(bundle, assetCounts, documentCounts, portalContinuity, mod
     flags.push("incomplete_property_stacks_need_completion");
   }
 
+  if ((propertyAssetGraph.partialPropertyAssetGraph || []).length > 0) {
+    prompts.push("Some properties are only partially connected across the household asset, liability, and protection graph.");
+    flags.push("partial_property_asset_graph");
+  }
+
+  if (
+    ((propertyStack.propertiesMissingMortgageLink || []).length > 0 ||
+      (propertyStack.propertiesMissingHomeownersLink || []).length > 0) &&
+    (
+      (propertyAssetGraph.propertiesMissingAssetGraphMortgageLink || []).length > 0 ||
+      (propertyAssetGraph.propertiesMissingAssetGraphHomeownersLink || []).length > 0
+    )
+  ) {
+    prompts.push("Some property relationships are still missing from the broader household linkage graph.");
+    flags.push("property_asset_graph_incomplete");
+  }
+
   if ((propertyStack.propertiesMissingProtectionButWithValue || []).length > 0) {
     prompts.push("Some properties now have value review visibility but still do not show linked homeowners protection.");
     flags.push("properties_with_value_missing_protection");
@@ -356,7 +375,7 @@ function buildPrompts(bundle, assetCounts, documentCounts, portalContinuity, mod
   return { prompts, flags };
 }
 
-function toUiNumber(value) {
+function _toUiNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const parsed = Number(String(value).replace(/[$,%\s,]/g, ""));
@@ -375,7 +394,7 @@ function toStatus(score) {
   return "At Risk";
 }
 
-function toVisibilityLabel(value) {
+function _toVisibilityLabel(value) {
   if (!value) return "Limited";
   if (["strong", "complete", "high"].includes(value)) return "Strong";
   if (["partial", "moderate", "mixed"].includes(value)) return "Moderate";
@@ -450,8 +469,9 @@ function buildDependencyFlag({
   };
 }
 
-export function buildCrossAssetDependencySignals(bundle = {}, savedPolicyRows = [], intelligence = null) {
+export function buildCrossAssetDependencySignals(bundle = {}, savedPolicyRows = []) {
   const propertySummary = bundle.propertyStackSummary || {};
+  const propertyAssetGraph = propertySummary.assetGraphSummary || {};
   const portalReadiness = bundle.portalReadiness || {};
   const assetCounts = bundle.assetCountsByCategory || {};
   const documentCounts = bundle.documentCountsByCategory || {};
@@ -533,6 +553,25 @@ export function buildCrossAssetDependencySignals(bundle = {}, savedPolicyRows = 
         route: "/mortgage",
         actionLabel: "Open mortgage review",
         priorityScore: 76,
+      })
+    );
+  }
+
+  if ((propertyAssetGraph.partialPropertyAssetGraph || []).length > 0) {
+    flags.push(
+      buildDependencyFlag({
+        key: "partial_property_operating_graph",
+        severity: "moderate",
+        title: "Property Operating Graph Is Partial",
+        explanation: "One or more properties are only partially connected across the asset, liability, and protection layers.",
+        supportingEvidence: [
+          `${propertyAssetGraph.partialPropertyAssetGraph.length} ${propertyAssetGraph.partialPropertyAssetGraph.length === 1 ? "property is" : "properties are"} only partially connected in the household graph.`,
+          `${propertyAssetGraph.completePropertyAssetGraph?.length || 0} ${propertyAssetGraph.completePropertyAssetGraph?.length === 1 ? "property now shows" : "properties now show"} full asset-to-liability-to-protection linkage.`,
+        ],
+        suggestedSmartActionKeys: ["open_property_hub", "open_homeowners_hub", "open_mortgage_hub"],
+        route: "/property",
+        actionLabel: "Open linked property review",
+        priorityScore: 74,
       })
     );
   }
@@ -1086,6 +1125,7 @@ export function buildHouseholdReviewReport({
   };
 
   const householdName = bundle?.household?.household_name || "Household Review";
+  const operatingGraphSummary = buildPropertyOperatingGraphSummary(bundle);
   const keyFacts = [
     { label: "Household", value: householdName },
     { label: "Readiness Score", value: safeMap.overall_score ?? "—" },
@@ -1174,6 +1214,19 @@ export function buildHouseholdReviewReport({
           explanation: flag.explanation,
         })),
         empty_message: "No cross-asset dependency flags are currently standing out.",
+      },
+      {
+        id: "property_operating_graph",
+        title: "Property Operating Graph",
+        summary: "Property, mortgage, homeowners, document, and portal continuity linkage across the visible household stack.",
+        kind: "table",
+        columns: [
+          { key: "title", label: "Signal" },
+          { key: "value", label: "Value" },
+          { key: "summary", label: "Summary" },
+        ],
+        rows: operatingGraphSummary.reportRows,
+        empty_message: "No property operating graph signals are currently available.",
       },
       {
         id: "strengths",

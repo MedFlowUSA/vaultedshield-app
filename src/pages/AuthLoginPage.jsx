@@ -1,10 +1,11 @@
 import { useState } from "react";
 import AuthPortalLayout, { AuthPrimaryShell, AuthSupportTiles } from "../components/auth/AuthPortalLayout";
 import { authActionStyle, authInputStyle } from "../components/auth/authPortalStyles";
+import { consumeAccountDeletionFlash } from "../lib/auth/requestAccountDeletion";
 
 export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "/insurance" }) {
   const [entering, setEntering] = useState(false);
-  const [refreshNote, setRefreshNote] = useState("");
+  const [refreshNote, setRefreshNote] = useState(() => consumeAccountDeletionFlash());
   const [refreshError, setRefreshError] = useState("");
   const [form, setForm] = useState({ email: "", password: "" });
 

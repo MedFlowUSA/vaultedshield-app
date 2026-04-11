@@ -12,8 +12,12 @@ const INTENT_KEYWORDS = [
     keywords: ["charge", "charges", "coi", "cost of insurance", "fee", "fees", "drag", "deduction"],
   },
   {
+    intent: "risk_summary",
+    keywords: ["what are the risks", "risks", "risk flags", "what risk", "anything risky", "red flags", "concerns"],
+  },
+  {
     intent: "loan_risk",
-    keywords: ["loan", "lapse", "under pressure", "pressure", "collapse", "risk"],
+    keywords: ["loan", "loans", "lapse", "loan pressure", "lapse pressure", "under pressure", "collapse"],
   },
   {
     intent: "missing_data",
@@ -29,7 +33,7 @@ const INTENT_KEYWORDS = [
   },
   {
     intent: "performance_summary",
-    keywords: ["performing", "performing well", "doing well", "stable", "growing", "how is this policy doing", "policy condition"],
+    keywords: ["good", "healthy", "performing", "performing well", "doing well", "stable", "growing", "is it growing", "how is this policy doing", "policy condition"],
   },
 ];
 
@@ -48,4 +52,3 @@ export function classifyPolicyQuestion(question = "") {
 
   return "generic_summary";
 }
-

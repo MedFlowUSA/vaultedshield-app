@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
-import PolicyAiAssistantCard from "../components/policy/PolicyAiAssistantCard";
+import PolicyAIChatBox from "../components/policy/PolicyAIChatBox";
+import PolicySignalsSummaryCard from "../components/policy/PolicySignalsSummaryCard";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -16,6 +17,7 @@ import { buildPolicyInsightSummary } from "../lib/ai/policyInsightEngine";
 import { normalizeLifePolicy } from "../lib/insurance/normalizeLifePolicy";
 import { buildIulV2Analytics } from "../lib/insurance/iulV2Analytics";
 import { buildPolicyOptimizationEngine } from "../lib/insurance/policyOptimizationEngine";
+import { buildPolicySignals as buildPolicySignalsSummary } from "../lib/policySignals/buildPolicySignals";
 import {
   analyzePolicyBasics,
   buildPolicyAdequacyReview,
@@ -112,6 +114,37 @@ function getIulStatusTone(value) {
   if (["behind", "underfunded", "high", "limited", "concentrated"].includes(value)) return "alert";
   if (["moderate", "mixed", "rising", "aggressive"].includes(value)) return "warning";
   return "info";
+}
+
+function getRevealPanelTone(status) {
+  if (status === "green") {
+    return {
+      background: "linear-gradient(135deg, rgba(220,252,231,1) 0%, rgba(240,253,244,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#86efac",
+      accent: "#166534",
+      text: "#14532d",
+      chipBackground: "#166534",
+      chipText: "#f0fdf4",
+    };
+  }
+  if (status === "red") {
+    return {
+      background: "linear-gradient(135deg, rgba(254,242,242,1) 0%, rgba(255,245,245,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#fca5a5",
+      accent: "#991b1b",
+      text: "#7f1d1d",
+      chipBackground: "#991b1b",
+      chipText: "#fef2f2",
+    };
+  }
+  return {
+    background: "linear-gradient(135deg, rgba(254,249,195,1) 0%, rgba(255,251,235,1) 48%, rgba(255,255,255,1) 100%)",
+    border: "#fcd34d",
+    accent: "#92400e",
+    text: "#78350f",
+    chipBackground: "#92400e",
+    chipText: "#fffbeb",
+  };
 }
 
 function getOptimizationTone(value) {
@@ -614,8 +647,8 @@ function renderReportSection(section, isTablet = false) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
-  if (!report) return null;
   const { isTablet } = useResponsiveLayout();
+  if (!report) return null;
 
   return (
     <SectionCard title={title} subtitle={subtitle} accent="#bfdbfe">
@@ -650,17 +683,19 @@ function ReportView({ title, subtitle, report, onPrint }) {
   );
 }
 
+const EMPTY_POLICY_DETAIL_BUNDLE = {
+  policy: null,
+  documents: [],
+  snapshots: [],
+  analytics: [],
+  statements: [],
+};
+
 export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "default" }) {
   const { isTablet } = useResponsiveLayout();
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
-  const [bundle, setBundle] = useState({
-    policy: null,
-    documents: [],
-    snapshots: [],
-    analytics: [],
-    statements: [],
-  });
+  const [bundle, setBundle] = useState(EMPTY_POLICY_DETAIL_BUNDLE);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [activeFollowupSection, setActiveFollowupSection] = useState("");
@@ -721,22 +756,16 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   }
 
   useEffect(() => {
-    setBundle({
-      policy: null,
-      documents: [],
-      snapshots: [],
-      analytics: [],
-      statements: [],
-    });
-    setLoadError("");
-
-    if (!policyId) return;
-
     let active = true;
 
     async function loadPolicyDetail() {
       setLoading(true);
       setLoadError("");
+      setBundle(EMPTY_POLICY_DETAIL_BUNDLE);
+      if (!policyId) {
+        setLoading(false);
+        return;
+      }
       const policyScope = {
         userId: debug.authUserId,
         householdId: debug.householdId,
@@ -792,11 +821,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     return () => {
       active = false;
     };
-  }, [debug.authUserId, debug.householdId, policyId]);
-
-  useEffect(() => {
-    setLatestPolicyAiEntry(null);
-  }, [policyId]);
+  }, [debug.authUserId, debug.householdId, debug.ownershipMode, debug.sharedFallbackActive, policyId]);
 
   const comparisonRow = useMemo(
     () => insuranceRows.find((row) => row.policy_id === policyId) || null,
@@ -808,9 +833,10 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   );
   const latestAnalytics = bundle.analytics[0] || null;
   const readerResults = useMemo(() => rehydrateVaultedPolicyBundle(bundle), [bundle]);
-  const normalizedPolicy = latestAnalytics?.normalized_policy || {};
-  const normalizedAnalytics = latestAnalytics?.normalized_analytics || {};
-  const chargeSummary = latestAnalytics?.normalized_analytics?.charge_summary || {};
+  const normalizedPolicy = useMemo(() => latestAnalytics?.normalized_policy || {}, [latestAnalytics]);
+  const normalizedAnalytics = useMemo(() => latestAnalytics?.normalized_analytics || {}, [latestAnalytics]);
+  const chargeSummary = useMemo(() => latestAnalytics?.normalized_analytics?.charge_summary || {}, [latestAnalytics]);
+  const currentPolicyAiEntry = latestPolicyAiEntry?.policyId === policyId ? latestPolicyAiEntry : null;
   const comparisonSummary =
     comparisonRow?.raw_comparison_summary ||
     latestAnalytics?.normalized_analytics?.comparison_summary ||
@@ -1000,6 +1026,8 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     "Policy Detail";
   const snapshotCarrier = comparisonRow?.carrier || bundle.policy?.carrier_name || "Carrier unavailable";
   const snapshotDescription = `${snapshotCarrier} | In-force policy intelligence with live statement interpretation, charge visibility, and evidence support.`;
+  const iulDecisionBanner = iulReader?.verdict?.decisionBanner || null;
+  const iulRevealTone = getRevealPanelTone(iulDecisionBanner?.status);
 
   const snapshotMetrics = [
     { label: "Cash Value", value: formatDisplayValue(comparisonRow?.cash_value) },
@@ -1049,48 +1077,6 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
       policyInterpretation.growth_summary,
     ]
   );
-  const policyAiContext = useMemo(
-    () => ({
-      lifePolicy,
-      normalizedPolicy,
-      normalizedAnalytics,
-      statementRows: statementTimeline,
-      comparisonSummary,
-      policyInterpretation,
-      policyAiSummary,
-      iulV2,
-      optimizationAnalysis,
-      comparisonRow,
-      ranking,
-      trendSummary,
-      generalLifeScorecard,
-      reviewReport,
-      chargeSummary,
-      missingFields,
-      basicPolicyAnalysis,
-      adequacyReview,
-    }),
-    [
-      adequacyReview,
-      basicPolicyAnalysis,
-      chargeSummary,
-      comparisonRow,
-      comparisonSummary,
-      generalLifeScorecard,
-      iulV2,
-      lifePolicy,
-      missingFields,
-      normalizedAnalytics,
-      normalizedPolicy,
-      optimizationAnalysis,
-      policyAiSummary,
-      policyInterpretation,
-      ranking,
-      reviewReport,
-      statementTimeline,
-      trendSummary,
-    ]
-  );
   const policyAiComparisonOptions = useMemo(
     () =>
       insuranceRows
@@ -1108,6 +1094,32 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
           },
         })),
     [insuranceRows, policyId]
+  );
+  const policySignals = useMemo(
+    () =>
+      buildPolicySignalsSummary({
+        policyInterpretation,
+        trendSummary,
+        comparisonData: comparisonRow || comparisonSummary || {},
+        signalsOutput: comparisonRow?.policy_signals || null,
+        normalizedMetrics: {
+          fundingPattern: basicPolicyAnalysis?.funding_pattern || basicPolicyAnalysis?.fundingPattern,
+          allocationPercent: lifePolicy?.typeSpecific?.allocationPercent,
+          illustrationStatus: iulV2?.illustrationComparison?.status,
+          chargeDragRatio: iulV2?.chargeAnalysis?.chargeDragRatio,
+        },
+      }),
+    [
+      basicPolicyAnalysis?.fundingPattern,
+      basicPolicyAnalysis?.funding_pattern,
+      comparisonRow,
+      comparisonSummary,
+      iulV2?.chargeAnalysis?.chargeDragRatio,
+      iulV2?.illustrationComparison?.status,
+      lifePolicy?.typeSpecific?.allocationPercent,
+      policyInterpretation,
+      trendSummary,
+    ]
   );
   const quickReviewSections = [
     { label: "Health Snapshot", section: !showUnifiedIulReader ? "interpretation" : "policy_overview" },
@@ -1212,7 +1224,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
       title={isIulConsoleMode ? `IUL Review Console${snapshotTitle ? `: ${snapshotTitle}` : ""}` : snapshotTitle}
       description={
         isIulConsoleMode
-          ? "VaultedShield’s standalone in-force IUL review experience. Start with the policy verdict, move into pressure drivers, and then verify the read through illustration support, charges, funding, and chronology."
+          ? "VaultedShield's standalone in-force IUL review experience. Start with the policy verdict, move into pressure drivers, and then verify the read through illustration support, charges, funding, and chronology."
           : snapshotDescription
       }
       actions={
@@ -1356,6 +1368,70 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 gap: "14px",
               }}
             >
+              {showUnifiedIulReader && iulDecisionBanner ? (
+                <div
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: iulRevealTone.background,
+                    border: `1px solid ${iulRevealTone.border}`,
+                    display: "grid",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                    <div style={{ display: "grid", gap: "6px", maxWidth: "760px" }}>
+                      <div style={{ fontSize: "12px", color: iulRevealTone.accent, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                        Analyzed Policy Reveal
+                      </div>
+                      <div style={{ color: iulRevealTone.text, fontSize: "24px", fontWeight: 800, lineHeight: "1.3" }}>
+                        {iulDecisionBanner.label}
+                      </div>
+                      <div style={{ color: iulRevealTone.text, lineHeight: "1.7", fontWeight: 600 }}>
+                        {iulDecisionBanner.summary}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "999px",
+                        background: iulRevealTone.chipBackground,
+                        color: iulRevealTone.chipText,
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {iulReader?.verdict?.verdict || "IUL Review"}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                    {iulDecisionBanner.quickFacts.slice(0, 3).map((fact) => (
+                      <div
+                        key={fact.label}
+                        style={{
+                          padding: "12px",
+                          borderRadius: "12px",
+                          background: "rgba(255,255,255,0.84)",
+                          border: `1px solid ${iulRevealTone.border}`,
+                          display: "grid",
+                          gap: "6px",
+                        }}
+                      >
+                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {fact.label}
+                        </div>
+                        <div style={{ color: "#0f172a", fontWeight: 800 }}>{fact.value}</div>
+                        <div style={{ color: "#475569", lineHeight: "1.55", fontSize: "13px" }}>{fact.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {snapshotMetrics.map((item) => (
                 <div
                   key={item.label}
@@ -1412,6 +1488,21 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
               ))}
             </div>
           </section>
+
+          <PolicySignalsSummaryCard policySignals={policySignals} />
+
+          <PolicyAIChatBox
+            key={policyId}
+            policyInterpretation={policyInterpretation}
+            trendSummary={trendSummary}
+            comparisonData={comparisonRow}
+            signalsOutput={comparisonRow?.policy_signals || null}
+            policySignals={policySignals}
+            comparisonOptions={policyAiComparisonOptions}
+            onLatestEntryChange={(entry) =>
+              setLatestPolicyAiEntry(entry ? { ...entry, policyId } : null)
+            }
+          />
 
           <SectionCard
             title="Protection Confidence"
@@ -2355,11 +2446,6 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                   </div>
                 ) : null}
 
-                <PolicyAiAssistantCard
-                  policyBundle={policyAiContext}
-                  comparisonOptions={policyAiComparisonOptions}
-                  onLatestEntryChange={setLatestPolicyAiEntry}
-                />
               </div>
             </SectionCard>
 
@@ -2619,13 +2705,13 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                     <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Policy Assistant</div>
                     <pre style={{ margin: 0, fontSize: "12px", color: "#475569", overflowX: "auto" }}>
                         {JSON.stringify(
-                          latestPolicyAiEntry
+                          currentPolicyAiEntry
                             ? {
-                                intent: latestPolicyAiEntry.intent || null,
-                                question: latestPolicyAiEntry.question || null,
-                                evidence: latestPolicyAiEntry.response?.evidence || [],
-                                missing_data: latestPolicyAiEntry.response?.missingData || [],
-                                disclaimers: latestPolicyAiEntry.response?.disclaimers || [],
+                                intent: currentPolicyAiEntry.intent || null,
+                                question: currentPolicyAiEntry.question || null,
+                                evidence: currentPolicyAiEntry.response?.evidence || [],
+                                missing_data: currentPolicyAiEntry.response?.missingData || [],
+                                disclaimers: currentPolicyAiEntry.response?.disclaimers || [],
                                 iul_v2: iulV2,
                               }
                             : { note: "No policy AI assistant question asked in this session." },

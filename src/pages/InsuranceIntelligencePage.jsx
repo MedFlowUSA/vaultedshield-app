@@ -5,10 +5,16 @@ import {
   buildPolicyListInterpretation,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import PortfolioAIChatBox from "../components/policy/PortfolioAIChatBox";
+import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCard";
+import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
 import { useEffect } from "react";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
+import { buildPolicySignals } from "../lib/policySignals/buildPolicySignals";
+import { buildPortfolioActionFeed } from "../lib/policySignals/buildPortfolioActionFeed";
+import { buildPortfolioSignals } from "../lib/policySignals/buildPortfolioSignals";
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
@@ -294,11 +300,24 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     return [...rows]
       .map((row) => {
         const basicAnalysis = analyzePolicyBasics({ comparisonSummary: row });
+        const interpretation = buildPolicyListInterpretation(row);
+        const policySignals = buildPolicySignals({
+          policyInterpretation: interpretation,
+          comparisonData: row,
+          signalsOutput: row.policy_signals || null,
+          normalizedMetrics: {
+            fundingPattern: basicAnalysis?.fundingPattern || basicAnalysis?.funding_pattern,
+            illustrationStatus: row.illustration_status || row.illustration_comparison_status,
+            allocationPercent: row.allocation_percent,
+          },
+        });
+
         return {
           ...row,
           ranking: buildVaultedPolicyRank(row),
-          interpretation: buildPolicyListInterpretation(row),
+          interpretation,
           basicAnalysis,
+          policySignals,
           gapAnalysis: detectInsuranceGaps(
             {
               comparisonSummary: row,
@@ -334,7 +353,26 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   }, [debug.authUserId, debug.householdId]);
 
   const portfolioBrief = useMemo(() => buildInsurancePortfolioBrief(rankedPolicies), [rankedPolicies]);
+  const portfolioSignals = useMemo(
+    () =>
+      buildPortfolioSignals({
+        policies: rankedPolicies,
+      }),
+    [rankedPolicies]
+  );
+  const portfolioActionFeed = useMemo(
+    () =>
+      buildPortfolioActionFeed({
+        policies: rankedPolicies,
+        portfolioSignals,
+      }),
+    [portfolioSignals, rankedPolicies]
+  );
   const portfolioReport = useMemo(() => buildInsurancePortfolioReport(rankedPolicies), [rankedPolicies]);
+  const topPolicyReportSection = portfolioReport.sections.find((section) => section.id === "top_policy_verdict") || null;
+  const carrierSupportReportSection = portfolioReport.sections.find((section) => section.id === "carrier_support") || null;
+  const advisorHandoffReportSection = portfolioReport.sections.find((section) => section.id === "advisor_handoff") || null;
+  const portfolioBottomLineSection = portfolioReport.sections.find((section) => section.id === "portfolio_bottom_line") || null;
 
   const totalCoverage = rankedPolicies
     .map((row) => parseDisplayNumber(row.death_benefit))
@@ -629,7 +667,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       eyebrow: "Advisor Brief",
       headline: portfolioBrief.summary,
       narrative:
-        topPriority?.reviewReason ||
+        topPriority?.review_reason ||
         "The portfolio is strongest where statement freshness, charge visibility, and policy identity are complete, and weakest where evidence is still partial.",
       nextAction: topPriority ? getPolicyEntryLabel(topPriority) : "Upload Another Policy",
       route: topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload",
@@ -989,7 +1027,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               {portfolioBrief.priority_policies?.[0]?.product || `${rankedPolicies.length} visible policies`}
             </div>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
-              {portfolioBrief.priority_policies?.[0]?.reviewReason || portfolioBrief.summary}
+              {portfolioBrief.priority_policies?.[0]?.review_reason || portfolioBrief.summary}
             </div>
           </div>
 
@@ -1049,8 +1087,74 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         </div>
       </section>
 
+      <PortfolioSignalsSummaryCard portfolioSignals={portfolioSignals} policies={rankedPolicies} />
+
+      <PortfolioActionFeedCard actions={portfolioActionFeed} onNavigate={onNavigate} />
+
+      <PortfolioAIChatBox
+        key={rankedPolicies.map((policy) => policy.policy_id || policy.id || policy.product || "").join("|")}
+        policies={rankedPolicies}
+        portfolioSignals={portfolioSignals}
+      />
+
       {showPortfolioReport ? (
         <PortfolioReportView report={portfolioReport} onPrint={handlePrintPortfolioReport} isCompact={isTablet} />
+      ) : null}
+
+      {topPolicyReportSection ? (
+        <section
+          style={{
+            display: "grid",
+            gap: "18px",
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
+            background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(255,255,255,1) 100%)",
+            border: "1px solid rgba(148, 163, 184, 0.18)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px", maxWidth: "920px" }}>
+            <div style={{ fontSize: "12px", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+              Verdict-First Handoff
+            </div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>
+              {topPolicyReportSection.title}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>{topPolicyReportSection.summary}</div>
+          </div>
+
+          {topPolicyReportSection.items?.length > 0 ? renderReportFactsGrid(topPolicyReportSection.items, 4) : null}
+
+          <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: "14px" }}>
+            {[carrierSupportReportSection, advisorHandoffReportSection].filter(Boolean).map((section) => (
+              <div
+                key={section.id}
+                style={{
+                  padding: "18px",
+                  borderRadius: "18px",
+                  background: "#ffffff",
+                  border: "1px solid rgba(148, 163, 184, 0.18)",
+                  display: "grid",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  {section.title}
+                </div>
+                <div style={{ color: "#0f172a", lineHeight: "1.65", fontWeight: 700 }}>{section.summary}</div>
+                {section.items?.length > 0 ? renderReportFactsGrid(section.items, 2) : null}
+                {section.bullets?.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
+                    {section.bullets.map((item) => (
+                      <li key={item} style={{ lineHeight: "1.7" }}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {iulShowcasePolicy ? (
@@ -1930,7 +2034,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         >
           <div style={{ fontWeight: 700, color: "#0f172a" }}>Portfolio Bottom Line</div>
           <div style={{ color: "#475569", lineHeight: "1.7" }}>
-            {portfolioReport.sections.find((section) => section.id === "portfolio_bottom_line")?.summary || portfolioBrief.summary}
+            {portfolioBottomLineSection?.summary || portfolioBrief.summary}
           </div>
         </div>
       </section>

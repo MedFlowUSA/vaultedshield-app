@@ -5,6 +5,22 @@ import {
   buildPolicyComparisonAnalysis,
 } from "../src/lib/domain/intelligenceEngine.js";
 import { buildPolicyAdequacyReview } from "../src/lib/domain/insurance/insuranceIntelligence.js";
+import { buildPolicySignals } from "../src/lib/domain/insurance/policySignalsEngine.js";
+import { buildPolicySignals as buildPolicySignalSummary } from "../src/lib/policySignals/buildPolicySignals.js";
+import { buildPortfolioActionFeed } from "../src/lib/policySignals/buildPortfolioActionFeed.js";
+import { buildPortfolioSignals } from "../src/lib/policySignals/buildPortfolioSignals.js";
+import { buildPropertySignals } from "../src/lib/propertySignals/buildPropertySignals.js";
+import { buildPropertyActionFeed } from "../src/lib/propertySignals/buildPropertyActionFeed.js";
+import { buildRetirementSignals } from "../src/lib/retirementSignals/buildRetirementSignals.js";
+import { buildRetirementActionFeed } from "../src/lib/retirementSignals/buildRetirementActionFeed.js";
+import {
+  buildPolicyAiAssistantResponse,
+  classifyPolicyAiAssistantIntent,
+} from "../src/lib/policyAi/policyAiAssistantModule.js";
+import { runPolicyAiAssistant } from "../src/utils/runPolicyAiAssistant.js";
+import { runPortfolioAiAssistant } from "../src/utils/runPortfolioAiAssistant.js";
+import { runPropertyAiAssistant } from "../src/utils/runPropertyAiAssistant.js";
+import { runRetirementAiAssistant } from "../src/utils/runRetirementAiAssistant.js";
 import {
   getStructuredData,
   getStructuredStrategyRows,
@@ -35,6 +51,13 @@ import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconst
 import { buildIulReaderModel } from "../src/features/iul-reader/readerModel.js";
 import { buildIulV2Analytics } from "../src/lib/insurance/iulV2Analytics.js";
 import { resolveResponsiveLayout } from "../src/lib/ui/responsiveLayout.js";
+import {
+  clearVaultedShieldSessionArtifacts,
+  consumeAccountDeletionFlash,
+  normalizeAccountDeletionPayload,
+  requiresDeletionReauth,
+  setAccountDeletionFlash,
+} from "../src/lib/auth/requestAccountDeletion.js";
 
 function field(value, confidence = "high", displayValue = null) {
   return {
@@ -55,6 +78,36 @@ function runTest(name, fn) {
   }
 }
 
+class MemoryStorage {
+  constructor() {
+    this.values = new Map();
+  }
+
+  get length() {
+    return this.values.size;
+  }
+
+  clear() {
+    this.values.clear();
+  }
+
+  getItem(key) {
+    return this.values.has(key) ? this.values.get(key) : null;
+  }
+
+  key(index) {
+    return [...this.values.keys()][index] || null;
+  }
+
+  removeItem(key) {
+    this.values.delete(key);
+  }
+
+  setItem(key, value) {
+    this.values.set(String(key), String(value));
+  }
+}
+
 runTest("parseIllustrationDocument rejects implausible future issue dates", () => {
   const result = parseIllustrationDocument({
     pages: [
@@ -71,6 +124,1353 @@ runTest("parseIllustrationDocument rejects implausible future issue dates", () =
   assert.equal(result.fields.issue_date.missing, true);
   assert.equal(result.fields.issue_date.value, null);
   assert.equal(result.fields.policy_number.value, "123456789");
+});
+
+runTest("buildPolicySignals promotes visible loan and charge pressure into an at-risk signal", () => {
+  const signals = buildPolicySignals({
+    comparisonSummary: {
+      cash_value: "$100,000",
+      loan_balance: "$42,000",
+      total_coi: "$9,500",
+      coi_ratio: "9.5%",
+      charge_drag_ratio: "13%",
+      charge_visibility_status: "moderate",
+      coi_confidence: "strong",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+  });
+
+  assert.equal(signals.policy_signal, "at_risk");
+  assert.equal(signals.risk_flags.some((item) => item.includes("Loan balance")), true);
+  assert.equal(signals.signal_reasons.length > 0, true);
+});
+
+runTest("buildPolicySignals keeps stable supported rows healthy", () => {
+  const signals = buildPolicySignals({
+    comparisonSummary: {
+      cash_value: "$150,000",
+      surrender_value: "$148,000",
+      loan_balance: "$0",
+      premium: "$8,000",
+      total_coi: "$1,500",
+      total_visible_policy_charges: "$2,100",
+      coi_ratio: "1%",
+      charge_drag_ratio: "2%",
+      charge_visibility_status: "strong",
+      coi_confidence: "strong",
+      strategy_visibility: "strong",
+      data_completeness_status: "strong",
+      policy_health_status: "strong",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+      continuity_score: 92,
+    },
+  });
+
+  assert.equal(signals.policy_signal, "healthy");
+  assert.equal(signals.confidence, "high");
+});
+
+runTest("buildPolicySignalSummary returns a healthy product signal", () => {
+  const signal = buildPolicySignalSummary({
+    policyInterpretation: {
+      performance_assessment: { status: "performing_well" },
+      growth_summary: "Cash value support appears stable.",
+    },
+    trendSummary: {
+      periods_count: 2,
+      summary: "Cash value increased modestly across the visible statement period.",
+    },
+    comparisonData: {
+      cash_value: "$150,000",
+      loan_balance: "$0",
+      charge_drag_ratio: "2%",
+      charge_visibility_status: "strong",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+  });
+
+  assert.equal(signal.signalLevel, "healthy");
+  assert.equal(signal.flags.loanRisk, false);
+  assert.equal(signal.confidence >= 0.7, true);
+});
+
+runTest("buildPolicySignalSummary returns a monitor product signal", () => {
+  const signal = buildPolicySignalSummary({
+    policyInterpretation: {
+      performance_assessment: { status: "mixed_needs_review" },
+    },
+    trendSummary: {
+      periods_count: 1,
+      summary: "The current read is usable but mixed.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      loan_balance: "$5,000",
+      charge_drag_ratio: "7%",
+      charge_visibility_status: "moderate",
+      latest_statement_date: "2025-12-31",
+      missing_fields: ["index_strategy"],
+    },
+  });
+
+  assert.equal(signal.signalLevel, "monitor");
+  assert.equal(signal.flags.chargeDrag, true);
+  assert.equal(signal.reasons.length > 0, true);
+});
+
+runTest("buildPolicySignalSummary returns an at-risk product signal", () => {
+  const signal = buildPolicySignalSummary({
+    trendSummary: {
+      periods_count: 2,
+      summary: "Cash value is trailing illustration.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      loan_balance: "$42,000",
+      charge_drag_ratio: "14%",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+  });
+
+  assert.equal(signal.signalLevel, "at_risk");
+  assert.equal(signal.flags.loanRisk, true);
+  assert.equal(signal.flags.chargeDrag, true);
+});
+
+runTest("buildPolicySignalSummary downgrades incomplete policy evidence", () => {
+  const signal = buildPolicySignalSummary({
+    comparisonData: {
+      missing_fields: ["cash_value", "loan_balance", "latest_statement_date", "total_coi", "planned_premium", "index_strategy"],
+    },
+  });
+
+  assert.equal(signal.signalLevel, "at_risk");
+  assert.equal(signal.flags.incompleteData, true);
+  assert.equal(signal.reasons.some((reason) => reason.includes("Critical policy evidence")), true);
+});
+
+runTest("buildPortfolioSignals returns a healthy portfolio signal", () => {
+  const policies = [
+    {
+      policy_id: "policy-1",
+      product: "Stable Policy A",
+      carrier: "Carrier A",
+      continuity_score: 92,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.88,
+      },
+    },
+    {
+      policy_id: "policy-2",
+      product: "Stable Policy B",
+      carrier: "Carrier B",
+      continuity_score: 89,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.84,
+      },
+    },
+  ];
+  const signal = buildPortfolioSignals({ policies });
+
+  assert.equal(signal.portfolioSignalLevel, "healthy");
+  assert.equal(signal.totals.healthyCount, 2);
+  assert.equal(signal.priorityPolicyIds.length > 0, true);
+});
+
+runTest("buildPortfolioSignals returns a mixed monitor portfolio signal", () => {
+  const policies = [
+    {
+      policy_id: "policy-1",
+      product: "Watch Policy",
+      carrier: "Carrier A",
+      continuity_score: 68,
+      missing_fields: ["index_strategy"],
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: true,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.7,
+      },
+    },
+    {
+      policy_id: "policy-2",
+      product: "Stable Policy",
+      carrier: "Carrier B",
+      continuity_score: 86,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.82,
+      },
+    },
+  ];
+  const signal = buildPortfolioSignals({ policies });
+
+  assert.equal(signal.portfolioSignalLevel, "monitor");
+  assert.equal(signal.totals.monitorCount, 1);
+  assert.equal(signal.portfolioFlags.chargeDragRisk, true);
+});
+
+runTest("buildPortfolioSignals returns an at-risk portfolio signal and selects priority policy", () => {
+  const policies = [
+    {
+      policy_id: "policy-risk-1",
+      product: "Risk Policy One",
+      carrier: "Carrier A",
+      continuity_score: 34,
+      missing_fields: ["cash_value", "loan_balance", "latest_statement_date"],
+      policySignals: {
+        signalLevel: "at_risk",
+        flags: {
+          fundingPressure: true,
+          chargeDrag: true,
+          loanRisk: true,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.42,
+      },
+    },
+    {
+      policy_id: "policy-risk-2",
+      product: "Risk Policy Two",
+      carrier: "Carrier A",
+      continuity_score: 45,
+      missing_fields: ["index_strategy", "planned_premium"],
+      policySignals: {
+        signalLevel: "at_risk",
+        flags: {
+          fundingPressure: true,
+          chargeDrag: false,
+          loanRisk: true,
+          incompleteData: false,
+          illustrationVarianceRisk: true,
+          concentrationRisk: true,
+        },
+        confidence: 0.5,
+      },
+    },
+    {
+      policy_id: "policy-healthy",
+      product: "Healthy Policy",
+      carrier: "Carrier B",
+      continuity_score: 90,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.9,
+      },
+    },
+  ];
+  const signal = buildPortfolioSignals({ policies });
+
+  assert.equal(signal.portfolioSignalLevel, "at_risk");
+  assert.equal(signal.priorityPolicyIds[0], "policy-risk-1");
+  assert.equal(signal.totals.atRiskCount, 2);
+});
+
+runTest("buildPortfolioSignals identifies strongest and weakest policies deterministically", () => {
+  const policies = [
+    {
+      policy_id: "policy-strongest",
+      product: "Strongest Policy",
+      continuity_score: 94,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.92,
+      },
+    },
+    {
+      policy_id: "policy-middle",
+      product: "Middle Policy",
+      continuity_score: 71,
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: true,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.66,
+      },
+    },
+    {
+      policy_id: "policy-weakest",
+      product: "Weakest Policy",
+      continuity_score: 38,
+      policySignals: {
+        signalLevel: "at_risk",
+        flags: {
+          fundingPressure: true,
+          chargeDrag: true,
+          loanRisk: true,
+          incompleteData: true,
+          illustrationVarianceRisk: true,
+          concentrationRisk: false,
+        },
+        confidence: 0.4,
+      },
+    },
+  ];
+  const signal = buildPortfolioSignals({ policies });
+
+  assert.equal(signal.strongestPolicyIds[0], "policy-strongest");
+  assert.equal(signal.weakestPolicyIds[0], "policy-weakest");
+});
+
+runTest("buildPortfolioSignals downgrades when incomplete data spreads across portfolio", () => {
+  const policies = [
+    {
+      policy_id: "policy-a",
+      product: "Policy A",
+      continuity_score: 55,
+      missing_fields: ["cash_value", "loan_balance", "latest_statement_date", "total_coi"],
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.48,
+      },
+    },
+    {
+      policy_id: "policy-b",
+      product: "Policy B",
+      continuity_score: 57,
+      missing_fields: ["planned_premium", "index_strategy", "cash_value", "latest_statement_date"],
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.46,
+      },
+    },
+    {
+      policy_id: "policy-c",
+      product: "Policy C",
+      continuity_score: 88,
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.84,
+      },
+    },
+  ];
+  const signal = buildPortfolioSignals({ policies });
+
+  assert.equal(signal.portfolioFlags.incompleteDataSpread, true);
+  assert.equal(signal.portfolioSignalLevel, "monitor");
+});
+
+runTest("buildPortfolioActionFeed creates ordered review actions from portfolio pressure", () => {
+  const policies = [
+    {
+      policy_id: "priority-policy",
+      product: "Priority Policy",
+      carrier: "Carrier A",
+      missing_fields: ["cash_value", "loan_balance", "latest_statement_date"],
+      review_reason: "Visible loan and charge pressure are concentrated here.",
+      interpretation: {
+        bottom_line_summary: "This policy is one of the main portfolio pressure points.",
+      },
+      policySignals: {
+        signalLevel: "at_risk",
+        reasons: ["Visible loan and charge pressure are concentrated here."],
+        flags: {
+          fundingPressure: true,
+          chargeDrag: true,
+          loanRisk: true,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.42,
+      },
+    },
+    {
+      policy_id: "data-policy",
+      product: "Data Gap Policy",
+      carrier: "Carrier A",
+      missing_fields: ["cash_value", "loan_balance", "latest_statement_date", "planned_premium"],
+      interpretation: {
+        bottom_line_summary: "This file needs more evidence.",
+      },
+      policySignals: {
+        signalLevel: "monitor",
+        reasons: ["Critical policy evidence is still incomplete."],
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.46,
+      },
+    },
+    {
+      policy_id: "strong-policy",
+      product: "Strong Policy",
+      carrier: "Carrier B",
+      interpretation: {
+        bottom_line_summary: "This policy currently looks stable.",
+      },
+      policySignals: {
+        signalLevel: "healthy",
+        reasons: ["Most visible policy support looks stable."],
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.9,
+      },
+    },
+  ];
+  const portfolioSignals = buildPortfolioSignals({ policies });
+  const feed = buildPortfolioActionFeed({ policies, portfolioSignals });
+
+  assert.equal(feed.length > 0, true);
+  assert.equal(feed[0].policyId, "priority-policy");
+  assert.equal(feed.some((item) => item.category === "data_completion"), true);
+  assert.equal(feed.some((item) => item.category === "comparison"), true);
+});
+
+runTest("buildPropertySignals returns a healthy property signal", () => {
+  const signal = buildPropertySignals({
+    property: {
+      city: "Scottsdale",
+      state: "AZ",
+      postal_code: "85255",
+      square_feet: 3100,
+      beds: 4,
+      baths: 3,
+      year_built: 2019,
+      last_purchase_price: 720000,
+      last_purchase_date: "2023-05-10",
+    },
+    latestValuation: {
+      id: "valuation-1",
+      confidence_label: "strong",
+      confidence_score: 0.86,
+      metadata: {
+        subject_completeness: 0.92,
+        official_market_support: "aligned",
+        comp_fit_score: 0.84,
+        strong_comp_count: 3,
+        valuation_range_ratio: 0.11,
+        review_flags: [],
+      },
+    },
+    valuationChangeSummary: {
+      change_status: "stable_change",
+      summary: "The latest valuation is broadly consistent with the prior run.",
+    },
+    propertyEquityPosition: {
+      financing_status: "visible",
+      protection_status: "visible",
+      estimated_ltv: 0.54,
+      review_flags: [],
+    },
+    propertyStackAnalytics: {
+      id: "stack-1",
+      linkage_status: "complete_property_stack",
+      continuity_status: "strong",
+    },
+    propertyValuationHistory: [{ id: "valuation-1" }, { id: "valuation-0" }],
+    linkedMortgages: [{ id: "mortgage-1" }],
+    linkedHomeownersPolicies: [{ id: "homeowners-1" }],
+  });
+
+  assert.equal(signal.signalLevel, "healthy");
+  assert.equal(signal.flags.weakValuation, false);
+  assert.equal(signal.confidence >= 0.75, true);
+});
+
+runTest("buildPropertySignals returns a monitor property signal when support is mixed", () => {
+  const signal = buildPropertySignals({
+    property: {
+      city: "Phoenix",
+      state: "AZ",
+      postal_code: "",
+      square_feet: "",
+      beds: 4,
+      baths: "",
+      year_built: 1998,
+    },
+    latestValuation: {
+      id: "valuation-2",
+      confidence_label: "moderate",
+      confidence_score: 0.66,
+      metadata: {
+        subject_completeness: 0.61,
+        official_market_support: "mixed",
+        comp_fit_score: 0.69,
+        strong_comp_count: 1,
+        valuation_range_ratio: 0.17,
+        review_flags: ["limited_comp_support"],
+      },
+    },
+    valuationChangeSummary: {
+      change_status: "insufficient_history",
+      summary: "Only one valuation is available.",
+    },
+    propertyEquityPosition: {
+      financing_status: "linked_balance_missing",
+      protection_status: "visible",
+      estimated_ltv: 0.66,
+      review_flags: [],
+    },
+    propertyStackAnalytics: {
+      linkage_status: "partial_property_stack",
+      continuity_status: "moderate",
+    },
+    linkedMortgages: [{ id: "mortgage-1" }],
+    linkedHomeownersPolicies: [{ id: "homeowners-1" }],
+  });
+
+  assert.equal(signal.signalLevel, "monitor");
+  assert.equal(signal.flags.incompleteFacts, true);
+  assert.equal(signal.flags.marketSupportGap, true);
+  assert.equal(signal.reasons.length > 0, true);
+});
+
+runTest("buildPropertySignals returns an at-risk property signal when pressure stacks up", () => {
+  const signal = buildPropertySignals({
+    property: {
+      city: "",
+      state: "",
+      postal_code: "",
+      square_feet: "",
+      beds: "",
+      baths: "",
+      year_built: "",
+    },
+    latestValuation: null,
+    valuationChangeSummary: {
+      change_status: "insufficient_history",
+      summary: "No valuation history is available yet.",
+    },
+    propertyEquityPosition: {
+      financing_status: "missing",
+      protection_status: "missing",
+      estimated_ltv: 0.91,
+      review_flags: ["ltv_review_elevated"],
+    },
+    propertyStackAnalytics: {
+      linkage_status: "property_only",
+      continuity_status: "weak",
+    },
+    linkedMortgages: [],
+    linkedHomeownersPolicies: [],
+  });
+
+  assert.equal(signal.signalLevel, "at_risk");
+  assert.equal(signal.flags.valuationMissing, true);
+  assert.equal(signal.flags.protectionGap, true);
+  assert.equal(signal.flags.equityPressure, true);
+});
+
+runTest("buildPropertyActionFeed prioritizes core property review moves", () => {
+  const propertySignals = buildPropertySignals({
+    property: {
+      city: "",
+      state: "",
+      postal_code: "",
+      square_feet: "",
+      beds: "",
+      baths: "",
+      year_built: "",
+    },
+    latestValuation: null,
+    propertyEquityPosition: {
+      financing_status: "missing",
+      protection_status: "missing",
+      estimated_ltv: 0.88,
+      review_flags: ["ltv_review_elevated"],
+    },
+    propertyStackAnalytics: {
+      linkage_status: "property_only",
+      continuity_status: "weak",
+    },
+    linkedMortgages: [],
+    linkedHomeownersPolicies: [],
+  });
+  const actions = buildPropertyActionFeed({
+    property: { property_name: "North Ranch Home" },
+    propertySignals,
+    valuationChangeSummary: { change_status: "insufficient_history" },
+  });
+
+  assert.equal(actions.length > 0, true);
+  assert.equal(actions[0].category, "valuation_setup");
+  assert.equal(actions.some((item) => item.category === "data_completion"), true);
+  assert.equal(actions.some((item) => item.category === "coverage_review"), true);
+});
+
+runTest("runPropertyAiAssistant references property signals for risk and review questions", () => {
+  const propertySignals = buildPropertySignals({
+    property: {
+      city: "Austin",
+      state: "TX",
+      postal_code: "",
+      square_feet: 2400,
+      beds: 4,
+      baths: "",
+      year_built: 2007,
+    },
+    latestValuation: {
+      id: "valuation-3",
+      confidence_label: "moderate",
+      confidence_score: 0.67,
+      metadata: {
+        subject_completeness: 0.68,
+        official_market_support: "mixed",
+        comp_fit_score: 0.7,
+        strong_comp_count: 1,
+        valuation_range_ratio: 0.16,
+        review_flags: ["limited_comp_support"],
+      },
+    },
+    valuationChangeSummary: {
+      change_status: "stable_change",
+      summary: "The latest valuation stayed relatively close to the prior run.",
+    },
+    propertyEquityPosition: {
+      financing_status: "linked_balance_missing",
+      protection_status: "missing",
+      estimated_ltv: 0.74,
+      review_flags: [],
+    },
+    propertyStackAnalytics: {
+      linkage_status: "partial_property_stack",
+      continuity_status: "moderate",
+    },
+    linkedMortgages: [{ id: "mortgage-1" }],
+    linkedHomeownersPolicies: [],
+  });
+  const propertyActionFeed = buildPropertyActionFeed({
+    property: { property_name: "Austin Home" },
+    propertySignals,
+    valuationChangeSummary: {
+      change_status: "stable_change",
+      summary: "The latest valuation stayed relatively close to the prior run.",
+    },
+  });
+  const response = runPropertyAiAssistant({
+    userQuestion: "What should I review first on this property?",
+    property: {
+      property_name: "Austin Home",
+      city: "Austin",
+      state: "TX",
+    },
+    latestValuation: {
+      id: "valuation-3",
+      confidence_label: "moderate",
+      confidence_score: 0.67,
+      midpoint_estimate: 640000,
+      comps_count: 2,
+      metadata: {
+        subject_completeness: 0.68,
+        official_market_support: "mixed",
+        comp_fit_score: 0.7,
+        strong_comp_count: 1,
+        valuation_range_ratio: 0.16,
+        review_flags: ["limited_comp_support"],
+      },
+    },
+    valuationChangeSummary: {
+      change_status: "stable_change",
+      summary: "The latest valuation stayed relatively close to the prior run.",
+    },
+    propertyEquityPosition: {
+      financing_status: "linked_balance_missing",
+      protection_status: "missing",
+      estimated_ltv: 0.74,
+      review_flags: [],
+    },
+    propertyStackAnalytics: {
+      linkage_status: "partial_property_stack",
+      continuity_status: "moderate",
+    },
+    linkedMortgages: [{ id: "mortgage-1" }],
+    linkedHomeownersPolicies: [],
+    propertySignals,
+    propertyActionFeed,
+  });
+
+  assert.equal(response.signal_level, propertySignals.signalLevel);
+  assert.equal(response.answer.includes("review"), true);
+  assert.equal(response.evidence.length > 0, true);
+});
+
+runTest("buildRetirementSignals returns a healthy account signal", () => {
+  const signal = buildRetirementSignals({
+    retirementRead: {
+      readinessStatus: "Better Supported",
+      confidence: 0.86,
+      metrics: {
+        currentBalanceVisible: true,
+        contributionsVisible: true,
+        completenessStatus: "strong",
+      },
+    },
+    latestSnapshot: {
+      id: "snapshot-1",
+      snapshot_date: "2026-02-01",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2026-02-01",
+        },
+        loan_distribution_metrics: {
+          loan_balance: 0,
+        },
+        beneficiary_metrics: {
+          beneficiary_present: true,
+        },
+      },
+    },
+    latestAnalytics: {
+      id: "analytics-1",
+      review_flags: [],
+      normalized_intelligence: {
+        concentration_flags: {
+          concentration_warning: false,
+        },
+        loan_flags: {
+          outstanding_loan_detected: false,
+        },
+        beneficiary_flags: {
+          beneficiary_missing: false,
+          beneficiary_status_unknown: false,
+        },
+      },
+    },
+    positions: [
+      { position_name: "Target Date Fund", allocation_percent: 35, current_value: 120000 },
+      { position_name: "Bond Fund", allocation_percent: 25, current_value: 80000 },
+    ],
+  });
+
+  assert.equal(signal.signalLevel, "healthy");
+  assert.equal(signal.flags.incompleteData, false);
+  assert.equal(signal.confidence >= 0.75, true);
+});
+
+runTest("buildRetirementSignals returns a monitor account signal", () => {
+  const signal = buildRetirementSignals({
+    retirementRead: {
+      readinessStatus: "Usable",
+      confidence: 0.61,
+      metrics: {
+        currentBalanceVisible: true,
+        contributionsVisible: false,
+        completenessStatus: "moderate",
+      },
+    },
+    latestSnapshot: {
+      id: "snapshot-2",
+      snapshot_date: "2025-01-01",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2025-01-01",
+        },
+        loan_distribution_metrics: {
+          loan_balance: 0,
+        },
+        beneficiary_metrics: {
+          beneficiary_present: true,
+        },
+      },
+    },
+    latestAnalytics: {
+      id: "analytics-2",
+      review_flags: [],
+      normalized_intelligence: {
+        concentration_flags: {
+          concentration_warning: true,
+        },
+        loan_flags: {
+          outstanding_loan_detected: false,
+        },
+        beneficiary_flags: {
+          beneficiary_missing: false,
+          beneficiary_status_unknown: false,
+        },
+      },
+    },
+    positions: [{ position_name: "Employer Stock", allocation_percent: 68, current_value: 150000 }],
+  });
+
+  assert.equal(signal.signalLevel, "monitor");
+  assert.equal(signal.flags.contributionVisibility, true);
+  assert.equal(signal.flags.concentrationRisk, true);
+});
+
+runTest("buildRetirementSignals returns an at-risk account signal", () => {
+  const signal = buildRetirementSignals({
+    retirementRead: {
+      readinessStatus: "Needs Review",
+      confidence: 0.34,
+      metrics: {
+        currentBalanceVisible: false,
+        contributionsVisible: false,
+        completenessStatus: "limited",
+      },
+    },
+    latestSnapshot: {
+      id: "snapshot-3",
+      snapshot_date: "2023-12-31",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2023-12-31",
+        },
+        loan_distribution_metrics: {
+          loan_balance: 25000,
+        },
+        beneficiary_metrics: {
+          beneficiary_present: false,
+        },
+      },
+    },
+    latestAnalytics: {
+      id: "analytics-3",
+      review_flags: ["beneficiary_missing", "outstanding_loan_detected"],
+      normalized_intelligence: {
+        concentration_flags: {
+          concentration_warning: false,
+        },
+        loan_flags: {
+          outstanding_loan_detected: true,
+        },
+        beneficiary_flags: {
+          beneficiary_missing: true,
+          beneficiary_status_unknown: false,
+        },
+      },
+    },
+    positions: [],
+  });
+
+  assert.equal(signal.signalLevel, "at_risk");
+  assert.equal(signal.flags.loanRisk, true);
+  assert.equal(signal.flags.beneficiaryRisk, true);
+  assert.equal(signal.flags.incompleteData, true);
+});
+
+runTest("buildRetirementActionFeed prioritizes incomplete retirement evidence", () => {
+  const retirementSignals = buildRetirementSignals({
+    retirementRead: {
+      readinessStatus: "Needs Review",
+      confidence: 0.38,
+      metrics: {
+        currentBalanceVisible: false,
+        contributionsVisible: false,
+        completenessStatus: "limited",
+      },
+    },
+    latestSnapshot: {
+      id: "snapshot-4",
+      snapshot_date: "2024-01-01",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2024-01-01",
+        },
+      },
+    },
+    latestAnalytics: null,
+    positions: [],
+  });
+  const actions = buildRetirementActionFeed({
+    retirementSignals,
+    retirementRead: {
+      headline: "This account still needs stronger statement support before it can be treated as reliable.",
+    },
+    positions: [],
+  });
+
+  assert.equal(actions.length > 0, true);
+  assert.equal(actions[0].category, "data_completion");
+  assert.equal(actions.some((item) => item.category === "positions_review"), true);
+});
+
+runTest("runRetirementAiAssistant references signals for review-first questions", () => {
+  const retirementSignals = buildRetirementSignals({
+    retirementRead: {
+      readinessStatus: "Needs Review",
+      confidence: 0.46,
+      headline: "This retirement read still needs stronger statement support before it can be treated as reliable.",
+      metrics: {
+        currentBalanceVisible: true,
+        contributionsVisible: false,
+        completenessStatus: "limited",
+      },
+    },
+    latestSnapshot: {
+      id: "snapshot-5",
+      snapshot_date: "2024-02-01",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2024-02-01",
+        },
+        beneficiary_metrics: {
+          beneficiary_present: false,
+        },
+      },
+    },
+    latestAnalytics: {
+      id: "analytics-5",
+      review_flags: ["beneficiary_missing"],
+      normalized_intelligence: {
+        concentration_flags: {
+          concentration_warning: false,
+        },
+        loan_flags: {
+          outstanding_loan_detected: false,
+        },
+        beneficiary_flags: {
+          beneficiary_missing: true,
+          beneficiary_status_unknown: false,
+        },
+      },
+    },
+    positions: [],
+  });
+  const retirementActionFeed = buildRetirementActionFeed({
+    retirementSignals,
+    retirementRead: {
+      headline: "This account still needs stronger statement support before it can be treated as reliable.",
+    },
+    positions: [],
+  });
+  const response = runRetirementAiAssistant({
+    userQuestion: "What should I review first?",
+    retirementSignals,
+    retirementRead: {
+      readinessStatus: "Needs Review",
+      confidence: 0.46,
+    },
+    retirementActionFeed,
+    positionSummary: {
+      count: 0,
+      topHolding: null,
+      concentrationNote: "",
+    },
+    latestSnapshot: {
+      snapshot_date: "2024-02-01",
+      normalized_retirement: {
+        statement_context: {
+          statement_date: "2024-02-01",
+        },
+      },
+    },
+    latestAnalytics: {
+      normalized_intelligence: {},
+    },
+  });
+
+  assert.equal(response.intent, "review_first");
+  assert.equal(response.answer.includes("review"), true);
+  assert.equal(response.evidence.length > 0, true);
+});
+
+runTest("policy AI assistant classifies the required question set", () => {
+  assert.deepEqual(classifyPolicyAiAssistantIntent("Is this policy good?"), {
+    intent: "performance",
+    internalIntent: "performance_summary",
+  });
+  assert.deepEqual(classifyPolicyAiAssistantIntent("What are the risks?"), {
+    intent: "risk",
+    internalIntent: "risk_summary",
+  });
+  assert.deepEqual(classifyPolicyAiAssistantIntent("How are charges affecting it?"), {
+    intent: "charges",
+    internalIntent: "charge_analysis",
+  });
+  assert.deepEqual(classifyPolicyAiAssistantIntent("Is it growing?"), {
+    intent: "performance",
+    internalIntent: "performance_summary",
+  });
+});
+
+runTest("policy AI assistant returns evidence-based non-advice responses", () => {
+  const baseInput = {
+    policyInterpretation: {
+      bottom_line_summary: "This policy is readable, but visible charge drag means it should stay on the monitor list.",
+    },
+    trendSummary: {
+      summary: "Cash value increased modestly across the visible statement period.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      total_visible_charges: "$6,500",
+      charge_visibility_status: "moderate",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+    signalsOutput: {
+      policy_signal: "monitor",
+      primary_reason: "Visible charge drag deserves monitoring.",
+      risk_flags: [],
+      monitor_flags: ["Visible charge drag deserves monitoring."],
+      signal_reasons: ["Visible charge drag deserves monitoring."],
+      confidence: "high",
+      missing_fields: [],
+    },
+  };
+  const questions = [
+    "Is this policy good?",
+    "What are the risks?",
+    "How are charges affecting it?",
+    "Is it growing?",
+  ];
+
+  for (const userQuestion of questions) {
+    const response = buildPolicyAiAssistantResponse({
+      ...baseInput,
+      userQuestion,
+    });
+
+    assert.equal(response.explanation.length > 0, true);
+    assert.equal(response.evidence.length > 0, true);
+    assert.equal(/should buy|should sell|should replace/i.test(response.explanation), false);
+  }
+
+  const riskResponse = buildPolicyAiAssistantResponse({
+    ...baseInput,
+    userQuestion: "What are the risks?",
+  });
+
+  assert.equal(riskResponse.intent, "risk");
+  assert.equal(riskResponse.disclaimers.some((item) => item.includes("not financial advice")), true);
+});
+
+runTest("runPolicyAiAssistant returns the chat-layer response contract", () => {
+  const response = runPolicyAiAssistant({
+    userQuestion: "How much are charges affecting this?",
+    policyInterpretation: {
+      charge_summary_explanation: "Visible charges are present and should be read alongside the policy's cash-value movement.",
+    },
+    trendSummary: {
+      summary: "Cash value increased modestly across the visible statement period.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      total_visible_charges: "$6,500",
+      charge_visibility_status: "moderate",
+      missing_fields: [],
+    },
+    signalsOutput: {
+      policy_signal: "monitor",
+      confidence: "high",
+      missing_fields: [],
+    },
+  });
+
+  assert.equal(response.intent, "charge_analysis");
+  assert.equal(response.answer.length > 0, true);
+  assert.equal(response.confidence, "high");
+  assert.equal(Array.isArray(response.evidence), true);
+  assert.equal(/replace policy/i.test(response.answer), false);
+});
+
+runTest("runPolicyAiAssistant references product policy signals in risk answers", () => {
+  const policySignals = buildPolicySignalSummary({
+    trendSummary: {
+      periods_count: 2,
+      summary: "Loan pressure is visible.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      loan_balance: "$40,000",
+      charge_drag_ratio: "13%",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+  });
+  const response = runPolicyAiAssistant({
+    userQuestion: "What are the risks?",
+    policyInterpretation: {
+      bottom_line_summary: "This policy needs review because visible pressure is present.",
+    },
+    trendSummary: {
+      periods_count: 2,
+      summary: "Loan pressure is visible.",
+    },
+    comparisonData: {
+      cash_value: "$100,000",
+      loan_balance: "$40,000",
+      latest_statement_date: "2025-12-31",
+      missing_fields: [],
+    },
+    policySignals,
+  });
+
+  assert.equal(response.answer.includes("Policy signal: at risk."), true);
+  assert.equal(response.intent, "risk_summary");
+  assert.equal(response.confidence, policySignals.confidence);
+});
+
+runTest("runPortfolioAiAssistant answers priority questions", () => {
+  const policies = [
+    {
+      policy_id: "priority-policy",
+      product: "Priority Policy",
+      carrier: "Carrier A",
+      policySignals: {
+        signalLevel: "at_risk",
+        flags: {
+          fundingPressure: true,
+          chargeDrag: true,
+          loanRisk: true,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.45,
+      },
+    },
+    {
+      policy_id: "stable-policy",
+      product: "Stable Policy",
+      carrier: "Carrier B",
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.88,
+      },
+    },
+  ];
+  const portfolioSignals = buildPortfolioSignals({ policies });
+  const response = runPortfolioAiAssistant({
+    userQuestion: "Which policy needs attention first?",
+    policies,
+    portfolioSignals,
+  });
+
+  assert.equal(response.intent, "priority");
+  assert.equal(response.answer.includes("Priority Policy"), true);
+});
+
+runTest("runPortfolioAiAssistant answers strongest policy questions", () => {
+  const policies = [
+    {
+      policy_id: "strong-policy",
+      product: "Strong Policy",
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.92,
+      },
+    },
+    {
+      policy_id: "watch-policy",
+      product: "Watch Policy",
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: true,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.66,
+      },
+    },
+  ];
+  const response = runPortfolioAiAssistant({
+    userQuestion: "Which policy looks strongest?",
+    policies,
+    portfolioSignals: buildPortfolioSignals({ policies }),
+  });
+
+  assert.equal(response.intent, "strongest");
+  assert.equal(response.answer.includes("Strong Policy"), true);
+});
+
+runTest("runPortfolioAiAssistant answers biggest risk questions", () => {
+  const policies = [
+    {
+      policy_id: "risk-a",
+      product: "Risk A",
+      carrier: "Carrier A",
+      policySignals: {
+        signalLevel: "at_risk",
+        flags: {
+          fundingPressure: true,
+          chargeDrag: true,
+          loanRisk: true,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.42,
+      },
+    },
+    {
+      policy_id: "risk-b",
+      product: "Risk B",
+      carrier: "Carrier A",
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: true,
+          loanRisk: false,
+          incompleteData: true,
+          illustrationVarianceRisk: true,
+          concentrationRisk: true,
+        },
+        confidence: 0.5,
+      },
+    },
+  ];
+  const response = runPortfolioAiAssistant({
+    userQuestion: "What are the biggest risks across my policies?",
+    policies,
+    portfolioSignals: buildPortfolioSignals({ policies }),
+  });
+
+  assert.equal(response.intent, "risk_summary");
+  assert.equal(response.answer.length > 0, true);
+  assert.equal(Array.isArray(response.evidence), true);
+});
+
+runTest("runPortfolioAiAssistant answers incomplete-data questions", () => {
+  const policies = [
+    {
+      policy_id: "incomplete-policy",
+      product: "Incomplete Policy",
+      policySignals: {
+        signalLevel: "monitor",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: true,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.46,
+      },
+    },
+    {
+      policy_id: "stable-policy",
+      product: "Stable Policy",
+      policySignals: {
+        signalLevel: "healthy",
+        flags: {
+          fundingPressure: false,
+          chargeDrag: false,
+          loanRisk: false,
+          incompleteData: false,
+          illustrationVarianceRisk: false,
+          concentrationRisk: false,
+        },
+        confidence: 0.86,
+      },
+    },
+  ];
+  const response = runPortfolioAiAssistant({
+    userQuestion: "Where is my data incomplete?",
+    policies,
+    portfolioSignals: buildPortfolioSignals({ policies }),
+  });
+
+  assert.equal(response.intent, "incomplete_data");
+  assert.equal(response.answer.includes("Incomplete Policy"), true);
 });
 
 runTest("parseIllustrationDocument extracts illustration ledger checkpoints when policy-year rows are visible", () => {
@@ -974,6 +2374,98 @@ runTest("buildVaultedPolicyScopeFilter isolates authenticated and guest policy q
     operator: "is",
     value: null,
   });
+});
+
+runTest("requiresDeletionReauth forces stale sessions back through password verification", () => {
+  const nowMs = new Date("2026-04-10T18:00:00.000Z").getTime();
+
+  assert.equal(
+    requiresDeletionReauth(
+      {
+        lastAuthAt: "2026-04-10T17:55:30.000Z",
+      },
+      nowMs
+    ),
+    false
+  );
+
+  assert.equal(
+    requiresDeletionReauth(
+      {
+        lastAuthAt: "2026-04-10T17:30:00.000Z",
+      },
+      nowMs
+    ),
+    true
+  );
+});
+
+runTest("normalizeAccountDeletionPayload maps completed, pending, and reauth states safely", () => {
+  assert.deepEqual(normalizeAccountDeletionPayload({ status: "completed", message: "done" }), {
+    ok: true,
+    status: "completed",
+    message: "done",
+  });
+
+  assert.deepEqual(normalizeAccountDeletionPayload({ status: "requested", message: "pending" }), {
+    ok: true,
+    status: "requested",
+    message: "pending",
+  });
+
+  assert.deepEqual(normalizeAccountDeletionPayload({ status: "reauth_required", message: "reauth" }), {
+    ok: false,
+    status: "reauth_required",
+    message: "reauth",
+  });
+});
+
+runTest("account deletion cleanup removes VaultedShield storage keys but preserves unrelated browser state", () => {
+  const originalWindow = globalThis.window;
+  const localStorage = new MemoryStorage();
+  const sessionStorage = new MemoryStorage();
+
+  try {
+    globalThis.window = {
+      localStorage,
+      sessionStorage,
+    };
+
+    localStorage.setItem("vaultedshield_access_session_v1", "session");
+    localStorage.setItem("vaultedshield-current-household-id", "household-1");
+    localStorage.setItem("another-app-key", "keep");
+    sessionStorage.setItem("vaultedshield-account-deletion-flash-v1", "flash");
+    sessionStorage.setItem("unrelated-session-key", "keep");
+
+    clearVaultedShieldSessionArtifacts();
+
+    assert.equal(localStorage.getItem("vaultedshield_access_session_v1"), null);
+    assert.equal(localStorage.getItem("vaultedshield-current-household-id"), null);
+    assert.equal(localStorage.getItem("another-app-key"), "keep");
+    assert.equal(sessionStorage.getItem("vaultedshield-account-deletion-flash-v1"), null);
+    assert.equal(sessionStorage.getItem("unrelated-session-key"), "keep");
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+runTest("account deletion flash is persisted once and then consumed", () => {
+  const originalWindow = globalThis.window;
+  const localStorage = new MemoryStorage();
+  const sessionStorage = new MemoryStorage();
+
+  try {
+    globalThis.window = {
+      localStorage,
+      sessionStorage,
+    };
+
+    setAccountDeletionFlash("Account removed");
+    assert.equal(consumeAccountDeletionFlash(), "Account removed");
+    assert.equal(consumeAccountDeletionFlash(), "");
+  } finally {
+    globalThis.window = originalWindow;
+  }
 });
 
 runTest("resolvePlatformDataScope blocks authenticated shell loads until an owned household resolves", () => {

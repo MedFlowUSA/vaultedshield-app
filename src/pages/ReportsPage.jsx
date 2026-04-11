@@ -16,8 +16,10 @@ import {
   buildPolicyListInterpretation,
   buildVaultedPolicyRank,
 } from "../lib/domain/intelligenceEngine";
+import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
+import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
 import {
@@ -41,6 +43,7 @@ import {
   buildHouseholdPriorityEngine,
   buildHouseholdScorecard,
 } from "../lib/domain/platformIntelligence/householdOperatingSystem";
+import { useDemoMode } from "../lib/demo/DemoModeContext";
 
 function buttonStyle(primary = false) {
   return {
@@ -237,7 +240,13 @@ function ReportView({ report, onPrint, label }) {
   );
 }
 
-function buildExecutiveSummaryLines({ householdMap, reviewDigest, moduleReadinessRows, rankedPolicies }) {
+function buildExecutiveSummaryLines({
+  householdMap,
+  reviewDigest,
+  moduleReadinessRows,
+  rankedPolicies,
+  operatingGraphSummary,
+}) {
   const lines = [];
   if (householdMap?.bottom_line) lines.push(householdMap.bottom_line);
   if (reviewDigest?.summary) lines.push(reviewDigest.summary);
@@ -263,12 +272,20 @@ function buildExecutiveSummaryLines({ householdMap, reviewDigest, moduleReadines
     lines.push("Insurance reporting will deepen once at least one saved policy is visible.");
   }
 
+  if ((operatingGraphSummary?.propertyCount || 0) > 0) {
+    lines.push(
+      `${operatingGraphSummary.completeCount || 0} complete property stack${operatingGraphSummary.completeCount === 1 ? "" : "s"} and ${operatingGraphSummary.partialCount || 0} partially connected stack${operatingGraphSummary.partialCount === 1 ? "" : "s"} are currently visible.`
+    );
+  }
+
   return lines.slice(0, 4);
 }
 
 export default function ReportsPage({ onNavigate }) {
+  const { reportCue } = useDemoMode();
   const { householdState, intelligenceBundle: bundle, insuranceRows: rows, debug, errors, loadingStates } = usePlatformShellData();
-  const [activeReport, setActiveReport] = useState("household");
+  const [selectedReport, setSelectedReport] = useState("household");
+  const activeReport = reportCue?.reportKey || selectedReport;
   const loadError = errors.householdData || errors.insurancePortfolio;
   const reviewScope = useMemo(
     () => ({
@@ -412,6 +429,10 @@ export default function ReportsPage({ onNavigate }) {
       ),
     [moduleReadinessRows]
   );
+  const operatingGraphSummary = useMemo(
+    () => buildPropertyOperatingGraphSummary(bundle || {}),
+    [bundle]
+  );
   const executiveSummaryLines = useMemo(
     () =>
       buildExecutiveSummaryLines({
@@ -419,8 +440,9 @@ export default function ReportsPage({ onNavigate }) {
         reviewDigest,
         moduleReadinessRows,
         rankedPolicies,
+        operatingGraphSummary,
       }),
-    [householdMap, moduleReadinessRows, rankedPolicies, reviewDigest]
+    [householdMap, moduleReadinessRows, operatingGraphSummary, rankedPolicies, reviewDigest]
   );
   const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
   const onboardingChecklist = useMemo(
@@ -1011,12 +1033,13 @@ export default function ReportsPage({ onNavigate }) {
           <button
             key={card.key}
             type="button"
+            data-demo-id={card.key === "insurance" ? "reports-insurance-card" : undefined}
             onClick={() => {
               if (card.key === "policy_detail" && rankedPolicies[0]?.policy_id) {
                 onNavigate?.(getPolicyDetailRoute(rankedPolicies[0]));
                 return;
               }
-              setActiveReport(card.key);
+              setSelectedReport(card.key);
             }}
             style={{
               padding: "22px",
@@ -1053,6 +1076,7 @@ export default function ReportsPage({ onNavigate }) {
       </section>
 
       <section
+        data-demo-id="reports-active-view"
         style={{
           display: "grid",
           gap: "18px",
@@ -1160,21 +1184,21 @@ export default function ReportsPage({ onNavigate }) {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={() => setActiveReport("executive")}
+            onClick={() => setSelectedReport("executive")}
             style={reportButtonStyle(activeReport === "executive")}
           >
             Executive Summary
           </button>
           <button
             type="button"
-            onClick={() => setActiveReport("household")}
+            onClick={() => setSelectedReport("household")}
             style={reportButtonStyle(activeReport === "household")}
           >
             Household Brief
           </button>
           <button
             type="button"
-            onClick={() => setActiveReport("insurance")}
+            onClick={() => setSelectedReport("insurance")}
             style={reportButtonStyle(activeReport === "insurance")}
           >
             Insurance Portfolio
@@ -1255,6 +1279,30 @@ export default function ReportsPage({ onNavigate }) {
                 ],
                 3
               )}
+            </div>
+
+            <div
+              style={{
+                padding: "22px 24px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Operating Graph</div>
+                <div style={{ color: "#475569", lineHeight: "1.8" }}>
+                  The household property stack now carries the same asset-liability-protection read into reporting, so connected records and missing dependencies stay visible in the export layer.
+                </div>
+              </div>
+              <OperatingGraphSummaryCards
+                cards={operatingGraphSummary.cards}
+                highlights={operatingGraphSummary.highlights.slice(0, 4)}
+                onNavigate={onNavigate}
+                theme="light"
+              />
             </div>
 
             <div

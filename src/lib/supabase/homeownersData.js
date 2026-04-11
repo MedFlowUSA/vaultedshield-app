@@ -13,6 +13,7 @@ import {
   unlinkHomeownersFromProperty,
   updatePropertyHomeownersLink,
 } from "./propertyStackLinks";
+import { listAssetLinksForAsset } from "./assetLinks";
 import { getSupabaseClient } from "./client";
 import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
 
@@ -356,7 +357,7 @@ export async function uploadHomeownersDocument({
   };
 }
 
-export async function getHomeownersPolicyBundle(homeownersPolicyId) {
+export async function getHomeownersPolicyBundle(homeownersPolicyId, scopeOverride = null) {
   const [
     homeownersPolicyResult,
     homeownersDocumentsResult,
@@ -368,12 +369,16 @@ export async function getHomeownersPolicyBundle(homeownersPolicyId) {
     listHomeownersSnapshots(homeownersPolicyId),
     listHomeownersAnalytics(homeownersPolicyId),
   ]);
+  const homeownersAssetLinksResult = homeownersPolicyResult.data?.assets?.id
+    ? await listAssetLinksForAsset(homeownersPolicyResult.data.assets.id, scopeOverride)
+    : { data: [], error: null };
 
   const error =
     homeownersPolicyResult.error ||
     homeownersDocumentsResult.error ||
     homeownersSnapshotsResult.error ||
     homeownersAnalyticsResult.error ||
+    homeownersAssetLinksResult.error ||
     null;
 
   return {
@@ -384,6 +389,7 @@ export async function getHomeownersPolicyBundle(homeownersPolicyId) {
           homeownersDocuments: homeownersDocumentsResult.data || [],
           homeownersSnapshots: homeownersSnapshotsResult.data || [],
           homeownersAnalytics: homeownersAnalyticsResult.data || [],
+          homeownersAssetLinks: homeownersAssetLinksResult.data || [],
         },
     error,
   };

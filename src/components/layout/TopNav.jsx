@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import logo from "../../assets/vaultedshield-logo.png";
 import { buildHouseholdIntelligence, buildHouseholdRiskContinuityMap } from "../../lib/domain/platformIntelligence";
+import { useDemoMode } from "../../lib/demo/DemoModeContext";
 import {
   buildDashboardCommandCenter,
   buildEmergencyAccessCommand,
@@ -45,10 +46,10 @@ function CompactSummaryCard({ label, value, accent = false }) {
       </div>
       <div
         style={{
-          fontSize: "12px",
+          fontSize: "13px",
           color: accent ? "#475569" : "#0f172a",
-                    fontWeight: 700,
-          lineHeight: "1.4",
+          fontWeight: 700,
+          lineHeight: "1.5",
           overflowWrap: "anywhere",
         }}
       >
@@ -212,6 +213,7 @@ export default function TopNav({
 }) {
   const [compactPanelOpen, setCompactPanelOpen] = useState(false);
   const { householdState, debug, intelligenceBundle, insuranceRows } = usePlatformShellData();
+  const { currentMainStepNumber, finishDemo, isDemoMode, mainStepCount, startDemo } = useDemoMode();
   const resolvedHouseholdName = householdState.household?.household_name || householdName;
   const reviewScope = useMemo(
     () => ({
@@ -409,6 +411,24 @@ export default function TopNav({
 
           <button
             type="button"
+            onClick={() => (isDemoMode ? finishDemo() : startDemo())}
+            style={{
+              border: isDemoMode ? "1px solid #bfdbfe" : "1px solid #dbeafe",
+              background: isDemoMode ? "#eff6ff" : "#f8fbff",
+              color: "#1d4ed8",
+              borderRadius: "12px",
+              padding: "12px 14px",
+              cursor: "pointer",
+              fontWeight: 700,
+              width: "100%",
+              minHeight: "44px",
+            }}
+          >
+            {isDemoMode ? `Demo Mode Active | Step ${currentMainStepNumber}/${mainStepCount}` : "Start Demo"}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setCompactPanelOpen((current) => !current)}
             style={{
               border: "1px solid #cbd5e1",
@@ -443,6 +463,9 @@ export default function TopNav({
                 </button>
                 <button type="button" onClick={() => onNavigate("/upload-center")} style={actionButtonStyle}>
                   Upload Center
+                </button>
+                <button type="button" onClick={() => onNavigate("/account")} style={actionButtonStyle}>
+                  Account
                 </button>
                 <button
                   type="button"
@@ -483,14 +506,44 @@ export default function TopNav({
           <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
           <CompactSummaryCard
             label="Household Score"
-            value={`${householdScorecard.overallScore ?? "--"} · ${householdScorecard.overallStatus}`}
+            value={`${householdScorecard.overallScore ?? "--"} - ${householdScorecard.overallStatus}`}
           />
+          {isDemoMode ? (
+            <button
+              type="button"
+              onClick={() => finishDemo()}
+              style={{
+                ...desktopQuickActionStyle,
+                border: "1px solid #bfdbfe",
+                background: "#eff6ff",
+                color: "#1d4ed8",
+              }}
+            >
+              Demo Mode Active | Step {currentMainStepNumber}/{mainStepCount}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => startDemo()}
+              style={{
+                ...desktopQuickActionStyle,
+                border: "1px solid #dbeafe",
+                background: "#f8fbff",
+                color: "#1d4ed8",
+              }}
+            >
+              Start Demo
+            </button>
+          )}
           <DesktopPriorityStrip priority={topPriority} />
           <button type="button" onClick={() => onUpgrade?.()} style={desktopQuickActionStyle}>
             Upgrade
           </button>
           <button type="button" onClick={() => onNavigate("/upload-center")} style={desktopQuickActionStyle}>
             Upload
+          </button>
+          <button type="button" onClick={() => onNavigate("/account")} style={desktopQuickActionStyle}>
+            Account
           </button>
           <button
             type="button"

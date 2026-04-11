@@ -8,6 +8,7 @@ import {
   buildScopedAccessError,
   normalizePlatformScope,
 } from "./platformScope.js";
+import { listHouseholdAssetLinks } from "./assetLinks.js";
 
 // Broad platform tables support the modular shell:
 // - households, members, contacts, generic assets, documents, alerts, tasks, reports
@@ -803,6 +804,7 @@ export async function getEmergencyModeBundle(householdId) {
         emergencyContacts: [],
         keyProfessionalContacts: [],
         assets: [],
+        assetLinks: [],
         keyDocuments: [],
         openAlerts: [],
         openTasks: [],
@@ -944,6 +946,17 @@ export async function getHouseholdIntelligenceBundle(householdId) {
         propertyStackAnalytics: [],
         propertyStackSummary: {
           propertyCount: 0,
+          assetGraphSummary: {
+            linkCount: 0,
+            mortgageLinkCount: 0,
+            homeownersLinkCount: 0,
+            propertyIdsWithMortgageAssetLinksCount: 0,
+            propertyIdsWithHomeownersAssetLinksCount: 0,
+            completePropertyAssetGraph: [],
+            partialPropertyAssetGraph: [],
+            propertiesMissingAssetGraphMortgageLink: [],
+            propertiesMissingAssetGraphHomeownersLink: [],
+          },
         },
         retirementAccounts: [],
         retirementDocuments: [],
@@ -1015,7 +1028,7 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       error: null,
     };
   }
-  const [householdsResult, membersResult, contactsResult, assetsResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult, propertiesResult, mortgageLoansResult, homeownersPoliciesResult, propertyStackAnalyticsResult, retirementAccountsResult, autoPoliciesResult, healthPlansResult, warrantiesResult] =
+  const [householdsResult, membersResult, contactsResult, assetsResult, assetLinksResult, documentsResult, alertsResult, tasksResult, reportsResult, portalHubResult, propertiesResult, mortgageLoansResult, homeownersPoliciesResult, propertyStackAnalyticsResult, retirementAccountsResult, autoPoliciesResult, healthPlansResult, warrantiesResult] =
     await Promise.all([
       listRecords("households", [{ column: "id", value: householdId }], {
         orderBy: "updated_at",
@@ -1023,6 +1036,7 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       listHouseholdMembers(householdId),
       listContacts(householdId),
       listAssets(householdId),
+      listHouseholdAssetLinks(householdId),
       listHouseholdDocuments(householdId),
       listAssetAlerts(householdId),
       listAssetTasks(householdId),
@@ -1080,6 +1094,7 @@ export async function getHouseholdIntelligenceBundle(householdId) {
   const householdMembers = membersResult.data || [];
   const contacts = contactsResult.data || [];
   const assets = assetsResult.data || [];
+  const assetLinks = assetLinksResult.data || [];
   const documents = documentsResult.data || [];
   const openAlerts = (alertsResult.data || []).filter((item) => item.status === "open");
   const openTasks = (tasksResult.data || []).filter((item) => item.status === "open");
@@ -1364,9 +1379,40 @@ export async function getHouseholdIntelligenceBundle(householdId) {
   const linkedHomeownersIds = new Set((propertyHomeownersLinksResult.data || []).map((link) => link.homeowners_policy_id));
   const propertyIdsWithMortgage = new Set((propertyMortgageLinksResult.data || []).map((link) => link.property_id));
   const propertyIdsWithHomeowners = new Set((propertyHomeownersLinksResult.data || []).map((link) => link.property_id));
+  const propertyAssetLinks = assetLinks.filter((link) =>
+    String(link.relationship_origin || "").startsWith("property_")
+  );
+  const propertyMortgageAssetLinks = propertyAssetLinks.filter(
+    (link) => link.relationship_origin === "property_mortgage" || link.target_module === "mortgage"
+  );
+  const propertyHomeownersAssetLinks = propertyAssetLinks.filter(
+    (link) => link.relationship_origin === "property_homeowners" || link.target_module === "homeowners"
+  );
+  const propertyIdsWithMortgageAssetLinks = new Set(
+    propertyMortgageAssetLinks.map((link) => link.source_record_id).filter(Boolean)
+  );
+  const propertyIdsWithHomeownersAssetLinks = new Set(
+    propertyHomeownersAssetLinks.map((link) => link.source_record_id).filter(Boolean)
+  );
 
   const propertiesMissingMortgageLink = properties.filter((item) => !propertyIdsWithMortgage.has(item.id));
   const propertiesMissingHomeownersLink = properties.filter((item) => !propertyIdsWithHomeowners.has(item.id));
+  const propertiesMissingAssetGraphMortgageLink = properties.filter(
+    (item) => !propertyIdsWithMortgageAssetLinks.has(item.id)
+  );
+  const propertiesMissingAssetGraphHomeownersLink = properties.filter(
+    (item) => !propertyIdsWithHomeownersAssetLinks.has(item.id)
+  );
+  const completePropertyAssetGraph = properties.filter(
+    (item) =>
+      propertyIdsWithMortgageAssetLinks.has(item.id) &&
+      propertyIdsWithHomeownersAssetLinks.has(item.id)
+  );
+  const partialPropertyAssetGraph = properties.filter((item) => {
+    const hasDebt = propertyIdsWithMortgageAssetLinks.has(item.id);
+    const hasProtection = propertyIdsWithHomeownersAssetLinks.has(item.id);
+    return (hasDebt || hasProtection) && !(hasDebt && hasProtection);
+  });
   const mortgagesWithoutLinkedProperties = mortgageLoans.filter((item) => !linkedMortgageIds.has(item.id));
   const homeownersWithoutLinkedProperties = homeownersPolicies.filter((item) => !linkedHomeownersIds.has(item.id));
   const weakContinuityPropertyStacks = propertyStackAnalytics.filter(
@@ -1423,6 +1469,7 @@ export async function getHouseholdIntelligenceBundle(householdId) {
       emergencyContacts,
       keyProfessionalContacts,
       assets,
+      assetLinks,
       keyAssets,
       assetCountsByCategory,
       documents,
@@ -1475,6 +1522,17 @@ export async function getHouseholdIntelligenceBundle(householdId) {
         weakValuationConfidenceProperties,
         highQualityPropertyReviewAvailable,
         analyticsByPropertyId,
+        assetGraphSummary: {
+          linkCount: propertyAssetLinks.length,
+          mortgageLinkCount: propertyMortgageAssetLinks.length,
+          homeownersLinkCount: propertyHomeownersAssetLinks.length,
+          propertyIdsWithMortgageAssetLinksCount: propertyIdsWithMortgageAssetLinks.size,
+          propertyIdsWithHomeownersAssetLinksCount: propertyIdsWithHomeownersAssetLinks.size,
+          completePropertyAssetGraph,
+          partialPropertyAssetGraph,
+          propertiesMissingAssetGraphMortgageLink,
+          propertiesMissingAssetGraphHomeownersLink,
+        },
       },
       retirementSummary: {
         accountCount: retirementAccounts.length,

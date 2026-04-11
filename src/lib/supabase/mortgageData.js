@@ -13,6 +13,7 @@ import {
   unlinkMortgageFromProperty,
   updatePropertyMortgageLink,
 } from "./propertyStackLinks";
+import { listAssetLinksForAsset } from "./assetLinks";
 import { getSupabaseClient } from "./client";
 import {
   createAssetWithDependencies,
@@ -22,6 +23,7 @@ import {
 } from "./platformCreation";
 import {
   getAssetById,
+  getOrCreateCurrentHousehold,
   uploadGenericAssetDocument,
 } from "./platformData";
 import {
@@ -384,12 +386,16 @@ export async function getMortgageLoanBundle(mortgageLoanId, scopeOverride = null
     listMortgageSnapshots(mortgageLoanId),
     listMortgageAnalytics(mortgageLoanId),
   ]);
+  const mortgageAssetLinksResult = mortgageLoanResult.data?.assets?.id
+    ? await listAssetLinksForAsset(mortgageLoanResult.data.assets.id, scopeOverride)
+    : { data: [], error: null };
 
   const error =
     mortgageLoanResult.error ||
     mortgageDocumentsResult.error ||
     mortgageSnapshotsResult.error ||
     mortgageAnalyticsResult.error ||
+    mortgageAssetLinksResult.error ||
     null;
 
   return {
@@ -400,6 +406,7 @@ export async function getMortgageLoanBundle(mortgageLoanId, scopeOverride = null
           mortgageDocuments: mortgageDocumentsResult.data || [],
           mortgageSnapshots: mortgageSnapshotsResult.data || [],
           mortgageAnalytics: mortgageAnalyticsResult.data || [],
+          mortgageAssetLinks: mortgageAssetLinksResult.data || [],
         },
     error,
   };

@@ -5,12 +5,17 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import RetirementActionFeedCard from "../components/retirement/RetirementActionFeedCard";
+import RetirementAIChatBox from "../components/retirement/RetirementAIChatBox";
+import RetirementSignalsSummaryCard from "../components/retirement/RetirementSignalsSummaryCard";
 import {
   getRetirementDocumentClass,
   getRetirementType,
   listRetirementProviders,
 } from "../lib/domain/retirement";
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
+import { buildRetirementSignals } from "../lib/retirementSignals/buildRetirementSignals";
+import { buildRetirementActionFeed } from "../lib/retirementSignals/buildRetirementActionFeed";
 import { buildRetirementCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
   annotateReviewWorkflowItems,
@@ -29,6 +34,7 @@ import {
   uploadRetirementDocument,
 } from "../lib/supabase/retirementData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { executeSmartAction } from "../lib/navigation/smartActions";
 
 const RETIREMENT_DOCUMENT_CLASSES = listRetirementDocumentClasses();
 const RETIREMENT_PROVIDERS = listRetirementProviders();
@@ -113,6 +119,7 @@ function formatFlagLabel(value) {
 export default function RetirementAccountDetailPage({ retirementAccountId, onNavigate }) {
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
+  const sectionRefs = useRef({});
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -295,6 +302,25 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
         : "",
     };
   }, [bundle]);
+  const retirementSignals = useMemo(
+    () =>
+      buildRetirementSignals({
+        retirementRead,
+        latestSnapshot,
+        latestAnalytics,
+        positions: bundle?.retirementPositions || [],
+      }),
+    [bundle?.retirementPositions, latestAnalytics, latestSnapshot, retirementRead]
+  );
+  const retirementActionFeed = useMemo(
+    () =>
+      buildRetirementActionFeed({
+        retirementSignals,
+        retirementRead,
+        positions: bundle?.retirementPositions || [],
+      }),
+    [bundle?.retirementPositions, retirementRead, retirementSignals]
+  );
 
   const retirementCommandCenter = useMemo(
     () =>
@@ -488,6 +514,22 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     setParsingDocumentId("");
   }
 
+  function scrollToSection(section) {
+    const target = sectionRefs.current[section];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function handleRetirementAction(action) {
+    if (!action?.target) return;
+
+    executeSmartAction(action.target, {
+      navigate: onNavigate,
+      scrollToSection,
+    });
+  }
+
   return (
     <div>
       <PageHeader
@@ -531,6 +573,25 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
           </div>
 
           <div style={{ marginTop: "24px" }}>
+            <RetirementSignalsSummaryCard retirementSignals={retirementSignals} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <RetirementActionFeedCard actions={retirementActionFeed} onAction={handleRetirementAction} />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <RetirementAIChatBox
+              retirementSignals={retirementSignals}
+              retirementRead={retirementRead}
+              retirementActionFeed={retirementActionFeed}
+              positionSummary={positionSummary}
+              latestSnapshot={latestSnapshot}
+              latestAnalytics={latestAnalytics}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.signals = node; }}>
             <SectionCard
               title="Retirement Command"
               subtitle="The strongest blockers on this account, what they put at risk, and the best next move."
@@ -797,7 +858,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }} ref={(node) => { sectionRefs.current.documents = node; }}>
             <SectionCard title="Retirement Documents">
               {bundle.retirementDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -982,7 +1043,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.snapshots = node; }}>
             <SectionCard title="Retirement Snapshots">
               {bundle.retirementSnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -1029,6 +1090,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+            <div ref={(node) => { sectionRefs.current.analytics = node; }}>
             <SectionCard title="Retirement Analytics">
               {bundle.retirementAnalytics.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -1070,13 +1132,23 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   ))}
                 </div>
               ) : (
-                <EmptyState
-                  title="No retirement analytics yet"
-                  description="Retirement intelligence will appear here after a retirement document is parsed into a snapshot and review record."
-                />
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <AIInsightPanel
+                    title="Working retirement intelligence"
+                    summary={`No persisted retirement analytics rows are stored yet, but this account currently reads ${retirementSignals.signalLevel.replace(/_/g, " ")} from the live statement, holdings, and review evidence.`}
+                    bullets={(retirementSignals.reasons || []).slice(0, 4)}
+                  />
+                  {retirementActionFeed[0] ? (
+                    <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
+                      <strong>Top live next move:</strong> {retirementActionFeed[0].summary}
+                    </div>
+                  ) : null}
+                </div>
               )}
             </SectionCard>
+            </div>
 
+            <div ref={(node) => { sectionRefs.current.positions = node; }}>
             <SectionCard title="Retirement Positions">
               {bundle.retirementPositions.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -1108,12 +1180,24 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   ))}
                 </div>
               ) : (
-                <EmptyState
-                  title="No retirement positions yet"
-                  description="Fund allocations, subaccounts, target-date holdings, and model portfolios will appear here after a statement with usable position rows is parsed."
-                />
+                <div style={{ display: "grid", gap: "14px" }}>
+                  <AIInsightPanel
+                    title="Live allocation read"
+                    summary={
+                      retirementSignals.flags.positionVisibility
+                        ? "Parsed position detail is still missing, so concentration and allocation review remain limited."
+                        : "Position detail is available, but a deeper allocation review will sharpen this account read further."
+                    }
+                    bullets={[
+                      `Parsed positions visible: ${positionSummary.count}.`,
+                      positionSummary.concentrationNote || "No clear concentration note is currently visible.",
+                      ...(retirementSignals.reasons || []).filter((reason) => reason.includes("allocation") || reason.includes("holding")).slice(0, 2),
+                    ]}
+                  />
+                </div>
               )}
             </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>

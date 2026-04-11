@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VaultedShield</string>
+    <string name="title_activity_main">VaultedShield</string>
+    <string name="package_name">com.vaultedshield.app</string>
+    <string name="custom_url_scheme">com.vaultedshield.app</string>
+</resources>

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient, isSupabaseConfigured } from "../supabase/client";
+import {
+  clearVaultedShieldSessionArtifacts,
+  requestAccountDeletion,
+  setAccountDeletionFlash,
+} from "./requestAccountDeletion";
 
 const SESSION_STORAGE_KEY = "vaultedshield_access_session_v1";
 const PROFILE_STORAGE_KEY = "vaultedshield_access_profiles_v1";
@@ -79,6 +84,7 @@ function buildSignedOutSession() {
     tier: "free",
     source: "signed_out",
     authMode: isSupabaseConfigured() ? "supabase" : "local",
+    lastAuthAt: null,
   };
 }
 
@@ -107,6 +113,7 @@ function createSession(profile = {}) {
     source: profile.source || "local_profile",
     authMode: profile.authMode || (isSupabaseConfigured() ? "supabase" : "local"),
     userId: profile.userId || null,
+    lastAuthAt: profile.lastAuthAt || profile.createdAt || null,
   };
 }
 
@@ -136,6 +143,15 @@ function setStoredTierForEmail(email = "", tier = "free") {
     ...storedPlans,
     [normalizedEmail]: ACCESS_TIERS[tier] ? tier : "free",
   });
+}
+
+function removeStoredTierForEmail(email = "") {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return;
+  const storedPlans = getStoredPlanMap();
+  if (!Object.prototype.hasOwnProperty.call(storedPlans, normalizedEmail)) return;
+  delete storedPlans[normalizedEmail];
+  writeStoredPlanMap(storedPlans);
 }
 
 function getStoredEmailSendGuardMap() {
@@ -218,6 +234,7 @@ function buildSessionFromSupabaseUser(user) {
     source: "supabase_auth",
     authMode: "supabase",
     userId: user.id,
+    lastAuthAt: user.last_sign_in_at || user.updated_at || user.created_at || null,
   });
 }
 
@@ -425,6 +442,66 @@ export function useAccessPortal() {
     setSession(buildSignedOutSession());
   }
 
+  async function reauthenticate({ password } = {}) {
+    if (!isSupabaseConfigured()) {
+      return { ok: false, error: "Reauthentication is only required for Supabase-backed accounts." };
+    }
+
+    const email = normalizeEmail(session?.email || "");
+    if (!email || !password) {
+      return { ok: false, error: "Enter your current password to continue." };
+    }
+
+    const result = await signInWithSupabase({ email, password });
+    if (!result.ok) {
+      return { ok: false, error: "We couldn't verify that password. Please try again." };
+    }
+
+    const nextSession = buildSessionFromSupabaseUser(result.user);
+    setSession(nextSession);
+    return { ok: true, profile: nextSession };
+  }
+
+  async function deleteAccount(options = {}) {
+    if (isSupabaseConfigured()) {
+      const result = await requestAccountDeletion({
+        session,
+        skipRecentAuthCheck: Boolean(options?.skipRecentAuthCheck),
+      });
+
+      if (result?.ok && (result.status === "completed" || result.status === "requested")) {
+        const normalizedEmail = normalizeEmail(session?.email || "");
+        if (normalizedEmail) {
+          removeStoredTierForEmail(normalizedEmail);
+        }
+        try {
+          await signOutFromSupabase();
+        } catch {
+          // Ignore remote sign-out failures and still clear the local app state.
+        }
+        clearVaultedShieldSessionArtifacts();
+        setAccountDeletionFlash(result.message);
+        setSession(buildSignedOutSession());
+      }
+
+      return result;
+    }
+
+    const normalizedEmail = normalizeEmail(session?.email || "");
+    if (normalizedEmail) {
+      setProfiles((current) => current.filter((profile) => profile.email !== normalizedEmail));
+      removeStoredTierForEmail(normalizedEmail);
+    }
+    clearVaultedShieldSessionArtifacts();
+    setAccountDeletionFlash("Local account profile removed from this device. You have been signed out.");
+    setSession(buildSignedOutSession());
+    return {
+      ok: true,
+      status: "completed",
+      message: "Local account profile removed from this device. You have been signed out.",
+    };
+  }
+
   function upgradePlan(tier) {
     const nextTier = ACCESS_TIERS[tier] ? tier : "free";
     if (session?.email) {
@@ -456,6 +533,8 @@ export function useAccessPortal() {
     signUp,
     signIn,
     signOut,
+    reauthenticate,
+    deleteAccount,
     upgradePlan,
     hasAccess: (minimumTier = "free") => hasTierAccess(currentTier, minimumTier),
   };

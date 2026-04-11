@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import HomeownersLinkedContextCard from "../components/homeowners/HomeownersLinkedContextCard";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
+import {
+  buildLinkedPropertyStackCompleteness,
+  dedupeLinkedContextRows,
+  formatCompletenessScore,
+  normalizeLinkedContextRows,
+  normalizeLinkedContextRowsForAssets,
+} from "../lib/assetLinks/linkedContext";
 import {
   getHomeownersCarrier,
   getHomeownersDocumentClass,
@@ -23,6 +31,7 @@ import {
   uploadHomeownersDocument,
 } from "../lib/supabase/homeownersData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildHomeownersCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
@@ -34,6 +43,7 @@ import {
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHomeownersDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const HOMEOWNERS_DOCUMENT_CLASSES = listHomeownersDocumentClasses();
 const HOMEOWNERS_CARRIERS = listHomeownersCarriers();
@@ -59,11 +69,13 @@ function getStatusTone(status) {
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [propertyLinks, setPropertyLinks] = useState([]);
+  const [linkedPropertyAssetLinks, setLinkedPropertyAssetLinks] = useState([]);
   const [availableProperties, setAvailableProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -109,7 +121,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   }, [reviewScope]);
 
   const loadHomeownersBundle = useCallback(async (targetHomeownersPolicyId, options = {}) => {
-    const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId);
+    const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId, platformScope);
     if (result.error || !result.data?.homeownersPolicy) {
       if (!options.silent) {
         setBundle(null);
@@ -138,10 +150,22 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
 
     if (result.data.homeownersPolicy?.id) {
       const propertyLinksResult = await listHomeownersPropertyLinks(result.data.homeownersPolicy.id);
-      setPropertyLinks(propertyLinksResult.data || []);
+      const nextPropertyLinks = propertyLinksResult.data || [];
+      setPropertyLinks(nextPropertyLinks);
       if (!options.silent && propertyLinksResult.error) {
         setLinkError(propertyLinksResult.error.message || "");
       }
+
+      const linkedPropertyAssetIds = nextPropertyLinks
+        .map((link) => link.properties?.assets?.id)
+        .filter(Boolean);
+      const propertyAssetLinksResult = await listAssetLinksForAssets(linkedPropertyAssetIds, platformScope);
+      setLinkedPropertyAssetLinks(propertyAssetLinksResult.data || []);
+      if (!options.silent && propertyAssetLinksResult.error) {
+        setLinkError(propertyAssetLinksResult.error.message || "");
+      }
+    } else {
+      setLinkedPropertyAssetLinks([]);
     }
 
     if (result.data.homeownersPolicy?.household_id) {
@@ -176,6 +200,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     setBundle(null);
     setAssetBundle(null);
     setPropertyLinks([]);
+    setLinkedPropertyAssetLinks([]);
     setAvailableProperties([]);
     setLoadError("");
     setLinkError("");
@@ -187,6 +212,10 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     ? getHomeownersPolicyType(homeownersPolicy.homeowners_policy_type_key)
     : null;
   const linkedAsset = homeownersPolicy?.assets || null;
+  const homeownersAssetLinks = useMemo(
+    () => bundle?.homeownersAssetLinks || [],
+    [bundle?.homeownersAssetLinks]
+  );
   const linkageStatus = getHomeownersLinkageStatus({
     linkedProperties: propertyLinks,
   });
@@ -238,6 +267,33 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
       { label: "Analytics", value: bundle?.homeownersAnalytics?.length || 0, helper: "Future homeowners review outputs" },
     ];
   }, [bundle, homeownersPolicy, homeownersPolicyType]);
+  const propertyAssetIds = useMemo(
+    () => propertyLinks.map((link) => link.properties?.assets?.id).filter(Boolean),
+    [propertyLinks]
+  );
+  const propertyAnalyticsById = useMemo(
+    () => intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId || {},
+    [intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId]
+  );
+  const linkedStackCompleteness = useMemo(
+    () => buildLinkedPropertyStackCompleteness(propertyLinks, propertyAnalyticsById),
+    [propertyAnalyticsById, propertyLinks]
+  );
+  const homeownersLinkedContext = useMemo(() => {
+    const normalizedHomeownersLinks = dedupeLinkedContextRows(
+      normalizeLinkedContextRows(homeownersAssetLinks, linkedAsset?.id)
+    );
+    const normalizedPropertyLinks = dedupeLinkedContextRows(
+      normalizeLinkedContextRowsForAssets(linkedPropertyAssetLinks, propertyAssetIds)
+    );
+
+    return {
+      propertyRows: normalizedHomeownersLinks.filter((row) => row.bucket === "property"),
+      liabilityRows: normalizedPropertyLinks.filter((row) => row.bucket === "liability"),
+    };
+  }, [homeownersAssetLinks, linkedAsset?.id, linkedPropertyAssetLinks, propertyAssetIds]);
+  const documentRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
+  const dualLayout = isTablet ? "1fr" : "1fr 1fr";
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
@@ -438,6 +494,10 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={homeownersPolicyType?.display_name || homeownersPolicy.homeowners_policy_type_key} tone="info" />
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+            <StatusBadge
+              label={`Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`}
+              tone={linkedStackCompleteness.tone}
+            />
           </div>
 
           <div style={{ marginTop: "24px" }}>
@@ -689,7 +749,25 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px" }}>
+            <SectionCard
+              title="Linked Context"
+              subtitle="Read this homeowners policy as part of the broader operating graph across property, liabilities, documents, and access continuity."
+            >
+              <HomeownersLinkedContextCard
+                propertyRows={homeownersLinkedContext.propertyRows}
+                liabilityRows={homeownersLinkedContext.liabilityRows}
+                propertyLinks={propertyLinks}
+                stackCompleteness={linkedStackCompleteness}
+                homeownersDocuments={bundle.homeownersDocuments || []}
+                assetBundle={assetBundle}
+                onNavigate={onNavigate}
+                isMobile={isTablet}
+              />
+            </SectionCard>
+          </div>
+
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
             <SectionCard title="Homeowners Documents">
               {bundle.homeownersDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -776,7 +854,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
             <SectionCard title="Homeowners Snapshots">
               {bundle.homeownersSnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -814,49 +892,10 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-            <SectionCard title="Linked Portals">
-              {assetBundle?.portalLinks?.length > 0 ? (
-                <div style={{ display: "grid", gap: "12px" }}>
-                  {assetBundle.portalLinks.map((link) => {
-                    const portal = link.portal_profiles || {};
-                    return (
-                      <div key={link.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{portal.portal_name || "Linked portal"}</div>
-                        <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
-                          <div><strong>Institution:</strong> {portal.institution_name || "Limited visibility"}</div>
-                          <div><strong>Recovery Hint:</strong> {portal.recovery_contact_hint || "Limited visibility"}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyState title="No linked portals yet" description="Portal continuity records will surface here through the linked platform asset when carrier access continuity is mapped." />
-              )}
-            </SectionCard>
-
-            <SectionCard title="Notes / Tasks / Alerts">
-              {assetBundle ? (
-                <AIInsightPanel
-                  title="Platform Linkage"
-                  summary="This homeowners record can inherit shared continuity context from the linked platform asset without collapsing homeowners-specific data into generic tables."
-                  bullets={[
-                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
-                    `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
-                    `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
-                  ]}
-                />
-              ) : (
-                <EmptyState title="Shared household context pending" description="Alerts, tasks, notes, and broader continuity context will appear here once this policy is linked into the broader household record." />
-              )}
-            </SectionCard>
-          </div>
-
           {import.meta.env.DEV ? (
             <SectionCard title="Homeowners Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
-                homeowners_policy_id={homeownersPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={homeownersPolicy.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | documents={bundle.homeownersDocuments.length} | snapshots={bundle.homeownersSnapshots.length} | analytics={bundle.homeownersAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | homeownersDocumentIds={uploadQueue.map((item) => item.homeownersDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
+                homeowners_policy_id={homeownersPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={homeownersPolicy.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | homeownersAssetLinks={homeownersAssetLinks.length} | linkedPropertyAssetLinks={linkedPropertyAssetLinks.length} | documents={bundle.homeownersDocuments.length} | snapshots={bundle.homeownersSnapshots.length} | analytics={bundle.homeownersAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | homeownersDocumentIds={uploadQueue.map((item) => item.homeownersDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
               </div>
             </SectionCard>
           ) : null}

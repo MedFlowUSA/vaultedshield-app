@@ -27,6 +27,61 @@ function ReaderStatusBadge({ status, children }) {
   );
 }
 
+function VerdictBannerTone(status) {
+  if (status === "green") {
+    return {
+      background: "linear-gradient(135deg, rgba(220,252,231,1) 0%, rgba(240,253,244,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#86efac",
+      text: "#14532d",
+      chipBackground: "#166534",
+      chipText: "#f0fdf4",
+      buttonBackground: "#14532d",
+      buttonText: "#f8fafc",
+    };
+  }
+  if (status === "red") {
+    return {
+      background: "linear-gradient(135deg, rgba(254,242,242,1) 0%, rgba(255,245,245,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#fca5a5",
+      text: "#7f1d1d",
+      chipBackground: "#991b1b",
+      chipText: "#fef2f2",
+      buttonBackground: "#7f1d1d",
+      buttonText: "#fff7f7",
+    };
+  }
+  return {
+    background: "linear-gradient(135deg, rgba(254,249,195,1) 0%, rgba(255,251,235,1) 48%, rgba(255,255,255,1) 100%)",
+    border: "#fcd34d",
+    text: "#78350f",
+    chipBackground: "#92400e",
+    chipText: "#fffbeb",
+    buttonBackground: "#78350f",
+    buttonText: "#fffbeb",
+  };
+}
+
+function VerdictActionButton({ children, onClick, primary = false, tone }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "10px 14px",
+        borderRadius: "999px",
+        border: primary ? `1px solid ${tone.buttonBackground}` : `1px solid ${tone.border}`,
+        background: primary ? tone.buttonBackground : "#ffffff",
+        color: primary ? tone.buttonText : tone.text,
+        fontWeight: 700,
+        fontSize: "13px",
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function BenchmarkTone(status) {
   if (status === "good") return { background: "#dcfce7", color: "#166534", border: "#bbf7d0" };
   if (status === "watch") return { background: "#fef3c7", color: "#92400e", border: "#fde68a" };
@@ -51,6 +106,113 @@ function TableTone(status) {
   if (status === "confirmed") return "#166534";
   if (status === "review") return "#92400e";
   return "#64748b";
+}
+
+function bandToReaderStatus(band) {
+  if (band === "strong") return "confirmed";
+  if (band === "watch") return "review";
+  return "missing";
+}
+
+function bandToLabel(band) {
+  if (band === "strong") return "Healthy";
+  if (band === "watch") return "Watch";
+  return "Attention";
+}
+
+function questionStatusToReaderStatus(status) {
+  if (status === "good") return "confirmed";
+  if (status === "watch") return "review";
+  return "missing";
+}
+
+function questionStatusToLabel(status) {
+  if (status === "good") return "Stable";
+  if (status === "watch") return "Watch";
+  return "Pressure";
+}
+
+function buildWhatMattersRightNow(reader) {
+  const topPressure = reader.verdict?.pressureStack?.[0] || null;
+  const nextMove =
+    reader.verdict?.reviewOrder?.[0] ||
+    reader.plainEnglishScorecard?.nextAction ||
+    reader.nextSteps?.[0] ||
+    "Continue adding cleaner annual statements and support pages.";
+  const projectionRead = reader.projectionView?.available
+    ? reader.projectionView.currentMatch
+      ? "Illustration proof is available and the current policy-year match is visible."
+      : "Illustration proof is partially available, but the current policy-year match is still directional."
+    : "Illustration proof is still limited because usable ledger checkpoints were not extracted yet.";
+  const opening =
+    reader.verdict?.verdict === "Healthy"
+      ? "This policy currently appears stable from the visible packet."
+      : reader.verdict?.verdict === "Under Pressure"
+        ? "This policy currently appears to be under visible pressure."
+        : "This policy currently appears readable, but not clean enough to leave on autopilot.";
+  const driver = topPressure
+    ? `${topPressure.label} is the biggest visible driver right now.`
+    : "No single driver dominates yet, but the packet still needs a disciplined review.";
+
+  return {
+    summary: `${opening} ${driver}`,
+    support: topPressure?.explanation || projectionRead,
+    action: nextMove,
+    proof: projectionRead,
+  };
+}
+
+function buildSectionSignals(reader) {
+  const questions = Array.isArray(reader.verdict?.reviewQuestions) ? reader.verdict.reviewQuestions : [];
+  const lookup = new Map(questions.map((item) => [item.label, item]));
+
+  return [
+    lookup.get("Is it keeping pace?")
+      ? {
+          title: "Illustration Pace",
+          status: lookup.get("Is it keeping pace?").status,
+          label: questionStatusToLabel(lookup.get("Is it keeping pace?").status),
+          summary: lookup.get("Is it keeping pace?").answer,
+          target: "proof",
+        }
+      : null,
+    lookup.get("Are charges creating drag?")
+      ? {
+          title: "Charges",
+          status: lookup.get("Are charges creating drag?").status,
+          label: questionStatusToLabel(lookup.get("Are charges creating drag?").status),
+          summary: lookup.get("Are charges creating drag?").answer,
+          target: "next_action",
+        }
+      : null,
+    lookup.get("Is funding support adequate?")
+      ? {
+          title: "Funding",
+          status: lookup.get("Is funding support adequate?").status,
+          label: questionStatusToLabel(lookup.get("Is funding support adequate?").status),
+          summary: lookup.get("Is funding support adequate?").answer,
+          target: "funding_pace",
+        }
+      : null,
+    lookup.get("Are loans increasing pressure?")
+      ? {
+          title: "Loans",
+          status: lookup.get("Are loans increasing pressure?").status,
+          label: questionStatusToLabel(lookup.get("Are loans increasing pressure?").status),
+          summary: lookup.get("Are loans increasing pressure?").answer,
+          target: "next_action",
+        }
+      : null,
+    lookup.get("Is the evidence strong enough to trust this read?")
+      ? {
+          title: "Evidence Quality",
+          status: lookup.get("Is the evidence strong enough to trust this read?").status,
+          label: questionStatusToLabel(lookup.get("Is the evidence strong enough to trust this read?").status),
+          summary: lookup.get("Is the evidence strong enough to trust this read?").answer,
+          target: "evidence",
+        }
+      : null,
+  ].filter(Boolean);
 }
 
 function renderReaderTable(table) {
@@ -102,13 +264,15 @@ function renderReaderTable(table) {
   );
 }
 
-export function IulReaderPanel({ reader, results }) {
+export function IulReaderPanel({ reader }) {
   const trustSectionRef = useRef(null);
   const policyReadSectionRef = useRef(null);
   const prioritiesSectionRef = useRef(null);
   const unifiedLeversSectionRef = useRef(null);
   const performanceSectionRef = useRef(null);
   const verdictSectionRef = useRef(null);
+  const proofSectionRef = useRef(null);
+  const evidenceSectionRef = useRef(null);
 
   function scrollToReaderSection(target) {
     const lookup = {
@@ -120,6 +284,8 @@ export function IulReaderPanel({ reader, results }) {
       next_action: prioritiesSectionRef,
       benchmarks: performanceSectionRef,
       verdict: verdictSectionRef,
+      proof: proofSectionRef,
+      evidence: evidenceSectionRef,
     };
 
     const ref = lookup[target];
@@ -127,6 +293,10 @@ export function IulReaderPanel({ reader, results }) {
       ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
+
+  const bannerTone = VerdictBannerTone(reader.verdict?.decisionBanner?.status);
+  const mattersNow = buildWhatMattersRightNow(reader);
+  const sectionSignals = buildSectionSignals(reader);
 
   return (
     <div
@@ -204,6 +374,115 @@ export function IulReaderPanel({ reader, results }) {
               scrollMarginTop: "96px",
             }}
           >
+            {reader.verdict.decisionBanner ? (
+              <div
+                data-demo-id="iul-verdict-banner"
+                style={{
+                  position: "sticky",
+                  top: "12px",
+                  zIndex: 1,
+                  padding: "18px",
+                  borderRadius: "18px",
+                  background: bannerTone.background,
+                  border: `1px solid ${bannerTone.border}`,
+                  display: "grid",
+                  gap: "14px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                  <div style={{ display: "grid", gap: "8px", maxWidth: "760px" }}>
+                    <div style={{ fontSize: "12px", color: bannerTone.text, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                      Verdict Banner
+                    </div>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          borderRadius: "999px",
+                          background: bannerTone.chipBackground,
+                          boxShadow: `0 0 0 4px ${bannerTone.border}`,
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <div style={{ fontSize: "28px", fontWeight: 800, color: bannerTone.text, lineHeight: "1.2" }}>
+                        {reader.verdict.decisionBanner.label}
+                      </div>
+                    </div>
+                    <div style={{ color: bannerTone.text, lineHeight: "1.7", fontWeight: 600 }}>
+                      {reader.verdict.decisionBanner.summary}
+                    </div>
+                    <div style={{ color: bannerTone.text, lineHeight: "1.7", opacity: 0.92 }}>
+                      {reader.verdict.headline}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      minWidth: "210px",
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "rgba(255,255,255,0.82)",
+                      border: `1px solid ${bannerTone.border}`,
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", color: bannerTone.text, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Current Read
+                    </div>
+                    <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>{reader.verdict.verdict}</div>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        width: "fit-content",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        background: bannerTone.chipBackground,
+                        color: bannerTone.chipText,
+                        fontSize: "12px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      Confidence {reader.verdict.confidenceLabel}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.65", fontSize: "13px" }}>
+                      Biggest missing link: {reader.verdict.missingLink}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                  {reader.verdict.decisionBanner.quickFacts.map((fact) => (
+                    <div
+                      key={fact.label}
+                      style={{
+                        padding: "13px 14px",
+                        borderRadius: "14px",
+                        background: "rgba(255,255,255,0.84)",
+                        border: `1px solid ${bannerTone.border}`,
+                        display: "grid",
+                        gap: "6px",
+                      }}
+                    >
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{fact.label}</div>
+                      <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.35" }}>{fact.value}</div>
+                      <div style={{ color: "#475569", lineHeight: "1.55", fontSize: "12px" }}>{fact.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <VerdictActionButton primary tone={bannerTone} onClick={() => scrollToReaderSection("proof")}>
+                    View Illustration Proof
+                  </VerdictActionButton>
+                  <VerdictActionButton tone={bannerTone} onClick={() => scrollToReaderSection("evidence")}>
+                    View Evidence
+                  </VerdictActionButton>
+                </div>
+              </div>
+            ) : null}
+
             <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", alignItems: "flex-start" }}>
               <div style={{ display: "grid", gap: "8px", maxWidth: "820px" }}>
                 <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
@@ -235,6 +514,68 @@ export function IulReaderPanel({ reader, results }) {
                 <ReaderStatusBadge status={reader.verdict.verdict === "Healthy" ? "confirmed" : reader.verdict.verdict === "Watch Closely" ? "review" : "missing"}>
                   Confidence {reader.verdict.confidenceLabel}
                 </ReaderStatusBadge>
+              </div>
+            </div>
+
+            {sectionSignals.length > 0 ? (
+              <div data-demo-id="iul-key-signals" style={{ display: "grid", gap: "12px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Key Signals Right Now
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                  {sectionSignals.map((item) => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      onClick={() => scrollToReaderSection(item.target)}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        border: "1px solid #dbeafe",
+                        background: "#ffffff",
+                        display: "grid",
+                        gap: "8px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "baseline" }}>
+                        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.title}</div>
+                        <ReaderStatusBadge status={questionStatusToReaderStatus(item.status)}>{item.label}</ReaderStatusBadge>
+                      </div>
+                      <div style={{ color: "#0f172a", lineHeight: "1.6", fontWeight: 700 }}>{item.summary}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div
+              data-demo-id="iul-what-matters"
+              style={{
+                padding: "16px 18px",
+                borderRadius: "16px",
+                background: "#fff7ed",
+                border: "1px solid #fed7aa",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+                <div style={{ fontSize: "12px", color: "#9a3412", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  What Matters Right Now
+                </div>
+                <ReaderStatusBadge status={reader.verdict.verdict === "Healthy" ? "confirmed" : reader.verdict.verdict === "Watch Closely" ? "review" : "missing"}>
+                  {reader.verdict.verdict}
+                </ReaderStatusBadge>
+              </div>
+              <div style={{ color: "#7c2d12", lineHeight: "1.7", fontWeight: 700 }}>{mattersNow.summary}</div>
+              <div style={{ color: "#9a3412", lineHeight: "1.7" }}>{mattersNow.support}</div>
+              <div style={{ paddingTop: "10px", borderTop: "1px solid #fed7aa", display: "grid", gap: "6px" }}>
+                <div style={{ fontSize: "12px", color: "#9a3412", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Next Review Move
+                </div>
+                <div style={{ color: "#7c2d12", lineHeight: "1.7" }}>{mattersNow.action}</div>
               </div>
             </div>
 
@@ -273,6 +614,8 @@ export function IulReaderPanel({ reader, results }) {
         ) : null}
 
         <div
+          ref={proofSectionRef}
+          data-demo-id="iul-illustration-proof"
           style={{
             background: "#ffffff",
             border: "1px solid #e2e8f0",
@@ -281,6 +624,7 @@ export function IulReaderPanel({ reader, results }) {
             display: "grid",
             gap: "14px",
             minWidth: 0,
+            scrollMarginTop: "96px",
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
@@ -290,8 +634,20 @@ export function IulReaderPanel({ reader, results }) {
               </div>
               <h3 style={{ margin: "8px 0 0 0" }}>Primary proof layer for whether the policy is keeping pace</h3>
             </div>
-            <ReaderStatusBadge status={reader.projectionView.available ? "review" : "missing"}>
-              {reader.projectionView.available ? "Proof Available" : "Proof Still Limited"}
+            <ReaderStatusBadge
+              status={
+                reader.projectionView.available
+                  ? reader.projectionView.currentMatch
+                    ? "confirmed"
+                    : "review"
+                  : "missing"
+              }
+            >
+              {reader.projectionView.available
+                ? reader.projectionView.currentMatch
+                  ? "Proof Active"
+                  : "Proof Partial"
+                : "Proof Limited"}
             </ReaderStatusBadge>
           </div>
 
@@ -366,6 +722,8 @@ export function IulReaderPanel({ reader, results }) {
 
         {reader.evidenceLedger?.length > 0 ? (
           <div
+            ref={evidenceSectionRef}
+            data-demo-id="iul-evidence-ledger"
             style={{
               background: "#ffffff",
               border: "1px solid #e2e8f0",
@@ -374,11 +732,17 @@ export function IulReaderPanel({ reader, results }) {
               display: "grid",
               gap: "14px",
               minWidth: 0,
+              scrollMarginTop: "96px",
             }}
           >
             <div style={{ display: "grid", gap: "6px" }}>
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                Evidence Ledger
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Evidence Ledger
+                </div>
+                <ReaderStatusBadge status={reader.evidenceAudit?.overallStatus === "strong" ? "confirmed" : reader.evidenceAudit?.overallStatus === "usable" ? "review" : "missing"}>
+                  {reader.evidenceAudit?.overallStatus === "strong" ? "Strong evidence" : reader.evidenceAudit?.overallStatus === "usable" ? "Usable evidence" : "Developing evidence"}
+                </ReaderStatusBadge>
               </div>
               <h3 style={{ margin: 0 }}>Why the console is making each major read</h3>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
@@ -422,6 +786,113 @@ export function IulReaderPanel({ reader, results }) {
           </div>
         ) : null}
 
+        {reader.carrierIntelligence ? (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid #e2e8f0",
+              borderRadius: "18px",
+              padding: "20px",
+              display: "grid",
+              gap: "14px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ display: "grid", gap: "6px", maxWidth: "760px" }}>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                    Carrier Intelligence Layer
+                  </div>
+                  <ReaderStatusBadge
+                    status={
+                      reader.carrierIntelligence.supportStatus === "carrier_aware_active"
+                        ? "confirmed"
+                        : reader.carrierIntelligence.supportStatus === "carrier_aware_partial"
+                          ? "review"
+                          : "missing"
+                    }
+                  >
+                    {reader.carrierIntelligence.supportLabel}
+                  </ReaderStatusBadge>
+                </div>
+                <h3 style={{ margin: 0 }}>How much of this read is carrier-aware instead of generic</h3>
+                <div style={{ color: "#0f172a", lineHeight: "1.7", fontWeight: 700 }}>{reader.carrierIntelligence.headline}</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{reader.carrierIntelligence.summary}</div>
+              </div>
+              <div
+                style={{
+                  minWidth: "190px",
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  background: "#ffffff",
+                  border: "1px solid #dbeafe",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Support Level
+                </div>
+                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{reader.carrierIntelligence.score}/100</div>
+                <ReaderStatusBadge
+                  status={
+                    reader.carrierIntelligence.supportStatus === "carrier_aware_active"
+                      ? "confirmed"
+                      : reader.carrierIntelligence.supportStatus === "carrier_aware_partial"
+                        ? "review"
+                        : "missing"
+                  }
+                >
+                  {reader.carrierIntelligence.supportLabel}
+                </ReaderStatusBadge>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+              {reader.carrierIntelligence.facts.map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    padding: "13px 14px",
+                    borderRadius: "14px",
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    display: "grid",
+                    gap: "6px",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ fontWeight: 800, color: "#0f172a", lineHeight: "1.5" }}>{item.value}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.55", fontSize: "13px" }}>{item.note}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px" }}>
+              <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  What Is Helping The Read
+                </div>
+                <div style={{ display: "grid", gap: "6px", color: "#475569", lineHeight: "1.6" }}>
+                  {reader.carrierIntelligence.bullets.map((item) => (
+                    <div key={item}>{item}</div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Fastest Next Lift
+                </div>
+                <div style={{ color: "#0f172a", lineHeight: "1.65", fontWeight: 700 }}>{reader.carrierIntelligence.strongestLift}</div>
+                <div style={{ color: "#475569", lineHeight: "1.6" }}>
+                  This is the fastest additional artifact that would make the read more carrier-aware and less generic.
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {reader.plainEnglishScorecard ? (
           <div
             style={{
@@ -437,7 +908,7 @@ export function IulReaderPanel({ reader, results }) {
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "flex-start" }}>
               <div style={{ minWidth: 0, maxWidth: "760px" }}>
                 <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>
-                  IUL At A Glance
+                  Extended Signal Scorecard
                 </div>
                 <h3 style={{ margin: "8px 0 0 0" }}>One plain-English window for the parts that matter most</h3>
                 <p style={{ margin: "10px 0 0 0", color: "#475569", lineHeight: "1.7" }}>
@@ -468,8 +939,8 @@ export function IulReaderPanel({ reader, results }) {
                 <div style={{ fontSize: "34px", fontWeight: 800, color: "#0f172a" }}>
                   {reader.plainEnglishScorecard.overallScore}/100
                 </div>
-                <ReaderStatusBadge status={reader.plainEnglishScorecard.overallBand === "strong" ? "confirmed" : reader.plainEnglishScorecard.overallBand === "watch" ? "review" : "missing"}>
-                  {reader.plainEnglishScorecard.overallBand === "strong" ? "Strong" : reader.plainEnglishScorecard.overallBand === "watch" ? "Needs Review" : "At Risk"}
+                <ReaderStatusBadge status={bandToReaderStatus(reader.plainEnglishScorecard.overallBand)}>
+                  {bandToLabel(reader.plainEnglishScorecard.overallBand)}
                 </ReaderStatusBadge>
               </div>
             </div>

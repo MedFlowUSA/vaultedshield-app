@@ -32,6 +32,99 @@ function buildReviewQuestion(label, status, answer) {
   };
 }
 
+function formatStatusLabel(value, fallback = "Developing") {
+  if (!value) return fallback;
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatCurrencyValue(value) {
+  if (value === null || value === undefined || value === "") return "Limited";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `$${value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+  return String(value);
+}
+
+function buildVerdictBanner({ verdict, confidenceLabel, illustration, charge, risk, evidenceAudit, results, missingLink }) {
+  const strategy = results.normalizedPolicy?.strategy || {};
+  const loans = results.normalizedPolicy?.loans || {};
+  const checkpointActual = illustration.selectedMetricData?.actualDisplay;
+  const checkpointIllustrated = illustration.selectedMetricData?.illustratedDisplay;
+  const checkpointValue =
+    checkpointActual && checkpointActual !== "Unavailable" && checkpointIllustrated && checkpointIllustrated !== "Unavailable"
+      ? `${checkpointActual} vs ${checkpointIllustrated}`
+      : "Limited";
+  const currentCreditingRate = strategy.crediting_rate?.display_value || null;
+  const currentTerms = [strategy.cap_rate?.display_value, strategy.participation_rate?.display_value, strategy.spread?.display_value]
+    .filter(Boolean)
+    .join(" / ");
+  const tone =
+    verdict === "Healthy"
+      ? {
+          status: "green",
+          label: "Performing Within Expected Range",
+          summary: "Based on the available in-force data, this IUL does not currently show a strong visible drift from its intended path.",
+        }
+      : verdict === "Under Pressure"
+        ? {
+            status: "red",
+            label: "Attention Required",
+            summary: "Based on the available in-force data, this IUL shows enough visible pressure that it should be treated as a review-first case.",
+          }
+        : {
+            status: "yellow",
+            label: "Watch Closely",
+            summary: "Based on the available in-force data, this IUL is readable but still has one or more pressure points that deserve closer review.",
+          };
+
+  return {
+    ...tone,
+    confidenceLabel,
+    missingLink,
+    quickFacts: [
+      {
+        label: "Illustration Pace",
+        value: formatStatusLabel(illustration.status),
+        note: illustration.shortExplanation || illustration.explanation || "Illustration pace is still developing.",
+      },
+      {
+        label: "Current Checkpoint",
+        value: checkpointValue,
+        note: checkpointValue === "Limited" ? "A cleaner current policy-year match is still needed." : `${illustration.selectedMetricLabel || "Current checkpoint"} actual vs illustrated.`,
+      },
+      {
+        label: "Current Crediting Read",
+        value: currentCreditingRate || currentTerms || "Limited",
+        note: currentCreditingRate
+          ? "Latest visible credited rate from the current packet."
+          : currentTerms
+            ? "Current strategy terms are visible even though a direct credited rate is limited."
+            : "Current crediting terms are still limited in the visible packet.",
+      },
+      {
+        label: "Charge Drag",
+        value: charge.totalVisibleCharges !== null && charge.totalVisibleCharges !== undefined ? formatCurrencyValue(charge.totalVisibleCharges) : formatStatusLabel(charge.chargeDragLevel, "Limited"),
+        note: charge.explanation || "Visible charge pressure is still developing.",
+      },
+      {
+        label: "Loan Pressure",
+        value: loans.loan_balance?.display_value || formatStatusLabel(risk.overallRisk, "Limited"),
+        note: risk.explanation || "Loan and lapse pressure are still developing.",
+      },
+      {
+        label: "Evidence Support",
+        value: formatStatusLabel(evidenceAudit?.overallStatus, "Developing"),
+        note: evidenceAudit?.headline || "Evidence support is still developing.",
+      },
+    ],
+  };
+}
+
 export function buildIulPolicyVerdict({
   results = {},
   evidenceAudit = null,
@@ -159,6 +252,17 @@ export function buildIulPolicyVerdict({
     ),
   ];
 
+  const decisionBanner = buildVerdictBanner({
+    verdict,
+    confidenceLabel,
+    illustration,
+    charge,
+    risk,
+    evidenceAudit,
+    results,
+    missingLink,
+  });
+
   return {
     verdict,
     confidenceLabel,
@@ -167,6 +271,7 @@ export function buildIulPolicyVerdict({
     primaryDriver: topPressure?.label || "Evidence quality",
     primaryDriverDetail: topPressure?.explanation || "No single dominant driver is standing out yet.",
     missingLink,
+    decisionBanner,
     pressureStack: pressureStack.slice(0, 5),
     reviewQuestions,
     reviewOrder: (pressureSummary?.checklist?.length ? pressureSummary.checklist : nextSteps).slice(0, 4),

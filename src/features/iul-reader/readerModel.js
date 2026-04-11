@@ -1137,6 +1137,113 @@ function buildUnifiedFocusCards(results = {}) {
   ].filter((card) => card.explanation || card.value !== "Limited");
 }
 
+function buildCarrierIntelligenceView(results = {}, resolvedLive = {}, evidenceAudit = null) {
+  const carrierProfile = results.carrierProfile || null;
+  const productProfile = results.productProfile || null;
+  const strategyReferenceHits = Array.isArray(results.strategyReferenceHits) ? results.strategyReferenceHits : [];
+  const extractedHits = strategyReferenceHits.filter((item) => item?.source === "extracted_packet");
+  const referenceHits = strategyReferenceHits.filter((item) => item?.source === "reference_seed_match");
+  const visibleTerms = [resolvedLive.capRate, resolvedLive.participationRate, resolvedLive.spread, results.normalizedPolicy?.strategy?.crediting_rate?.display_value].filter(Boolean);
+
+  let score = 18;
+  if (carrierProfile) score += 28;
+  if (productProfile) score += 24;
+  if (extractedHits.length > 0) score += Math.min(20, extractedHits.length * 4);
+  if (referenceHits.length > 0) score += Math.min(8, referenceHits.length * 4);
+  if (visibleTerms.length > 0) score += Math.min(12, visibleTerms.length * 4);
+  if (evidenceAudit?.overallStatus === "strong") score += 6;
+  else if (evidenceAudit?.overallStatus === "usable") score += 3;
+  score = Math.max(0, Math.min(100, score));
+
+  const supportStatus =
+    score >= 78
+      ? "carrier_aware_active"
+      : score >= 55
+        ? "carrier_aware_partial"
+        : "generic_leaning";
+
+  const headline =
+    supportStatus === "carrier_aware_active"
+      ? "Carrier-aware intelligence is materially helping this IUL read."
+      : supportStatus === "carrier_aware_partial"
+        ? "Carrier-aware intelligence is helping, but parts of this read still lean on generic interpretation."
+        : "This read is still leaning mostly on generic interpretation rather than stronger carrier-specific support.";
+
+  const summary =
+    supportStatus === "carrier_aware_active"
+      ? "Carrier profile, product family, and strategy references are visible enough that the console can interpret this policy with stronger product-specific context."
+      : supportStatus === "carrier_aware_partial"
+        ? "Some carrier or product hints are active, but one or more of the strongest policy-specific support layers are still incomplete."
+        : "The current packet can still be reviewed, but it is not yet benefiting from enough carrier- or product-specific support to call this a stronger specialized read.";
+
+  const strongestLift =
+    !carrierProfile
+      ? "Add a clearer carrier-branded annual statement cover page or policy summary."
+      : !productProfile
+        ? "Add the illustration or policy page that shows the exact product line."
+        : visibleTerms.length < 2
+          ? "Add allocation or crediting pages that show cap, participation, spread, or credited rate."
+          : "Add more dated statements if you want deeper carrier-specific trend confidence rather than better identity support.";
+
+  const bullets = [
+    carrierProfile
+      ? `${carrierProfile.display_name || carrierProfile.name} carrier recognition is active.`
+      : "Carrier recognition is still generic.",
+    productProfile
+      ? `${productProfile.display_name || productProfile.key} product-family support is active.`
+      : "Product-family interpretation is still generic.",
+    extractedHits.length > 0
+      ? `${extractedHits.length} carrier/product-specific strategy term${extractedHits.length === 1 ? "" : "s"} were matched directly from the packet.`
+      : "No strong carrier/product strategy terms were matched directly from the packet yet.",
+    referenceHits.length > 0
+      ? `${referenceHits.length} strategy reference match${referenceHits.length === 1 ? "" : "es"} reinforced the read.`
+      : null,
+  ].filter(Boolean);
+
+  return {
+    score,
+    supportStatus,
+    supportLabel:
+      supportStatus === "carrier_aware_active"
+        ? "Carrier-Aware Active"
+        : supportStatus === "carrier_aware_partial"
+          ? "Carrier-Aware Partial"
+          : "Generic-Leaning",
+    headline,
+    summary,
+    strongestLift,
+    bullets,
+    facts: [
+      {
+        label: "Carrier Profile",
+        value: carrierProfile?.display_name || carrierProfile?.name || "Limited",
+        note: carrierProfile
+          ? "Carrier-specific parsing patterns are helping this review."
+          : "The packet is still leaning on generic carrier detection.",
+      },
+      {
+        label: "Product Family",
+        value: productProfile?.display_name || productProfile?.key || "Limited",
+        note: productProfile
+          ? "Product-specific strategy behavior is better grounded."
+          : "Product-family behavior is still inferred more generically.",
+      },
+      {
+        label: "Strategy Matches",
+        value: strategyReferenceHits.length ? String(strategyReferenceHits.length) : "0",
+        note: strategyReferenceHits.length
+          ? "Matched strategy references are reinforcing visible account terms."
+          : "No reference hits are reinforcing strategy interpretation yet.",
+      },
+      {
+        label: "Visible Product Terms",
+        value: visibleTerms.length ? visibleTerms.join(" / ") : "Limited",
+        note: "Cap, participation, spread, and credited-rate visibility make the read more carrier-specific.",
+      },
+    ],
+  };
+}
+
 export function buildIulReaderModel(results) {
   const statementResults = Array.isArray(results.statementResults) ? results.statementResults : [];
   const baselineSummary = results.illustrationSummary || {};
@@ -1290,6 +1397,7 @@ export function buildIulReaderModel(results) {
     { ...results, optimizationAnalysis },
     evidenceAudit
   );
+  const carrierIntelligence = buildCarrierIntelligenceView(results, resolvedLive, evidenceAudit);
 
   const readerTables = [
     buildUniformTable("Values And Funding", "The main numbers most clients expect in an initial policy read.", [
@@ -1448,6 +1556,7 @@ export function buildIulReaderModel(results) {
     evidenceLedger,
     projectionSummary: benchmarkView.projectionSummary,
     projectionView,
+    carrierIntelligence,
     classification,
     evidenceAudit,
     pressureSummary,

@@ -3,6 +3,7 @@ import {
   answerHouseholdQuestion,
   buildHouseholdReviewReport,
 } from "../lib/domain/platformIntelligence";
+import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import {
   buildReviewAssignmentOptions,
   buildHouseholdReviewDigest,
@@ -15,6 +16,7 @@ import {
 import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
+import { useDemoMode } from "../lib/demo/DemoModeContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
 import {
@@ -44,6 +46,7 @@ import {
   buildHouseholdPriorityEngine,
   buildHouseholdScorecard,
 } from "../lib/domain/platformIntelligence/householdOperatingSystem";
+import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
@@ -579,6 +582,7 @@ function HouseholdReportView({ report, onPrint, isCompact = false }) {
 
 export default function DashboardPage({ onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
+  const { isDemoMode, startDemo } = useDemoMode();
   const {
     householdState,
     counts,
@@ -625,6 +629,10 @@ export default function DashboardPage({ onNavigate }) {
   const propertySummary = useMemo(
     () => intelligenceBundle?.propertyStackSummary || {},
     [intelligenceBundle?.propertyStackSummary]
+  );
+  const operatingGraphSummary = useMemo(
+    () => buildPropertyOperatingGraphSummary(intelligenceBundle || {}),
+    [intelligenceBundle]
   );
   const continuityPercent = Math.max(
     0,
@@ -1284,6 +1292,7 @@ export default function DashboardPage({ onNavigate }) {
           </section>
 
           <section
+            data-demo-id="dashboard-demo-entry"
             style={{
               padding: sectionPadding,
               borderRadius: sectionRadius,
@@ -1300,6 +1309,14 @@ export default function DashboardPage({ onNavigate }) {
               <div style={{ fontSize: "24px", fontWeight: 800 }}>A strong first walkthrough</div>
               <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
                 If you want the dashboard to come alive quickly, this is the cleanest setup order for a household demo.
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", paddingTop: "6px" }}>
+                <button type="button" onClick={() => startDemo()} style={buttonStyle(true)}>
+                  {isDemoMode ? "Restart Demo" : "Start Demo"}
+                </button>
+                <button type="button" onClick={() => onNavigate?.("/insurance")} style={buttonStyle(false)}>
+                  Open Insurance Workspace
+                </button>
               </div>
             </div>
 
@@ -1826,6 +1843,7 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          data-demo-id="dashboard-risk-map"
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -2034,6 +2052,31 @@ export default function DashboardPage({ onNavigate }) {
               </button>
             </div>
           </div>
+        </section>
+
+        <section
+          style={{
+            padding: sectionPadding,
+            borderRadius: sectionRadius,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.05)",
+            display: "grid",
+            gap: "18px",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Operating Graph</div>
+            <div style={{ color: "#94a3b8", lineHeight: "1.8", maxWidth: "900px" }}>
+              VaultedShield now surfaces how well property, financing, protection, documents, and portal continuity connect before you drill into a single module.
+            </div>
+          </div>
+
+          <OperatingGraphSummaryCards
+            cards={operatingGraphSummary.cards}
+            highlights={operatingGraphSummary.highlights.slice(0, 4)}
+            onNavigate={onNavigate}
+            theme="dark"
+          />
         </section>
 
         {showHouseholdReport ? (

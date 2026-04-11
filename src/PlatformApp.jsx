@@ -1,15 +1,18 @@
 import { Component, Suspense, lazy, useEffect, useState } from "react";
+import DemoOverlay from "./components/demo/DemoOverlay";
 import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
 import TopNav from "./components/layout/TopNav";
 import { hasTierAccess, useAccessPortal } from "./lib/auth/accessPortal";
 import { clearLegacyHouseholdReviewStorage } from "./lib/domain/platformIntelligence/reviewWorkflowState";
+import { DemoModeProvider } from "./lib/demo/DemoModeContext";
 import { PlatformShellDataProvider } from "./lib/intelligence/PlatformShellDataContext";
 import { getRouteByPath } from "./lib/navigation/routes";
 import { useHashRoute } from "./lib/navigation/useHashRoute";
 import useResponsiveLayout from "./lib/ui/useResponsiveLayout";
 
 const PricingPage = lazy(() => import("./pages/PricingPage"));
+const AccountCenterPage = lazy(() => import("./pages/AccountCenterPage"));
 const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage"));
 const AuthLoginPage = lazy(() => import("./pages/AuthLoginPage"));
 const AuthSignupPage = lazy(() => import("./pages/AuthSignupPage"));
@@ -223,6 +226,8 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <AuthSignupPage onNavigate={navigate} accessPortal={accessPortal} returnPath={returnPath} />;
     case "/pricing":
       return <PricingPage onNavigate={navigate} accessPortal={accessPortal} returnPath={returnPath} />;
+    case "/account":
+      return <AccountCenterPage onNavigate={navigate} accessPortal={accessPortal} />;
     case "/privacy-policy":
       return <PrivacyPolicyPage />;
     case "/terms-of-service":
@@ -274,7 +279,7 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
     case "/portals":
       return <PortalHubPage onNavigate={navigate} />;
     case "/reports":
-      return <ReportsPage />;
+      return <ReportsPage onNavigate={navigate} />;
     case "/contacts":
       return <ContactsPage />;
     case "/settings":
@@ -395,86 +400,89 @@ export default function PlatformApp() {
 
   return (
     <PlatformShellDataProvider accessSession={accessPortal.session} authReady={accessPortal.authReady}>
-      <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative", overflowX: "clip" }}>
-        {useCompactShell && sidebarOpen ? (
-          <button
-            type="button"
-            aria-label="Close navigation overlay"
-            onClick={() => setSidebarOpen(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              border: "none",
-              background: "rgba(15, 23, 42, 0.42)",
-              cursor: "pointer",
-              zIndex: 70,
-              padding: 0,
-              opacity: 1,
-              transition: "opacity 220ms ease",
-              touchAction: "none",
-            }}
-          />
-        ) : null}
-        {useCompactShell ? (
-          <Sidebar
-            currentPath={pathname}
-            onNavigate={navigate}
-            currentTier={accessPortal.currentTier}
-            currentPlanLabel={accessPortal.currentPlan.label}
-            onUpgrade={handleOpenPricing}
-            isCompact
-            isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-          />
-        ) : null}
-        <div style={{ display: "flex", minHeight: "100vh" }}>
-          {!useCompactShell ? (
+      <DemoModeProvider pathname={resolvedPathname} navigate={navigate}>
+        <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative", overflowX: "clip" }}>
+          {useCompactShell && sidebarOpen ? (
+            <button
+              type="button"
+              aria-label="Close navigation overlay"
+              onClick={() => setSidebarOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                border: "none",
+                background: "rgba(15, 23, 42, 0.42)",
+                cursor: "pointer",
+                zIndex: 70,
+                padding: 0,
+                opacity: 1,
+                transition: "opacity 220ms ease",
+                touchAction: "none",
+              }}
+            />
+          ) : null}
+          {useCompactShell ? (
             <Sidebar
               currentPath={pathname}
               onNavigate={navigate}
               currentTier={accessPortal.currentTier}
               currentPlanLabel={accessPortal.currentPlan.label}
               onUpgrade={handleOpenPricing}
-              isCompact={false}
-              isOpen
+              isCompact
+              isOpen={sidebarOpen}
               onClose={() => setSidebarOpen(false)}
             />
           ) : null}
-          <ContentContainer>
-            <TopNav
-              title={route.title}
-              subtitle="Modular family continuity and asset-intelligence shell"
-              onNavigate={navigate}
-              onUpgrade={handleOpenPricing}
-              currentPlanLabel={accessPortal.currentPlan.label}
-              householdName={accessPortal.session.householdName || "Working Household"}
-              onSignOut={() => {
-                accessPortal.signOut();
-                navigate("/login");
-              }}
-              showSidebarToggle={useCompactShell}
-              onToggleSidebar={() => setSidebarOpen((current) => !current)}
-              isCompact={isMobile}
-            />
-            <div
-              style={{
-                padding: isMobile
-                  ? "16px 16px max(24px, calc(env(safe-area-inset-bottom, 0px) + 12px))"
-                  : isTablet
-                    ? "18px 16px 24px"
-                    : "28px",
-                width: "100%",
-                maxWidth: "100%",
-                overflowX: "clip",
-              }}
-            >
-              <RouteErrorBoundary resetKey={resolvedPathname}>
-                {renderLazyRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
-              </RouteErrorBoundary>
-            </div>
-          </ContentContainer>
+          <div style={{ display: "flex", minHeight: "100vh" }}>
+            {!useCompactShell ? (
+              <Sidebar
+                currentPath={pathname}
+                onNavigate={navigate}
+                currentTier={accessPortal.currentTier}
+                currentPlanLabel={accessPortal.currentPlan.label}
+                onUpgrade={handleOpenPricing}
+                isCompact={false}
+                isOpen
+                onClose={() => setSidebarOpen(false)}
+              />
+            ) : null}
+            <ContentContainer>
+              <TopNav
+                title={route.title}
+                subtitle="Modular family continuity and asset-intelligence shell"
+                onNavigate={navigate}
+                onUpgrade={handleOpenPricing}
+                currentPlanLabel={accessPortal.currentPlan.label}
+                householdName={accessPortal.session.householdName || "Working Household"}
+                onSignOut={() => {
+                  accessPortal.signOut();
+                  navigate("/login");
+                }}
+                showSidebarToggle={useCompactShell}
+                onToggleSidebar={() => setSidebarOpen((current) => !current)}
+                isCompact={isMobile}
+              />
+              <div
+                style={{
+                  padding: isMobile
+                    ? "16px 16px max(24px, calc(env(safe-area-inset-bottom, 0px) + 12px))"
+                    : isTablet
+                      ? "18px 16px 24px"
+                      : "28px",
+                  width: "100%",
+                  maxWidth: "100%",
+                  overflowX: "clip",
+                }}
+              >
+                <RouteErrorBoundary resetKey={resolvedPathname}>
+                  {renderLazyRoute(resolvedPathname, navigate, accessPortal, resolvedPricingReturnPath)}
+                </RouteErrorBoundary>
+              </div>
+            </ContentContainer>
+          </div>
+          <DemoOverlay />
         </div>
-      </div>
+      </DemoModeProvider>
     </PlatformShellDataProvider>
   );
 }

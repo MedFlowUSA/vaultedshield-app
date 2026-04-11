@@ -58,7 +58,13 @@ function addEvidence(evidence, label, value, source = "") {
 }
 
 function getComparisonHealth(context = {}) {
-  return normalizeHealthLabel(context?.policyAiSummary?.status || context?.ranking?.status || context?.generalLifeScorecard?.headline || "");
+  return normalizeHealthLabel(
+    context?.comparisonRow?.policy_signals?.policy_signal ||
+      context?.policyAiSummary?.status ||
+      context?.ranking?.status ||
+      context?.generalLifeScorecard?.headline ||
+      ""
+  );
 }
 
 function buildSharedMissingData(context = {}) {
@@ -76,6 +82,7 @@ function buildGenericSummary(context = {}) {
   }
 
   const evidence = [];
+  addEvidence(evidence, "Policy Signal", formatText(context?.comparisonRow?.policy_signals?.policy_signal?.replace(/_/g, " ")), "Policy signals engine");
   addEvidence(evidence, "Policy Health Snapshot", getComparisonHealth(context), "Policy health interpretation");
   addEvidence(evidence, "Current Accumulation Value", formatText(context?.comparisonRow?.cash_value || context?.lifePolicy?.values?.cashValue), "Latest statement or parsed values");
   addEvidence(evidence, "Death Benefit", formatText(context?.comparisonRow?.death_benefit || context?.lifePolicy?.coverage?.deathBenefit), "Policy overview");
@@ -128,6 +135,7 @@ function buildRatingExplanation(context = {}) {
   const missingData = buildSharedMissingData(context);
   const evidence = [];
   const health = getComparisonHealth(context);
+  addEvidence(evidence, "Policy Signal", formatText(context?.comparisonRow?.policy_signals?.policy_signal?.replace(/_/g, " ")), "Policy signals engine");
   addEvidence(evidence, "Policy Health Snapshot", health, "Policy scoring");
   addEvidence(evidence, "Funding Pattern", formatText(context?.basicPolicyAnalysis?.funding_pattern), "Funding read");
   addEvidence(evidence, "Loan Balance", formatText(context?.comparisonRow?.loan_balance || context?.lifePolicy?.loans?.loanBalance), "Loan read");
@@ -135,6 +143,7 @@ function buildRatingExplanation(context = {}) {
   addEvidence(evidence, "Illustration Comparison", formatText(context?.iulV2?.illustrationComparison?.status?.replace(/_/g, " ")), "Illustration read");
 
   const pieces = [
+    context?.comparisonRow?.policy_signals?.primary_reason,
     context?.policyAiSummary?.summary,
     context?.policyInterpretation?.confidence_summary,
   ].filter(Boolean);
@@ -185,10 +194,27 @@ function buildChargeAnalysis(context = {}) {
   const chargeSummary = context?.chargeSummary || {};
   const missingData = buildSharedMissingData(context);
   const evidence = [];
-  const visibleCoi = chargeAnalysis?.totalVisibleCharges ?? chargeSummary?.total_coi ?? null;
+  const visibleCoi =
+    chargeAnalysis?.totalVisibleCharges ??
+    chargeSummary?.total_coi ??
+    toNumber(context?.comparisonRow?.total_coi) ??
+    toNumber(context?.comparisonRow?.total_visible_policy_charges) ??
+    toNumber(context?.comparisonRow?.total_visible_charges) ??
+    null;
 
-  addEvidence(evidence, "Visible COI", formatCurrency(chargeSummary?.total_coi ?? null), "Charge extraction");
-  addEvidence(evidence, "Visible Charges", formatCurrency(chargeAnalysis?.totalVisibleCharges ?? chargeSummary?.total_visible_policy_charges ?? null), "Charge extraction");
+  addEvidence(evidence, "Visible COI", formatCurrency(chargeSummary?.total_coi ?? toNumber(context?.comparisonRow?.total_coi) ?? null), "Charge extraction");
+  addEvidence(
+    evidence,
+    "Visible Charges",
+    formatCurrency(
+      chargeAnalysis?.totalVisibleCharges ??
+        chargeSummary?.total_visible_policy_charges ??
+        toNumber(context?.comparisonRow?.total_visible_policy_charges) ??
+        toNumber(context?.comparisonRow?.total_visible_charges) ??
+        null
+    ),
+    "Charge extraction"
+  );
   addEvidence(evidence, "Charge Drag Read", formatText(chargeAnalysis?.chargeDragLevel || context?.comparisonRow?.charge_visibility_status), "Charge interpretation");
   addEvidence(evidence, "Charge Trend", formatText(chargeAnalysis?.trend), "Charge interpretation");
   addEvidence(evidence, "Charge Visibility", formatText(context?.comparisonRow?.charge_visibility_status), "Charge support read");
@@ -200,7 +226,7 @@ function buildChargeAnalysis(context = {}) {
   const answer =
     chargeAnalysis?.explanation ||
     context?.policyInterpretation?.charge_summary_explanation ||
-    "Based on the available data, charges appear to be part of the policy story, but visibility is still only partial.";
+    `Based on the available data, visible charges total ${formatCurrency(visibleCoi)}. Charges appear to be part of the policy story, but the read should be paired with cash-value growth, loans, and statement continuity.`;
 
   return {
     answer,
@@ -243,6 +269,37 @@ function buildLoanRisk(context = {}) {
     answer,
     evidence,
     disclaimers: ["Loan pressure should be reviewed in context with cash value, charges, and statement history."],
+    missingData,
+  };
+}
+
+function buildRiskSummary(context = {}) {
+  const signal = context?.comparisonRow?.policy_signals || {};
+  const riskFlags = signal.risk_flags || [];
+  const monitorFlags = signal.monitor_flags || [];
+  const missingData = buildSharedMissingData(context);
+  const evidence = [];
+  const loanBalance = toNumber(context?.comparisonRow?.loan_balance) ?? toNumber(context?.lifePolicy?.loans?.loanBalance);
+  const cashValue = toNumber(context?.comparisonRow?.cash_value);
+  const loanRatio = loanBalance !== null && cashValue !== null && cashValue > 0 ? loanBalance / cashValue : null;
+
+  addEvidence(evidence, "Policy Signal", formatText(signal.policy_signal?.replace(/_/g, " ")), "Policy signals engine");
+  addEvidence(evidence, "Primary Signal Reason", formatText(signal.primary_reason), "Policy signals engine");
+  addEvidence(evidence, "Signal Confidence", formatText(signal.confidence), "Policy signals engine");
+  addEvidence(evidence, "Loan Balance", loanBalance === null ? null : formatCurrency(loanBalance), "Loan read");
+  addEvidence(evidence, "Loan-to-Value Read", loanRatio === null ? null : `${Math.round(loanRatio * 100)}%`, "Loan pressure check");
+  addEvidence(evidence, "Charge Visibility", formatText(context?.comparisonRow?.charge_visibility_status), "Charge support read");
+
+  const topRisks = dedupe([...riskFlags, ...monitorFlags]).slice(0, 4);
+  const answer =
+    topRisks.length > 0
+      ? `The main visible risk signals are: ${topRisks.join(" ")}`
+      : "Based on the available data, no dominant risk flag is standing out right now. The read should still be checked against evidence quality, charges, loans, and statement continuity.";
+
+  return {
+    answer,
+    evidence,
+    disclaimers: ["This is an evidence-based risk summary from the current file, not financial advice."],
     missingData,
   };
 }
@@ -357,6 +414,8 @@ export function buildPolicyAiResponse({
       return buildChargeAnalysis(context);
     case "loan_risk":
       return buildLoanRisk(context);
+    case "risk_summary":
+      return buildRiskSummary(context);
     case "missing_data":
       return buildMissingData(context);
     case "policy_review_priority":

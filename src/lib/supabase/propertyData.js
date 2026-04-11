@@ -6,6 +6,9 @@ import {
   listPropertyDocumentClasses as listPropertyDocumentClassesFromDomain,
 } from "../domain/property";
 import {
+  listAssetLinksForAsset,
+} from "./assetLinks";
+import {
   getPropertyStackBundle,
   getPropertyStackAnalytics,
   getPropertyStackLinkageStatus,
@@ -20,6 +23,7 @@ import {
   listMortgagePropertyLinks,
   listPropertyHomeownersLinks,
   listPropertyMortgageLinks,
+  syncPropertyAssetLinkMirror,
 } from "./propertyStackLinks";
 import {
   createPropertyValuation,
@@ -485,6 +489,10 @@ export async function getPropertyBundle(propertyId, scopeOverride = null) {
     };
   }
 
+  const propertyAssetLinksResult = propertyResult.data?.asset_id
+    ? await listAssetLinksForAsset(propertyResult.data.asset_id, scopeOverride)
+    : { data: [], error: null };
+
   const latestValuationId = latestValuationResult.data?.id || null;
   const latestValuationCompsResult = latestValuationId
     ? await listPropertyComps(propertyId, latestValuationId, scopeOverride)
@@ -504,6 +512,7 @@ export async function getPropertyBundle(propertyId, scopeOverride = null) {
     propertyAnalyticsResult.error ||
     stackResult.error ||
     propertyStackAnalyticsResult.error ||
+    propertyAssetLinksResult.error ||
     latestValuationResult.error ||
     valuationHistoryResult.error ||
     latestValuationCompsResult.error ||
@@ -534,6 +543,7 @@ export async function getPropertyBundle(propertyId, scopeOverride = null) {
           propertyAnalytics: propertyAnalyticsResult.data || [],
           linkedMortgages: stackResult.data?.linkedMortgages || [],
           linkedHomeownersPolicies: stackResult.data?.linkedHomeownersPolicies || [],
+          propertyAssetLinks: propertyAssetLinksResult.data || [],
           latestPropertyValuation: latestValuationResult.data || null,
           propertyValuationHistory: valuationHistoryResult.data || [],
           propertyComps: latestValuationCompsResult.data || [],
@@ -716,4 +726,6 @@ export {
   updatePropertyHomeownersLink,
   unlinkMortgageFromProperty,
   unlinkHomeownersFromProperty,
+  syncPropertyAssetLinkMirror,
+  listAssetLinksForAsset,
 };

@@ -4,7 +4,6 @@ import { createEmptyNormalizedPolicy } from "./policySchema.js";
 import { resolveProductProfile } from "./products.js";
 import { buildStrategyReferenceHits } from "./strategies.js";
 import {
-  getBestValue,
   getStructuredExtractionSummary,
   getStructuredFlags,
   getStructuredQuality,
@@ -17,6 +16,7 @@ import {
   buildProtectionComparisonNarrative,
   detectInsuranceGaps,
 } from "./insurance/insuranceIntelligence.js";
+import { buildPolicySignals } from "./insurance/policySignalsEngine.js";
 
 function hasValue(field) {
   return Boolean(field && !field.missing && field.display_value && field.display_value !== "Not found");
@@ -947,10 +947,19 @@ export function buildPolicyComparisonSummary({ policyId = null, normalizedPolicy
     },
   };
 
+  const policySignals = buildPolicySignals({
+    normalizedPolicy,
+    normalizedAnalytics,
+    comparisonSummary: summary,
+  });
+
   const continuity = buildPolicyContinuityScore(summary, chargeSummary, missingFields);
 
   return {
     ...summary,
+    policy_signals: policySignals,
+    policy_signal: policySignals.policy_signal,
+    policy_signal_reasons: policySignals.signal_reasons,
     continuity_score: continuity.score,
     continuity_status: continuity.status,
     continuity_explanation: continuity.explanation,
@@ -966,57 +975,70 @@ export function buildPolicyComparisonSummary({ policyId = null, normalizedPolicy
 }
 
 export function buildVaultedPolicyComparisonRows(policies = []) {
-  return policies.map((policy) => ({
-    policy_id: policy.policy_id || null,
-    carrier: policy.carrier_name ?? null,
-    product: policy.product_name ?? null,
-    owner_name: policy.owner_name ?? null,
-    insured_name: policy.insured_name ?? null,
-    trustee_name: policy.trustee_name ?? null,
-    ownership_structure: policy.ownership_structure ?? null,
-    primary_beneficiary_name: policy.primary_beneficiary_name ?? null,
-    contingent_beneficiary_name: policy.contingent_beneficiary_name ?? null,
-    beneficiary_status: policy.beneficiary_status ?? null,
-    issue_date: policy.issue_date ?? null,
-    death_benefit: policy.death_benefit ?? null,
-    premium: policy.planned_premium ?? null,
-    annual_target_premium: policy.annual_target_premium ?? null,
-    account_value: policy.accumulation_value ?? null,
-    cash_value: policy.cash_value ?? null,
-    surrender_value: policy.cash_surrender_value ?? null,
-    loan_balance: policy.loan_balance ?? null,
-    total_coi: policy.total_coi ?? null,
-    total_visible_charges: policy.total_visible_policy_charges ?? null,
-    coi_ratio: policy.coi_ratio ?? null,
-    charge_drag_ratio: policy.charge_drag_ratio ?? null,
-    primary_strategy: policy.primary_index_strategy ?? null,
-    cap_rate: policy.cap_rate ?? null,
-    participation_rate: policy.participation_rate ?? null,
-    spread: policy.spread ?? null,
-    strategy_visibility: policy.strategy_visibility_status || "limited",
-    policy_health_score: policy.policy_health_score ?? null,
-    policy_health_status: policy.policy_health_status || "limited",
-    data_completeness_status: policy.data_completeness_status || "basic",
-    latest_statement_date: policy.latest_statement_date ?? null,
-    latest_statement_date_source: policy.comparison_debug?.latest_statement_date_source || "missing",
-    coi_source_kind: policy.comparison_debug?.coi_source_kind || "fallback",
-    coi_confidence: policy.comparison_debug?.coi_confidence || "weak",
-    charge_visibility_status: policy.comparison_debug?.charge_visibility_status || "limited",
-    structured_data_present: Boolean(policy.comparison_debug?.structured_data_present),
-    parser_version: policy.comparison_debug?.parser_version || null,
-    structured_quality_summary: policy.comparison_debug?.structured_quality_summary || null,
-    structured_strategy_used: Boolean(policy.comparison_debug?.structured_strategy_used),
-    fallback_used: Boolean(policy.comparison_debug?.fallback_used),
-    ratio_inputs: policy.comparison_debug?.ratio_inputs || {},
-    ratio_omissions: policy.comparison_debug?.ratio_omissions || [],
-    missing_fields: policy.missing_fields || [],
-    continuity_score: policy.continuity_score ?? null,
-    continuity_status: policy.continuity_status ?? null,
-    continuity_explanation: policy.continuity_explanation ?? "",
-    continuity_inputs: policy.comparison_debug?.continuity_inputs || {},
-    continuity_penalties: policy.comparison_debug?.continuity_penalties || [],
-    raw_comparison_summary: policy,
-  }));
+  return policies.map((policy) => {
+    const row = {
+      policy_id: policy.policy_id || null,
+      carrier: policy.carrier_name ?? null,
+      product: policy.product_name ?? null,
+      policy_type: policy.policy_type ?? null,
+      owner_name: policy.owner_name ?? null,
+      insured_name: policy.insured_name ?? null,
+      trustee_name: policy.trustee_name ?? null,
+      ownership_structure: policy.ownership_structure ?? null,
+      primary_beneficiary_name: policy.primary_beneficiary_name ?? null,
+      contingent_beneficiary_name: policy.contingent_beneficiary_name ?? null,
+      beneficiary_status: policy.beneficiary_status ?? null,
+      issue_date: policy.issue_date ?? null,
+      death_benefit: policy.death_benefit ?? null,
+      premium: policy.planned_premium ?? null,
+      annual_target_premium: policy.annual_target_premium ?? null,
+      account_value: policy.accumulation_value ?? null,
+      cash_value: policy.cash_value ?? null,
+      surrender_value: policy.cash_surrender_value ?? null,
+      loan_balance: policy.loan_balance ?? null,
+      total_coi: policy.total_coi ?? null,
+      total_visible_charges: policy.total_visible_policy_charges ?? null,
+      coi_ratio: policy.coi_ratio ?? null,
+      charge_drag_ratio: policy.charge_drag_ratio ?? null,
+      primary_strategy: policy.primary_index_strategy ?? null,
+      cap_rate: policy.cap_rate ?? null,
+      participation_rate: policy.participation_rate ?? null,
+      spread: policy.spread ?? null,
+      strategy_visibility: policy.strategy_visibility_status || "limited",
+      policy_health_score: policy.policy_health_score ?? null,
+      policy_health_status: policy.policy_health_status || "limited",
+      data_completeness_status: policy.data_completeness_status || "basic",
+      latest_statement_date: policy.latest_statement_date ?? null,
+      latest_statement_date_source: policy.comparison_debug?.latest_statement_date_source || "missing",
+      coi_source_kind: policy.comparison_debug?.coi_source_kind || "fallback",
+      coi_confidence: policy.comparison_debug?.coi_confidence || "weak",
+      charge_visibility_status: policy.comparison_debug?.charge_visibility_status || "limited",
+      structured_data_present: Boolean(policy.comparison_debug?.structured_data_present),
+      parser_version: policy.comparison_debug?.parser_version || null,
+      structured_quality_summary: policy.comparison_debug?.structured_quality_summary || null,
+      structured_strategy_used: Boolean(policy.comparison_debug?.structured_strategy_used),
+      fallback_used: Boolean(policy.comparison_debug?.fallback_used),
+      ratio_inputs: policy.comparison_debug?.ratio_inputs || {},
+      ratio_omissions: policy.comparison_debug?.ratio_omissions || [],
+      carrier_profile: policy.carrier_profile || null,
+      product_profile: policy.product_profile || null,
+      strategy_reference_hits: policy.strategy_reference_hits || [],
+      missing_fields: policy.missing_fields || [],
+      continuity_score: policy.continuity_score ?? null,
+      continuity_status: policy.continuity_status ?? null,
+      continuity_explanation: policy.continuity_explanation ?? "",
+      continuity_inputs: policy.comparison_debug?.continuity_inputs || {},
+      continuity_penalties: policy.comparison_debug?.continuity_penalties || [],
+      raw_comparison_summary: policy,
+    };
+    const policySignals = policy.policy_signals || buildPolicySignals({ comparisonSummary: row });
+    return {
+      ...row,
+      policy_signals: policySignals,
+      policy_signal: policySignals.policy_signal,
+      policy_signal_reasons: policySignals.signal_reasons,
+    };
+  });
 }
 
 export function buildVaultedPolicyRank(row) {
@@ -1677,7 +1699,7 @@ function buildAssistantFollowups(intent = "general_policy_summary") {
   return (followupsByIntent[intent] || followupsByIntent.general_policy_summary).slice(0, 4);
 }
 
-function buildPolicyAssistantActions(intent = "general_policy_summary", { policyId = "", comparisonSummary = null } = {}) {
+function buildPolicyAssistantActions(intent = "general_policy_summary", { policyId = "" } = {}) {
   const actions = [];
 
   if (intent === "comparison_request") {
@@ -1952,7 +1974,6 @@ export function answerPolicyQuestion({
     followup_prompts: buildAssistantFollowups(classification.intent),
     actions: buildPolicyAssistantActions(classification.intent, {
       policyId,
-      comparisonSummary: safeComparisonSummary,
     }),
     debug: {
       classified_intent: classification,
@@ -2633,6 +2654,7 @@ export function buildInsurancePortfolioBrief(rows = []) {
     .map((row) => ({
       policy_id: row.policy_id || null,
       product: row.product || "Unnamed policy",
+      policy_type: row.policy_type || null,
       carrier: row.carrier || "Carrier unavailable",
       status: row.interpretation.label,
       continuity_score: row.ranking.score,
@@ -2669,6 +2691,139 @@ export function buildInsurancePortfolioBrief(rows = []) {
   };
 }
 
+function buildPortfolioTopPolicySection(policy = null) {
+  if (!policy) {
+    return {
+      id: "top_policy_verdict",
+      title: "Top Policy Verdict",
+      kind: "summary",
+      summary: "A top policy verdict will appear here once at least one policy is available for review.",
+    };
+  }
+
+  const status = policy.interpretation?.label || policy.ranking?.status || "Needs Review";
+  const reasons = [
+    policy.ranking?.statusExplanation,
+    policy.interpretation?.bottom_line_summary,
+  ].filter(Boolean);
+  const evidenceGaps = Array.isArray(policy.missing_fields) ? policy.missing_fields : [];
+
+  return {
+    id: "top_policy_verdict",
+    title: "Top Policy Verdict",
+    kind: "bullets",
+    summary:
+      `${policy.product || "Unnamed policy"} with ${policy.carrier || "Carrier unavailable"} currently reads as ${status}. ` +
+      (reasons[0] || "The current file provides a usable review starting point, but the strongest conclusion still depends on evidence quality."),
+    items: [
+      { label: "Top Policy", value: policy.product || "Unnamed policy" },
+      { label: "Carrier", value: policy.carrier || "Carrier unavailable" },
+      { label: "Current Read", value: status },
+      { label: "Continuity Score", value: policy.ranking?.score ?? "-" },
+      { label: "Latest Statement", value: policy.latest_statement_date || "-" },
+      { label: "Cash Value", value: displayReportValue(policy.cash_value) },
+      { label: "Total COI", value: displayReportValue(policy.total_coi) },
+      { label: "COI Confidence", value: displayReportValue(policy.coi_confidence) },
+    ],
+    bullets: [
+      reasons[1] && reasons[1] !== reasons[0] ? reasons[1] : null,
+      policy.latest_statement_date
+        ? `Latest visible statement support is anchored to ${policy.latest_statement_date}.`
+        : "A latest visible statement date is still missing from the current packet.",
+      evidenceGaps.length > 0
+        ? `Strongest remaining evidence gaps: ${evidenceGaps.slice(0, 3).join(", ")}.`
+        : "No critical missing-field blocker is standing out above the others.",
+    ].filter(Boolean),
+  };
+}
+
+function buildPortfolioAdvisorHandoffSection(brief, topPolicy = null) {
+  const bullets = [
+    topPolicy
+      ? `${topPolicy.product || "The top policy"} should lead the conversation because it carries the strongest current combination of continuity, visibility, and review relevance.`
+      : null,
+    brief.focus_areas?.[0] || null,
+    brief.focus_areas?.[1] || null,
+    brief.priority_policies?.[0]
+      ? `${brief.priority_policies[0].product || "Priority policy"} remains first in the review queue because ${String(brief.priority_policies[0].review_reason || "").replace(/^\w/, (c) => c.toLowerCase())}`
+      : null,
+  ].filter(Boolean);
+
+  return {
+    id: "advisor_handoff",
+    title: "Advisor Handoff Read",
+    kind: "bullets",
+    summary:
+      topPolicy
+        ? "This report is meant to hand an advisor, operator, or executive directly into the strongest current policy discussion instead of making them interpret the portfolio from raw rows."
+        : "This report will become more actionable once at least one policy is available for review.",
+    bullets,
+  };
+}
+
+function buildPortfolioCarrierSupportSection(policy = null) {
+  if (!policy) {
+    return {
+      id: "carrier_support",
+      title: "Carrier Intelligence Support",
+      kind: "summary",
+      summary: "Carrier intelligence support will appear once a policy is available for review.",
+    };
+  }
+
+  const carrierProfile = policy.carrier_profile || policy.carrierProfile || null;
+  const productProfile = policy.product_profile || policy.productProfile || null;
+  const strategyHits = Array.isArray(policy.strategy_reference_hits || policy.strategyReferenceHits)
+    ? policy.strategy_reference_hits || policy.strategyReferenceHits
+    : [];
+  const extractedHits = strategyHits.filter((item) => item?.source === "extracted_packet");
+  const referenceHits = strategyHits.filter((item) => item?.source === "reference_seed_match");
+  const visibleTerms = [policy.cap_rate, policy.participation_rate, policy.spread].filter(Boolean);
+
+  const supportLabel =
+    carrierProfile && productProfile && (extractedHits.length > 0 || visibleTerms.length > 1)
+      ? "Carrier-aware active"
+      : carrierProfile || productProfile || strategyHits.length > 0
+        ? "Carrier-aware partial"
+        : "Generic-leaning";
+
+  const summary =
+    supportLabel === "Carrier-aware active"
+      ? "The top policy is benefiting from visible carrier, product-family, and strategy-specific support rather than a mostly generic read."
+      : supportLabel === "Carrier-aware partial"
+        ? "The top policy is getting some carrier-aware lift, but parts of the interpretation still depend on generic fallback logic."
+        : "The top policy can still be reviewed, but it is not yet getting much carrier-specific reinforcement.";
+
+  return {
+    id: "carrier_support",
+    title: "Carrier Intelligence Support",
+    kind: "bullets",
+    summary,
+    items: [
+      { label: "Support Level", value: supportLabel },
+      { label: "Carrier Profile", value: carrierProfile?.display_name || carrierProfile?.name || "-" },
+      { label: "Product Family", value: productProfile?.display_name || productProfile?.key || "-" },
+      { label: "Strategy Matches", value: strategyHits.length || 0 },
+      { label: "Visible Product Terms", value: visibleTerms.length > 0 ? visibleTerms.join(" / ") : "-" },
+    ],
+    bullets: [
+      extractedHits.length > 0
+        ? `${extractedHits.length} extracted strategy term${extractedHits.length === 1 ? "" : "s"} directly reinforce the current read.`
+        : "No extracted strategy reference hits are reinforcing the current read yet.",
+      referenceHits.length > 0
+        ? `${referenceHits.length} reference-seed match${referenceHits.length === 1 ? "" : "es"} are supporting product-specific interpretation.`
+        : null,
+      !carrierProfile
+        ? "A clearer carrier-branded statement cover page or policy summary would improve carrier-specific parsing fastest."
+        : !productProfile
+          ? "A cleaner product-name page would improve product-family interpretation fastest."
+          : visibleTerms.length < 2
+            ? "Allocation or crediting pages would strengthen product-specific strategy interpretation fastest."
+            : "Carrier-aware support is already helping the strongest policy read materially.",
+    ].filter(Boolean),
+  };
+}
+
 export function buildInsurancePortfolioReport(rows = []) {
   const brief = buildInsurancePortfolioBrief(rows);
   const policies = [...(Array.isArray(rows) ? rows : [])]
@@ -2678,10 +2833,11 @@ export function buildInsurancePortfolioReport(rows = []) {
       interpretation: row?.interpretation || buildPolicyListInterpretation(row),
     }))
     .sort((left, right) => (right.ranking?.score ?? 0) - (left.ranking?.score ?? 0));
+  const topPolicy = policies[0] || null;
 
   return {
-    title: "Insurance Portfolio Review",
-    subtitle: "Household-level insurance intelligence summary",
+    title: "Verdict-First Insurance Portfolio Review",
+    subtitle: "Household-level insurance intelligence with a top-policy verdict, priority queue, and advisor-ready handoff",
     sections: [
       {
         id: "portfolio_summary",
@@ -2689,6 +2845,8 @@ export function buildInsurancePortfolioReport(rows = []) {
         kind: "summary",
         summary: brief.summary,
       },
+      buildPortfolioTopPolicySection(topPolicy),
+      buildPortfolioCarrierSupportSection(topPolicy),
       {
         id: "portfolio_metrics",
         title: "Portfolio Metrics",
@@ -2712,6 +2870,7 @@ export function buildInsurancePortfolioReport(rows = []) {
         summary: "These are the portfolio-level confidence and visibility issues currently shaping review quality.",
         bullets: brief.focus_areas,
       },
+      buildPortfolioAdvisorHandoffSection(brief, topPolicy),
       {
         id: "priority_queue",
         title: "Priority Review Queue",

@@ -24,6 +24,7 @@ import {
 } from "../lib/domain/insurance/insuranceDocumentPacket";
 import { analyzePolicyBasics } from "../lib/domain/insurance/insuranceIntelligence";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { getPolicyDetailRoute, getPolicyEntryLabel } from "../lib/navigation/insurancePolicyRouting";
 import { persistVaultedPolicyAnalysis } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import useScanSession from "../hooks/useScanSession";
@@ -137,6 +138,156 @@ function buildReaderReadinessSummary(documentDiagnostics) {
       warningCount > 0 ? `${warningCount} extraction warning${warningCount === 1 ? "" : "s"} are still active.` : null,
     ].filter(Boolean),
     nextSteps: [...new Set(allQualities.flatMap((item) => item.nextSteps || []).filter(Boolean))].slice(0, 4),
+  };
+}
+
+function formatAnalysisConfidenceLabel(score) {
+  if (!Number.isFinite(Number(score))) return "Developing";
+  const normalized = Number(score);
+  if (normalized >= 0.85) return "High";
+  if (normalized >= 0.65) return "Moderate";
+  return "Developing";
+}
+
+function formatPolicySignalLabel(value, fallback = "Still forming") {
+  if (!value) return fallback;
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function buildUploadIntelligenceSummary(saveStatus) {
+  if (!saveStatus?.succeeded || !saveStatus?.policyId) return null;
+  const basics = saveStatus.basicPolicyAnalysis || {};
+  const confidence = Number(basics.confidenceScore || 0);
+  const confidenceLabel = formatAnalysisConfidenceLabel(confidence);
+  const missingSignals = Array.isArray(basics.flags) ? basics.flags.filter(Boolean) : [];
+  const carrierProfile = saveStatus.carrierProfile || null;
+  const productProfile = saveStatus.productProfile || null;
+  const strategyHits = Array.isArray(saveStatus.strategyReferenceHits) ? saveStatus.strategyReferenceHits : [];
+  const carrierSupportLabel =
+    carrierProfile && productProfile && strategyHits.length > 0
+      ? "Carrier-aware active"
+      : carrierProfile || productProfile || strategyHits.length > 0
+        ? "Carrier-aware partial"
+        : "Generic-leaning";
+  const detectedItems = [
+    `${saveStatus.policyType || saveStatus.product || "Life policy"} detected`,
+    saveStatus.carrier ? `${saveStatus.carrier} packet recognized` : null,
+    `${saveStatus.statementCount || 0} annual statement${saveStatus.statementCount === 1 ? "" : "s"} processed`,
+    basics.hasCashValue ? "Cash value visibility confirmed" : null,
+    basics.hasDeathBenefit ? "Death benefit visibility confirmed" : null,
+    carrierProfile ? `${carrierProfile.display_name || carrierProfile.name} carrier profile matched` : null,
+    productProfile ? `${productProfile.display_name || productProfile.key} product family matched` : null,
+  ].filter(Boolean);
+
+  const reviewRead =
+    confidence >= 0.85
+      ? "This packet looks strong enough to move directly into the review console."
+      : confidence >= 0.65
+        ? "This packet looks usable for review, but some signals still need confirmation."
+        : "This packet saved successfully, but the first review should be treated as provisional until more support is added.";
+
+  const underPressure =
+    basics.fundingPattern === "underfunded" ||
+    basics.coiTrend === "increasing" ||
+    missingSignals.length >= 3;
+  const highSupport = confidence >= 0.85 && !underPressure;
+  const revealStatus = highSupport ? "green" : underPressure ? "red" : "yellow";
+  const revealLabel =
+    revealStatus === "green"
+      ? "Ready For Review"
+      : revealStatus === "red"
+        ? "Needs Review Attention"
+        : "Usable With Review";
+  const revealHeadline =
+    revealStatus === "green"
+      ? "We analyzed your policy and the first in-force read is ready."
+      : revealStatus === "red"
+        ? "We analyzed your policy and found visible pressure or missing support."
+        : "We analyzed your policy and built a first read with a few caution flags.";
+  const revealInsights = [
+    basics.hasCashValue
+      ? "Core policy value visibility is present."
+      : "Cash value visibility is still limited in the current packet.",
+    basics.fundingPattern === "unknown"
+      ? "Funding pace is still developing from the visible packet."
+      : `Funding currently reads as ${formatPolicySignalLabel(basics.fundingPattern).toLowerCase()}.`,
+    basics.coiTrend === "unknown"
+      ? "COI trend is still developing from the visible statement trail."
+      : `COI currently reads as ${formatPolicySignalLabel(basics.coiTrend).toLowerCase()}.`,
+  ];
+
+  return {
+    revealStatus,
+    revealLabel,
+    revealHeadline,
+    revealInsights,
+    confidenceLabel,
+    reviewRead,
+    detectedItems,
+    missingSignals: missingSignals.slice(0, 4),
+    signalCards: [
+      {
+        label: "Policy Read Confidence",
+        value: `${Math.round(confidence * 100)}%`,
+        note: `${confidenceLabel} support from the currently saved packet.`,
+      },
+      {
+        label: "Funding Read",
+        value: formatPolicySignalLabel(basics.fundingPattern),
+        note: "Based on the currently visible premium structure.",
+      },
+      {
+        label: "COI Trend",
+        value: formatPolicySignalLabel(basics.coiTrend),
+        note: "Based on the visible statement trail in this packet.",
+      },
+      {
+        label: "Next Best Review",
+        value: missingSignals.length > 0 ? "Fill missing support" : "Open the saved policy",
+        note: missingSignals[0] || "This packet is ready for a deeper in-force review.",
+      },
+      {
+        label: "Carrier Support",
+        value: carrierSupportLabel,
+        note:
+          strategyHits.length > 0
+            ? `${strategyHits.length} carrier/product strategy reference match${strategyHits.length === 1 ? "" : "es"} are reinforcing this read.`
+            : "This packet is still leaning more on generic interpretation than strategy reference support.",
+      },
+    ],
+  };
+}
+
+function getUploadRevealTone(status) {
+  if (status === "green") {
+    return {
+      background: "linear-gradient(135deg, rgba(220,252,231,1) 0%, rgba(240,253,244,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#86efac",
+      accent: "#166534",
+      text: "#14532d",
+      chipBackground: "#166534",
+      chipText: "#f0fdf4",
+    };
+  }
+  if (status === "red") {
+    return {
+      background: "linear-gradient(135deg, rgba(254,242,242,1) 0%, rgba(255,245,245,1) 48%, rgba(255,255,255,1) 100%)",
+      border: "#fca5a5",
+      accent: "#991b1b",
+      text: "#7f1d1d",
+      chipBackground: "#991b1b",
+      chipText: "#fef2f2",
+    };
+  }
+  return {
+    background: "linear-gradient(135deg, rgba(254,249,195,1) 0%, rgba(255,251,235,1) 48%, rgba(255,255,255,1) 100%)",
+    border: "#fcd34d",
+    accent: "#92400e",
+    text: "#78350f",
+    chipBackground: "#92400e",
+    chipText: "#fffbeb",
   };
 }
 
@@ -1160,6 +1311,13 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           intelligence.normalizedPolicy?.policy_identity?.product_name ||
           intelligence.normalizedPolicy?.policy_identity?.policy_type ||
           "Life policy",
+        policyType:
+          intelligence.normalizedPolicy?.policy_identity?.policy_type ||
+          intelligence.normalizedPolicy?.policy_identity?.policy_type_label ||
+          "",
+        carrierProfile: intelligence.carrierProfile || null,
+        productProfile: intelligence.productProfile || null,
+        strategyReferenceHits: Array.isArray(intelligence.strategyReferenceHits) ? intelligence.strategyReferenceHits : [],
         statementCount: sortedStatements.length,
         errorSummary: persistenceStatus?.errorSummary || "",
         basicPolicyAnalysis,
@@ -1206,6 +1364,24 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     Boolean(statementFiles.length) ||
     illustrationScan.hasPages ||
     statementScan.hasPages;
+  const uploadIntelligenceSummary = buildUploadIntelligenceSummary(saveStatus);
+  const uploadRevealTone = getUploadRevealTone(uploadIntelligenceSummary?.revealStatus);
+  const savedPolicyRoute =
+    saveStatus?.policyId
+      ? getPolicyDetailRoute({
+          policy_id: saveStatus.policyId,
+          policy_type: saveStatus.policyType,
+          product: saveStatus.product,
+        })
+      : null;
+  const savedPolicyLabel =
+    saveStatus?.policyId
+      ? getPolicyEntryLabel({
+          policy_id: saveStatus.policyId,
+          policy_type: saveStatus.policyType,
+          product: saveStatus.product,
+        })
+      : "Open Saved Policy";
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
@@ -1419,10 +1595,10 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           {saveStatus?.succeeded && saveStatus.policyId ? (
             <button
               type="button"
-              onClick={() => onNavigate?.(`/insurance/${saveStatus.policyId}`)}
+              onClick={() => savedPolicyRoute && onNavigate?.(savedPolicyRoute)}
               style={actionStyle(false)}
             >
-              Open Saved Policy
+              {savedPolicyLabel}
             </button>
           ) : null}
         </div>
@@ -1568,7 +1744,152 @@ export default function LifePolicyUploadPage({ onNavigate }) {
             <div style={{ color: "#475569" }}>
               Annual statements processed: {saveStatus.statementCount}
             </div>
-            {saveStatus.basicPolicyAnalysis ? (
+            {uploadIntelligenceSummary ? (
+              <div
+                style={{
+                  marginTop: "6px",
+                  padding: "14px",
+                  borderRadius: "12px",
+                  background: "#ffffff",
+                  border: "1px solid #dbeafe",
+                  display: "grid",
+                  gap: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "16px",
+                    borderRadius: "16px",
+                    background: uploadRevealTone.background,
+                    border: `1px solid ${uploadRevealTone.border}`,
+                    display: "grid",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                    <div style={{ display: "grid", gap: "6px", maxWidth: "720px" }}>
+                      <div style={{ fontSize: "12px", color: uploadRevealTone.accent, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        We Analyzed Your Policy
+                      </div>
+                      <div style={{ color: uploadRevealTone.text, fontSize: "22px", fontWeight: 800, lineHeight: "1.3" }}>
+                        {uploadIntelligenceSummary.revealHeadline}
+                      </div>
+                      <div style={{ color: uploadRevealTone.text, lineHeight: "1.7", fontWeight: 600 }}>
+                        {uploadIntelligenceSummary.reviewRead}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "999px",
+                        background: uploadRevealTone.chipBackground,
+                        color: uploadRevealTone.chipText,
+                        fontWeight: 800,
+                        fontSize: "12px",
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {uploadIntelligenceSummary.revealLabel}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                    {uploadIntelligenceSummary.revealInsights.map((item) => (
+                      <div
+                        key={item}
+                        style={{
+                          padding: "12px",
+                          borderRadius: "12px",
+                          background: "rgba(255,255,255,0.84)",
+                          border: `1px solid ${uploadRevealTone.border}`,
+                          color: "#0f172a",
+                          lineHeight: "1.6",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    {saveStatus?.policyId && savedPolicyRoute ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(savedPolicyRoute)}
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: "999px",
+                          border: `1px solid ${uploadRevealTone.accent}`,
+                          background: uploadRevealTone.chipBackground,
+                          color: uploadRevealTone.chipText,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {savedPolicyLabel}
+                      </button>
+                    ) : null}
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: "999px",
+                        border: `1px solid ${uploadRevealTone.border}`,
+                        background: "rgba(255,255,255,0.82)",
+                        color: uploadRevealTone.text,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {uploadIntelligenceSummary.missingSignals.length > 0
+                        ? "Upload more support to sharpen the read"
+                        : "Packet looks ready for deeper review"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                  {uploadIntelligenceSummary.signalCards.map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        padding: "12px",
+                        borderRadius: "12px",
+                        background: "#f8fbff",
+                        border: "1px solid #dbeafe",
+                        display: "grid",
+                        gap: "6px",
+                      }}
+                    >
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.value}</div>
+                      <div style={{ color: "#475569", lineHeight: "1.55", fontSize: "13px" }}>{item.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    We detected the policy structure, built the initial in-force read, and saved the packet into VaultedShield.
+                  </div>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>We detected</div>
+                  <div style={{ display: "grid", gap: "6px", color: "#475569" }}>
+                    {uploadIntelligenceSummary.detectedItems.map((item) => (
+                      <div key={item}>{item}</div>
+                    ))}
+                  </div>
+                </div>
+
+                {uploadIntelligenceSummary.missingSignals.length > 0 ? (
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontWeight: 700, color: "#92400e" }}>Still missing for a stronger read</div>
+                    <div style={{ display: "grid", gap: "6px", color: "#475569" }}>
+                      {uploadIntelligenceSummary.missingSignals.map((item) => (
+                        <div key={item}>{item}</div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : saveStatus.basicPolicyAnalysis ? (
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
                 Confidence: {Math.round((saveStatus.basicPolicyAnalysis.confidenceScore || 0) * 100)}% | Funding: {saveStatus.basicPolicyAnalysis.fundingPattern} | COI trend: {saveStatus.basicPolicyAnalysis.coiTrend}
               </div>

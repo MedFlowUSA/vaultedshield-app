@@ -2,6 +2,12 @@ import { getSupabaseClient } from "./client";
 import { getAssetDetailBundle } from "./platformData";
 import { evaluatePropertyEquityPosition } from "../domain/propertyValuation";
 import {
+  buildAssetLinkRelationshipKey,
+  deleteAssetLinksByRelationshipKeys,
+  listPropertyMirrorAssetLinks,
+  upsertAssetLink,
+} from "./assetLinks";
+import {
   appendHouseholdScope,
   buildScopedAccessError,
 } from "./platformScope";
@@ -156,6 +162,144 @@ async function getLatestPropertyValuationRecord(propertyId) {
   return { data: data || null, error: queryError };
 }
 
+function warnAssetLinkMirrorIssue(message, context = {}) {
+  if (import.meta.env.DEV) {
+    console.warn(`[VaultedShield] ${message}`, context);
+  }
+}
+
+async function syncPropertyAssetLinkMirror(propertyId, scopeOverride = null) {
+  if (!propertyId) {
+    return { data: null, error: new Error("propertyId is required") };
+  }
+
+  const propertyResult = await getScopedProperty(propertyId, scopeOverride);
+  if (propertyResult.error || !propertyResult.data) {
+    return {
+      data: null,
+      error: propertyResult.error || buildScopedAccessError("Property"),
+    };
+  }
+
+  const propertyAssetId = propertyResult.data.asset_id || propertyResult.data.assets?.id || null;
+  if (!propertyAssetId) {
+    return {
+      data: null,
+      error: new Error("Property must have an asset_id before asset links can be mirrored"),
+    };
+  }
+
+  const [mortgageLinksResult, homeownersLinksResult, existingAssetLinksResult] = await Promise.all([
+    listPropertyMortgageLinks(propertyId),
+    listPropertyHomeownersLinks(propertyId),
+    listPropertyMirrorAssetLinks(propertyResult.data.household_id, propertyAssetId),
+  ]);
+
+  const combinedError =
+    mortgageLinksResult.error || homeownersLinksResult.error || existingAssetLinksResult.error || null;
+  if (combinedError) {
+    return { data: null, error: combinedError };
+  }
+
+  const desiredRelationshipKeys = [];
+  const syncPayloads = [];
+
+  (mortgageLinksResult.data || []).forEach((link) => {
+    const targetAssetId = link.mortgage_loans?.asset_id || link.mortgage_loans?.assets?.id || null;
+    if (!targetAssetId) return;
+
+    const relationshipKey = buildAssetLinkRelationshipKey("property_mortgage_links", link.id);
+    desiredRelationshipKeys.push(relationshipKey);
+    syncPayloads.push({
+      household_id: propertyResult.data.household_id,
+      source_asset_id: propertyAssetId,
+      target_asset_id: targetAssetId,
+      source_module: "property",
+      target_module: "mortgage",
+      source_record_id: propertyResult.data.id,
+      target_record_id: link.mortgage_loan_id,
+      relationship_origin: "property_mortgage",
+      relationship_key: relationshipKey,
+      link_type: link.link_type || "primary_financing",
+      confidence_score: link.metadata?.confidence_score ?? 0.95,
+      is_primary: link.is_primary,
+      notes: link.notes || null,
+      metadata: {
+        ...(link.metadata || {}),
+        legacy_table: "property_mortgage_links",
+        legacy_link_id: link.id,
+        source_record_type: "property",
+        target_record_type: "mortgage_loan",
+      },
+    });
+  });
+
+  (homeownersLinksResult.data || []).forEach((link) => {
+    const targetAssetId =
+      link.homeowners_policies?.asset_id || link.homeowners_policies?.assets?.id || null;
+    if (!targetAssetId) return;
+
+    const relationshipKey = buildAssetLinkRelationshipKey("property_homeowners_links", link.id);
+    desiredRelationshipKeys.push(relationshipKey);
+    syncPayloads.push({
+      household_id: propertyResult.data.household_id,
+      source_asset_id: propertyAssetId,
+      target_asset_id: targetAssetId,
+      source_module: "property",
+      target_module: "homeowners",
+      source_record_id: propertyResult.data.id,
+      target_record_id: link.homeowners_policy_id,
+      relationship_origin: "property_homeowners",
+      relationship_key: relationshipKey,
+      link_type: link.link_type || "primary_property_coverage",
+      confidence_score: link.metadata?.confidence_score ?? 0.95,
+      is_primary: link.is_primary,
+      notes: link.notes || null,
+      metadata: {
+        ...(link.metadata || {}),
+        legacy_table: "property_homeowners_links",
+        legacy_link_id: link.id,
+        source_record_type: "property",
+        target_record_type: "homeowners_policy",
+      },
+    });
+  });
+
+  const syncResults = await Promise.all(syncPayloads.map((payload) => upsertAssetLink(payload)));
+  const syncError = syncResults.find((result) => result?.error)?.error || null;
+  if (syncError) {
+    return { data: null, error: syncError };
+  }
+
+  const staleRelationshipKeys = (existingAssetLinksResult.data || [])
+    .map((row) => row.relationship_key)
+    .filter((relationshipKey) => relationshipKey && !desiredRelationshipKeys.includes(relationshipKey));
+
+  const deleteResult = await deleteAssetLinksByRelationshipKeys(staleRelationshipKeys);
+  if (deleteResult.error) {
+    return { data: null, error: deleteResult.error };
+  }
+
+  return {
+    data: {
+      mirroredCount: syncResults.length,
+      staleRelationshipKeys,
+    },
+    error: null,
+  };
+}
+
+async function syncPropertyAssetLinksNonBlocking(propertyId, scopeOverride = null) {
+  const syncResult = await syncPropertyAssetLinkMirror(propertyId, scopeOverride);
+  if (syncResult.error) {
+    warnAssetLinkMirrorIssue("property asset-link mirror sync failed", {
+      propertyId,
+      error: syncResult.error?.message || String(syncResult.error),
+    });
+  }
+  return syncResult;
+}
+
 export function getPropertyStackLinkageStatus({
   linkedMortgages = [],
   linkedHomeownersPolicies = [],
@@ -211,7 +355,10 @@ export async function linkMortgageToProperty(propertyId, mortgageLoanId, options
   );
 
   if (existingResult.error) return { data: null, error: existingResult.error, duplicate: false };
-  if (existingResult.data?.id) return { data: existingResult.data, error: null, duplicate: true };
+  if (existingResult.data?.id) {
+    await syncPropertyAssetLinksNonBlocking(propertyId, options.scopeOverride);
+    return { data: existingResult.data, error: null, duplicate: true };
+  }
 
   if (options.is_primary ?? true) {
     const demotionResult = await demoteOtherPrimaryLinks(
@@ -234,6 +381,7 @@ export async function linkMortgageToProperty(propertyId, mortgageLoanId, options
     });
 
   if (!insertResult.error) {
+    await syncPropertyAssetLinksNonBlocking(propertyId, options.scopeOverride);
     await upsertPropertyStackAnalytics(propertyId, options.scopeOverride);
   }
 
@@ -280,7 +428,10 @@ export async function linkHomeownersToProperty(propertyId, homeownersPolicyId, o
   );
 
   if (existingResult.error) return { data: null, error: existingResult.error, duplicate: false };
-  if (existingResult.data?.id) return { data: existingResult.data, error: null, duplicate: true };
+  if (existingResult.data?.id) {
+    await syncPropertyAssetLinksNonBlocking(propertyId, options.scopeOverride);
+    return { data: existingResult.data, error: null, duplicate: true };
+  }
 
   if (options.is_primary ?? true) {
     const demotionResult = await demoteOtherPrimaryLinks(
@@ -303,6 +454,7 @@ export async function linkHomeownersToProperty(propertyId, homeownersPolicyId, o
     });
 
   if (!insertResult.error) {
+    await syncPropertyAssetLinksNonBlocking(propertyId, options.scopeOverride);
     await upsertPropertyStackAnalytics(propertyId, options.scopeOverride);
   }
 
@@ -640,6 +792,7 @@ export async function updatePropertyMortgageLink(linkId, updates = {}) {
     metadata: updates.metadata ?? existingResult.data.metadata ?? {},
   });
   if (updateResult.error) return updateResult;
+  await syncPropertyAssetLinksNonBlocking(existingResult.data.property_id, updates.scopeOverride);
   await upsertPropertyStackAnalytics(existingResult.data.property_id, updates.scopeOverride);
   return updateResult;
 }
@@ -686,6 +839,7 @@ export async function updatePropertyHomeownersLink(linkId, updates = {}) {
     metadata: updates.metadata ?? existingResult.data.metadata ?? {},
   });
   if (updateResult.error) return updateResult;
+  await syncPropertyAssetLinksNonBlocking(existingResult.data.property_id, updates.scopeOverride);
   await upsertPropertyStackAnalytics(existingResult.data.property_id, updates.scopeOverride);
   return updateResult;
 }
@@ -708,6 +862,7 @@ export async function unlinkMortgageFromProperty(linkId, options = {}) {
   }
   const deleteResult = await deleteRecord("property_mortgage_links", linkId);
   if (deleteResult.error) return deleteResult;
+  await syncPropertyAssetLinksNonBlocking(existingResult.data.property_id, options.scopeOverride);
   await upsertPropertyStackAnalytics(existingResult.data.property_id, options.scopeOverride);
   return deleteResult;
 }
@@ -730,6 +885,9 @@ export async function unlinkHomeownersFromProperty(linkId, options = {}) {
   }
   const deleteResult = await deleteRecord("property_homeowners_links", linkId);
   if (deleteResult.error) return deleteResult;
+  await syncPropertyAssetLinksNonBlocking(existingResult.data.property_id, options.scopeOverride);
   await upsertPropertyStackAnalytics(existingResult.data.property_id, options.scopeOverride);
   return deleteResult;
 }
+
+export { syncPropertyAssetLinkMirror };
