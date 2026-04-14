@@ -12,6 +12,7 @@ import StatusBadge from "../components/shared/StatusBadge";
 import { buildHouseholdIntelligence } from "../lib/domain/platformIntelligence";
 import { createAssetTask, getEmergencyModeBundle, updateHousehold } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatDate(value) {
@@ -402,7 +403,7 @@ export default function EmergencyModePage() {
         </SectionCard>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Household Debug: {householdState.context.householdId || "none"} | Source: {householdState.context.source} | Members: {bundle.householdMembers.length} | Emergency Contacts: {bundle.emergencyContacts.length} | Professional Contacts: {bundle.keyProfessionalContacts.length} | Assets: {bundle.assets.length} | Documents: {bundle.keyDocuments.length} | Portals: {bundle.portalReadiness.portalCount} | Alerts: {bundle.openAlerts.length} | Tasks: {bundle.openTasks.length} | docStatus={intelligence.document_completeness.score_label} | emergencyStatus={intelligence.emergency_readiness.score_label} | portalStatus={intelligence.portal_continuity.score_label} | prompts={intelligence.missing_item_prompts.length} | flags={intelligence.review_flags.join(", ") || "none"} | Error: {saveError || "none"} | Loading: {loading ? "yes" : "no"}
         </div>

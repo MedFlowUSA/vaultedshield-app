@@ -15,6 +15,7 @@ import {
   listProperties,
 } from "../lib/supabase/propertyData";
 import { buildPropertyHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 
 const PROPERTY_TYPES = listPropertyTypes();
 
@@ -330,7 +331,7 @@ export default function PropertyHubPage({ onNavigate }) {
         </div>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Property Debug: household={householdState.context.householdId || "none"} | properties={properties.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
         </div>

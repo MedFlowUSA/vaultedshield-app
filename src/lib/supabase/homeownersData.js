@@ -16,6 +16,7 @@ import {
 import { listAssetLinksForAsset } from "./assetLinks";
 import { getSupabaseClient } from "./client";
 import { createAsset, getAssetById, uploadGenericAssetDocument } from "./platformData";
+import { assembleModuleBundle } from "./moduleBundleState.js";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -373,26 +374,57 @@ export async function getHomeownersPolicyBundle(homeownersPolicyId, scopeOverrid
     ? await listAssetLinksForAsset(homeownersPolicyResult.data.assets.id, scopeOverride)
     : { data: [], error: null };
 
-  const error =
-    homeownersPolicyResult.error ||
-    homeownersDocumentsResult.error ||
-    homeownersSnapshotsResult.error ||
-    homeownersAnalyticsResult.error ||
-    homeownersAssetLinksResult.error ||
-    null;
+  return assembleHomeownersPolicyBundle({
+    homeownersPolicyResult,
+    homeownersDocumentsResult,
+    homeownersSnapshotsResult,
+    homeownersAnalyticsResult,
+    homeownersAssetLinksResult,
+  });
+}
 
-  return {
-    data: error
-      ? null
-      : {
-          homeownersPolicy: homeownersPolicyResult.data,
-          homeownersDocuments: homeownersDocumentsResult.data || [],
-          homeownersSnapshots: homeownersSnapshotsResult.data || [],
-          homeownersAnalytics: homeownersAnalyticsResult.data || [],
-          homeownersAssetLinks: homeownersAssetLinksResult.data || [],
-        },
-    error,
-  };
+export function assembleHomeownersPolicyBundle({
+  homeownersPolicyResult,
+  homeownersDocumentsResult,
+  homeownersSnapshotsResult,
+  homeownersAnalyticsResult,
+  homeownersAssetLinksResult,
+}) {
+  return assembleModuleBundle({
+    coreResult: homeownersPolicyResult,
+    coreKey: "homeownersPolicy",
+    missingMessage: "Homeowners policy bundle could not be loaded.",
+    collections: [
+      {
+        key: "homeownersDocuments",
+        area: "documents",
+        label: "Homeowners documents",
+        result: homeownersDocumentsResult,
+        fallbackData: [],
+      },
+      {
+        key: "homeownersSnapshots",
+        area: "snapshots",
+        label: "Homeowners snapshots",
+        result: homeownersSnapshotsResult,
+        fallbackData: [],
+      },
+      {
+        key: "homeownersAnalytics",
+        area: "analytics",
+        label: "Homeowners analytics",
+        result: homeownersAnalyticsResult,
+        fallbackData: [],
+      },
+      {
+        key: "homeownersAssetLinks",
+        area: "asset_links",
+        label: "Homeowners linked context",
+        result: homeownersAssetLinksResult,
+        fallbackData: [],
+      },
+    ],
+  });
 }
 
 export async function createHomeownersAssetWithPolicy(payload) {

@@ -18,6 +18,7 @@ import {
   uploadAutoDocument,
 } from "../lib/supabase/autoData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildAutoCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -635,7 +636,7 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Auto Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 auto_policy_id={autoPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={autoPolicy.household_id || "none"} | documents={bundle.autoDocuments.length} | snapshots={bundle.autoSnapshots.length} | analytics={bundle.autoAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | autoDocumentIds={uploadQueue.map((item) => item.autoDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || "none"}

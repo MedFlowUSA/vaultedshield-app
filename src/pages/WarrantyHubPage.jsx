@@ -16,6 +16,7 @@ import {
   listWarranties,
 } from "../lib/supabase/warrantyData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 
 const WARRANTY_TYPES = listWarrantyTypes();
 const WARRANTY_PROVIDERS = listWarrantyProviders();
@@ -282,7 +283,7 @@ export default function WarrantyHubPage({ onNavigate }) {
         </div>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Warranty Debug: household={householdState.context.householdId || "none"} | warranties={warranties.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
         </div>

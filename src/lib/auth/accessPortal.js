@@ -213,6 +213,14 @@ function normalizeSupabaseEmailError(error) {
   return message || "Authentication could not be completed.";
 }
 
+function buildSupabaseEmailRedirectUrl() {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return undefined;
+  }
+
+  return `${window.location.origin}/#/login`;
+}
+
 export function getTierDefinition(tierKey = "free") {
   return ACCESS_TIERS[tierKey] || ACCESS_TIERS.free;
 }
@@ -244,7 +252,7 @@ function buildPendingConfirmationResult(user = null) {
     requiresEmailConfirmation: true,
     user,
     profile: null,
-    message: "Account created. Confirm the email address for this account, then log in.",
+    message: "Your VaultedShield account has been created. Confirm the email address for this workspace, then sign in.",
   };
 }
 
@@ -287,6 +295,7 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
     email: normalizedEmail,
     password: String(password || ""),
     options: {
+      emailRedirectTo: buildSupabaseEmailRedirectUrl(),
       data: {
         household_name: String(householdName || "").trim() || "Working Household",
         requested_tier: tier,

@@ -18,6 +18,7 @@ import {
   uploadWarrantyDocument,
 } from "../lib/supabase/warrantyData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildWarrantyCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -634,7 +635,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Warranty Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 warranty_id={warranty.id} | asset_id={linkedAsset?.id || "none"} | household_id={warranty.household_id || "none"} | documents={bundle.warrantyDocuments.length} | snapshots={bundle.warrantySnapshots.length} | analytics={bundle.warrantyAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | warrantyDocumentIds={uploadQueue.map((item) => item.warrantyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || "none"}

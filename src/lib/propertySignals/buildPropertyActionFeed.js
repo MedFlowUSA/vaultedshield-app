@@ -8,6 +8,29 @@ function uniqueBy(items = [], getKey = (item) => item.id) {
   });
 }
 
+function buildStackCompletenessSummary(propertySignals) {
+  const scoreText = propertySignals?.metadata?.stackCompletenessScore !== null && propertySignals?.metadata?.stackCompletenessScore !== undefined
+    ? `${propertySignals.metadata.stackCompletenessLabel.toLowerCase()} at ${Math.round(Number(propertySignals.metadata.stackCompletenessScore) * 100)}%`
+    : "not fully visible yet";
+
+  if (propertySignals?.flags?.protectionGap && propertySignals?.flags?.debtVisibilityGap) {
+    return `The property operating graph is ${scoreText}, with both liability visibility and protection linkage still incomplete.`;
+  }
+  if (propertySignals?.flags?.protectionGap) {
+    return `The property operating graph is ${scoreText}, and homeowners protection still needs to be linked into the stack.`;
+  }
+  if (propertySignals?.flags?.debtVisibilityGap || propertySignals?.flags?.linkageGap) {
+    return `The property operating graph is ${scoreText}, and financing visibility still needs to be tightened before the stack reads cleanly.`;
+  }
+  return `The property operating graph is ${scoreText}, so the asset, liability, and protection view still needs a cleaner review path.`;
+}
+
+function getStackCompletenessTarget(propertySignals) {
+  if (propertySignals?.flags?.protectionGap) return "homeowners";
+  if (propertySignals?.flags?.debtVisibilityGap || propertySignals?.flags?.linkageGap) return "mortgages";
+  return "equity";
+}
+
 export function buildPropertyActionFeed({
   property = null,
   propertySignals = null,
@@ -51,6 +74,23 @@ export function buildPropertyActionFeed({
       target: { type: "scroll_section", section: "valuation" },
       urgency: propertySignals.signalLevel === "at_risk" ? "high" : "warning",
       category: "valuation_review",
+    });
+  }
+
+  if (propertySignals.flags.stackCompletenessGap || propertySignals.flags.linkageGap) {
+    actions.push({
+      id: "property-stack-completeness",
+      title: "Strengthen property stack completeness",
+      summary: buildStackCompletenessSummary(propertySignals),
+      actionLabel: "Open stack review",
+      target: { type: "scroll_section", section: getStackCompletenessTarget(propertySignals) },
+      urgency:
+        propertySignals.metadata?.stackCompletenessScore !== null &&
+        propertySignals.metadata?.stackCompletenessScore !== undefined &&
+        Number(propertySignals.metadata.stackCompletenessScore) < 0.4
+          ? "high"
+          : "warning",
+      category: "operating_graph",
     });
   }
 

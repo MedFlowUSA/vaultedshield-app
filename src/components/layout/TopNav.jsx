@@ -18,6 +18,7 @@ import {
   getHouseholdReviewWorkflowState,
 } from "../../lib/domain/platformIntelligence/reviewWorkflowState";
 import { usePlatformShellData } from "../../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../../lib/ui/devDiagnostics";
 
 function CompactSummaryCard({ label, value, accent = false }) {
   return (
@@ -50,6 +51,46 @@ function CompactSummaryCard({ label, value, accent = false }) {
           color: accent ? "#475569" : "#0f172a",
           fontWeight: 700,
           lineHeight: "1.5",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function CompactMetaPill({ label, value, accent = false }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "2px",
+        padding: "8px 10px",
+        borderRadius: "999px",
+        background: accent ? "#eff6ff" : "#f8fafc",
+        border: accent ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "10px",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: accent ? "#1d4ed8" : "#64748b",
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "12px",
+          fontWeight: 700,
+          color: "#0f172a",
+          lineHeight: 1.25,
           overflowWrap: "anywhere",
         }}
       >
@@ -211,7 +252,7 @@ export default function TopNav({
   showSidebarToggle = false,
   isCompact = false,
 }) {
-  const [compactPanelOpen, setCompactPanelOpen] = useState(false);
+  const [compactPanelRouteKey, setCompactPanelRouteKey] = useState("");
   const { householdState, debug, intelligenceBundle, insuranceRows } = usePlatformShellData();
   const { currentMainStepNumber, finishDemo, isDemoMode, mainStepCount, startDemo } = useDemoMode();
   const resolvedHouseholdName = householdState.household?.household_name || householdName;
@@ -275,8 +316,9 @@ export default function TopNav({
         commandCenter,
         housingCommand: housingCommandCenter,
         emergencyAccessCommand,
+        bundle: intelligenceBundle,
       }),
-    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter, intelligenceBundle]
   );
   const topBlocker = commandCenter.blockers[0] || null;
   const topHousingBlocker = housingCommandCenter.blockers[0] || null;
@@ -298,7 +340,7 @@ export default function TopNav({
     border: "1px solid #cbd5e1",
     background: "#ffffff",
     borderRadius: "12px",
-    padding: "12px 14px",
+    padding: isCompact ? "10px 12px" : "12px 14px",
     cursor: "pointer",
     fontWeight: 600,
     width: isCompact ? "100%" : "auto",
@@ -314,6 +356,8 @@ export default function TopNav({
     fontWeight: 700,
     minHeight: "40px",
   };
+  const compactPanelKey = `${title}|${subtitle}`;
+  const compactPanelOpen = isCompact && compactPanelRouteKey === compactPanelKey;
 
   return (
     <div
@@ -373,13 +417,16 @@ export default function TopNav({
             {subtitle}
           </div>
           {isCompact ? (
-            <div style={{ marginTop: "8px", display: "grid", gap: "4px" }}>
-              <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.4" }}>
-                {compactHeadline}
-              </div>
-              <div style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.4" }}>
-                {compactSupportLine}
-              </div>
+            <div style={{ marginTop: "7px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              <CompactMetaPill
+                label="Household Score"
+                value={`${householdScorecard.overallScore ?? "--"} - ${householdScorecard.overallStatus}`}
+                accent
+              />
+              <CompactMetaPill label="Household" value={resolvedHouseholdName} />
+              {isDemoMode ? (
+                <CompactMetaPill label="Demo Mode" value={`Step ${currentMainStepNumber}/${mainStepCount}`} />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -396,53 +443,46 @@ export default function TopNav({
         >
           <div
             style={{
+              padding: "10px 12px",
+              borderRadius: "14px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: "8px",
-              width: "100%",
+              gridTemplateColumns: "1fr auto",
+              gap: "10px",
+              alignItems: "center",
             }}
           >
-            <CompactSummaryCard label={currentPlanLabel} value={resolvedHouseholdName} accent />
-            <CompactSummaryCard
-              label="Household Score"
-              value={`${householdScorecard.overallScore ?? "--"} - ${householdScorecard.overallStatus}`}
-            />
+            <div style={{ minWidth: 0, display: "grid", gap: "3px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>
+                Priority
+              </div>
+              <div style={{ fontSize: "13px", color: "#0f172a", fontWeight: 700, lineHeight: "1.35" }}>
+                {compactHeadline}
+              </div>
+              <div style={{ fontSize: "11px", color: "#64748b", lineHeight: "1.35" }}>
+                {compactSupportLine}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCompactPanelRouteKey((current) => (current === compactPanelKey ? "" : compactPanelKey))}
+              style={{
+                border: compactPanelOpen ? "1px solid #bfdbfe" : "1px solid #cbd5e1",
+                background: compactPanelOpen ? "#eff6ff" : "#ffffff",
+                color: compactPanelOpen ? "#1d4ed8" : "#0f172a",
+                borderRadius: "12px",
+                padding: "10px 12px",
+                cursor: "pointer",
+                fontWeight: 700,
+                minHeight: "44px",
+                minWidth: "84px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {compactPanelOpen ? "Close" : "Actions"}
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => (isDemoMode ? finishDemo() : startDemo())}
-            style={{
-              border: isDemoMode ? "1px solid #bfdbfe" : "1px solid #dbeafe",
-              background: isDemoMode ? "#eff6ff" : "#f8fbff",
-              color: "#1d4ed8",
-              borderRadius: "12px",
-              padding: "12px 14px",
-              cursor: "pointer",
-              fontWeight: 700,
-              width: "100%",
-              minHeight: "44px",
-            }}
-          >
-            {isDemoMode ? `Demo Mode Active | Step ${currentMainStepNumber}/${mainStepCount}` : "Start Demo"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setCompactPanelOpen((current) => !current)}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "12px 14px",
-              cursor: "pointer",
-              fontWeight: 700,
-              width: "100%",
-              minHeight: "44px",
-            }}
-          >
-            {compactPanelOpen ? "Hide quick actions" : "Show quick actions"}
-          </button>
 
           {compactPanelOpen ? (
             <div
@@ -455,36 +495,98 @@ export default function TopNav({
                 border: "1px solid #e2e8f0",
               }}
             >
-              <PriorityCard priority={topPriority} />
+              <button
+                type="button"
+                onClick={() => {
+                  setCompactPanelRouteKey("");
+                  if (isDemoMode) {
+                    finishDemo();
+                    return;
+                  }
+                  startDemo();
+                }}
+                style={{
+                  border: isDemoMode ? "1px solid #bfdbfe" : "1px solid #dbeafe",
+                  background: isDemoMode ? "#eff6ff" : "#f8fbff",
+                  color: "#1d4ed8",
+                  borderRadius: "12px",
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  width: "100%",
+                  minHeight: "44px",
+                }}
+              >
+                {isDemoMode ? `Demo Mode Active | Step ${currentMainStepNumber}/${mainStepCount}` : "Start Demo"}
+              </button>
 
-              <div style={{ display: "grid", gap: "8px" }}>
-                <button type="button" onClick={() => onUpgrade?.()} style={actionButtonStyle}>
-                  Upgrade
-                </button>
-                <button type="button" onClick={() => onNavigate("/upload-center")} style={actionButtonStyle}>
-                  Upload Center
-                </button>
-                <button type="button" onClick={() => onNavigate("/account")} style={actionButtonStyle}>
-                  Account
+              <div
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompactPanelRouteKey("");
+                    onNavigate("/upload-center");
+                  }}
+                  style={actionButtonStyle}
+                >
+                  Upload
                 </button>
                 <button
                   type="button"
-                  onClick={() => onNavigate("/insurance")}
+                  onClick={() => {
+                    setCompactPanelRouteKey("");
+                    onNavigate("/insurance");
+                  }}
                   style={{
                     border: "none",
                     background: "#0f172a",
                     color: "#ffffff",
                     borderRadius: "12px",
-                    padding: "12px 14px",
+                    padding: "10px 12px",
                     cursor: "pointer",
                     fontWeight: 700,
                     width: "100%",
                     minHeight: "44px",
                   }}
                 >
-                  Open Insurance Workspace
+                  Insurance
                 </button>
-                <button type="button" onClick={() => onSignOut?.()} style={actionButtonStyle}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompactPanelRouteKey("");
+                    onNavigate("/account");
+                  }}
+                  style={actionButtonStyle}
+                >
+                  Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompactPanelRouteKey("");
+                    onUpgrade?.();
+                  }}
+                  style={actionButtonStyle}
+                >
+                  Upgrade
+                </button>
+              </div>
+              <div style={{ display: "grid", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompactPanelRouteKey("");
+                    onSignOut?.();
+                  }}
+                  style={actionButtonStyle}
+                >
                   Log Out
                 </button>
               </div>
@@ -563,7 +665,7 @@ export default function TopNav({
         </div>
       )}
 
-      {import.meta.env.DEV && isCompact ? (
+      {shouldShowDevDiagnostics() && isCompact ? (
         <div
           style={{
             width: "100%",

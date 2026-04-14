@@ -24,6 +24,7 @@ import {
   REVIEW_WORKFLOW_STATUSES,
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { buildRetirementDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
@@ -1249,7 +1250,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Retirement Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 retirement_account_id={retirementAccount.id} | asset_id={linkedAsset?.id || "none"} | household_id={retirementAccount.household_id || "none"} | documents={bundle.retirementDocuments.length} | snapshots={bundle.retirementSnapshots.length} | analytics={bundle.retirementAnalytics.length} | positions={bundle.retirementPositions.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | retirementDocumentIds={uploadQueue.map((item) => item.retirementDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || parseError || "none"}

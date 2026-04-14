@@ -7,6 +7,7 @@ import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeAssetsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { createAsset, listAssets } from "../lib/supabase/platformData";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_ASSETS = [];
@@ -267,7 +268,7 @@ export default function AssetsHomePage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px" }}>
           Household Debug: {householdState.context.householdId || "none"} | Source: {householdState.context.source} | Assets: {assets.length}
         </div>

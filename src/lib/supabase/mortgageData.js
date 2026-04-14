@@ -30,6 +30,7 @@ import {
   appendHouseholdScope,
   buildScopedAccessError,
 } from "./platformScope";
+import { assembleModuleBundle } from "./moduleBundleState.js";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();
@@ -390,26 +391,57 @@ export async function getMortgageLoanBundle(mortgageLoanId, scopeOverride = null
     ? await listAssetLinksForAsset(mortgageLoanResult.data.assets.id, scopeOverride)
     : { data: [], error: null };
 
-  const error =
-    mortgageLoanResult.error ||
-    mortgageDocumentsResult.error ||
-    mortgageSnapshotsResult.error ||
-    mortgageAnalyticsResult.error ||
-    mortgageAssetLinksResult.error ||
-    null;
+  return assembleMortgageLoanBundle({
+    mortgageLoanResult,
+    mortgageDocumentsResult,
+    mortgageSnapshotsResult,
+    mortgageAnalyticsResult,
+    mortgageAssetLinksResult,
+  });
+}
 
-  return {
-    data: error
-      ? null
-      : {
-          mortgageLoan: mortgageLoanResult.data,
-          mortgageDocuments: mortgageDocumentsResult.data || [],
-          mortgageSnapshots: mortgageSnapshotsResult.data || [],
-          mortgageAnalytics: mortgageAnalyticsResult.data || [],
-          mortgageAssetLinks: mortgageAssetLinksResult.data || [],
-        },
-    error,
-  };
+export function assembleMortgageLoanBundle({
+  mortgageLoanResult,
+  mortgageDocumentsResult,
+  mortgageSnapshotsResult,
+  mortgageAnalyticsResult,
+  mortgageAssetLinksResult,
+}) {
+  return assembleModuleBundle({
+    coreResult: mortgageLoanResult,
+    coreKey: "mortgageLoan",
+    missingMessage: "Mortgage loan bundle could not be loaded.",
+    collections: [
+      {
+        key: "mortgageDocuments",
+        area: "documents",
+        label: "Mortgage documents",
+        result: mortgageDocumentsResult,
+        fallbackData: [],
+      },
+      {
+        key: "mortgageSnapshots",
+        area: "snapshots",
+        label: "Mortgage snapshots",
+        result: mortgageSnapshotsResult,
+        fallbackData: [],
+      },
+      {
+        key: "mortgageAnalytics",
+        area: "analytics",
+        label: "Mortgage analytics",
+        result: mortgageAnalyticsResult,
+        fallbackData: [],
+      },
+      {
+        key: "mortgageAssetLinks",
+        area: "asset_links",
+        label: "Mortgage linked context",
+        result: mortgageAssetLinksResult,
+        fallbackData: [],
+      },
+    ],
+  });
 }
 
 export async function createMortgageAssetWithLoan(payload) {

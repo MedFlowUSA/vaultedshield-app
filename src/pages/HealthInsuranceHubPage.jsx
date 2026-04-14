@@ -16,6 +16,7 @@ import {
   listHealthPlans,
 } from "../lib/supabase/healthData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 
 const HEALTH_PLAN_TYPES = listHealthPlanTypes();
 const HEALTH_CARRIERS = listHealthCarriers();
@@ -274,7 +275,7 @@ export default function HealthInsuranceHubPage({ onNavigate }) {
         </div>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Health Debug: household={householdState.context.householdId || "none"} | plans={healthPlans.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
         </div>

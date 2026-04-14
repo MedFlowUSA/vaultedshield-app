@@ -19,6 +19,7 @@ import {
   createRetirementAssetWithAccount,
   listRetirementAccounts,
 } from "../lib/supabase/retirementData";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCategoryLabel(majorCategory) {
@@ -664,7 +665,7 @@ export default function RetirementHubPage({ onNavigate }) {
         </div>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Retirement Debug: household={householdState.context.householdId || "none"} | accounts={accounts.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
         </div>

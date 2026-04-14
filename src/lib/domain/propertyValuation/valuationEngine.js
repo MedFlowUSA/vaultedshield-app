@@ -1,3 +1,9 @@
+import {
+  formatCompletenessScore,
+  getCompletenessLabel,
+  normalizeCompletenessScore,
+} from "../../assetLinks/linkedContext.js";
+
 function average(values = []) {
   if (!values.length) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -310,7 +316,6 @@ export function buildVirtualValuation(subject = {}, providerResult = {}) {
       : null;
   const midpointEstimate = sanitizePositiveEstimate(rawMidpointEstimate);
 
-  const signalEstimates = blendedSignals.map((signal) => signal.estimate).filter(Number.isFinite);
   const weightedVariance =
     midpointEstimate !== null && totalWeight > 0
       ? blendedSignals.reduce(
@@ -628,6 +633,7 @@ export function classifyPropertyQuestion(questionText = "") {
   const normalized = String(questionText || "").toLowerCase();
 
   const matchers = [
+    { intent: "stack_completeness", patterns: ["stack", "complete", "completeness", "partial", "connected", "linkage"] },
     { intent: "comp_quality", patterns: ["comp", "comparable", "sale", "sales", "strong comps", "comp quality"] },
     { intent: "value_change", patterns: ["change", "changed", "moved", "different", "last run", "history"] },
     { intent: "market_support", patterns: ["market", "fhfa", "official", "price per foot", "price per sq", "trend"] },
@@ -652,6 +658,12 @@ export function classifyPropertyQuestion(questionText = "") {
 
 function buildPropertyAssistantFollowups(intent) {
   const followupsByIntent = {
+    stack_completeness: [
+      "Is financing linked cleanly?",
+      "Is homeowners protection linked?",
+      "How strong is the current equity picture?",
+      "What should I review first on this property?",
+    ],
     valuation_strength: [
       "How strong are the comps?",
       "What official market support is being used?",
@@ -701,6 +713,11 @@ function buildPropertyAssistantFollowups(intent) {
 
 function buildPropertyAssistantActions(intent, propertyId) {
   const actions = {
+    stack_completeness: [
+      { id: "open-mortgages", label: "Open Mortgages", type: "scroll_section", section: "mortgages" },
+      { id: "open-homeowners", label: "Open Homeowners", type: "scroll_section", section: "homeowners" },
+      { id: "open-equity", label: "Open Equity Review", type: "scroll_section", section: "equity" },
+    ],
     valuation_strength: [
       { id: "open-valuation", label: "Open Valuation", type: "scroll_section", section: "valuation" },
       { id: "open-comps", label: "Review Comps", type: "scroll_section", section: "comps" },
@@ -772,11 +789,45 @@ export function answerPropertyQuestion({
     ? `${metadata.average_comp_recency_months} months`
     : "not available";
   const officialSupport = metadata.official_market_support || "unavailable";
+  const stackCompletenessScore = normalizeCompletenessScore(propertyStackAnalytics?.completeness_score);
+  const stackCompletenessLabel = getCompletenessLabel(stackCompletenessScore).toLowerCase();
+  const stackCompletenessText = formatCompletenessScore(stackCompletenessScore);
+  const stackContinuity = propertyStackAnalytics?.continuity_status || "not available";
+  const stackLinkageStatus = propertyStackAnalytics?.linkage_status
+    ? String(propertyStackAnalytics.linkage_status).replace(/_/g, " ")
+    : "not available";
+  const stackGapSummary =
+    linkedMortgages.length === 0 && linkedHomeownersPolicies.length === 0
+      ? "No linked mortgage or homeowners policy is visible yet."
+      : linkedMortgages.length === 0
+        ? "Mortgage linkage is not visible yet."
+        : linkedHomeownersPolicies.length === 0
+          ? "Homeowners protection is not linked yet."
+          : "Both liability and protection are visible, but the stack still has continuity limits.";
 
   let answerText = "";
   let evidencePoints = [];
 
   switch (classification.intent) {
+    case "stack_completeness":
+      answerText =
+        stackCompletenessScore === null
+          ? "The property stack cannot be scored cleanly yet because the current operating graph is still missing enough linked context."
+          : stackCompletenessScore >= 0.95
+            ? "This property stack appears fully connected based on the available asset, liability, and protection links."
+            : stackCompletenessScore >= 0.75
+              ? "This property stack appears mostly connected, but some continuity details still need a cleaner read."
+              : stackCompletenessScore >= 0.4
+                ? "This property stack is still partial, so value, liability, and protection are not yet reading as one complete operating graph."
+                : "This property stack is still limited, which means the household review is relying on a fragmented view of the property.";
+      evidencePoints = [
+        `Stack completeness is ${stackCompletenessText} and currently reads ${stackCompletenessLabel}.`,
+        `Stack continuity is ${stackContinuity} with linkage status ${stackLinkageStatus}.`,
+        `Linked mortgages: ${linkedMortgages.length}.`,
+        `Linked homeowners policies: ${linkedHomeownersPolicies.length}.`,
+        stackGapSummary,
+      ];
+      break;
     case "valuation_strength":
       answerText =
         latestValuation?.confidence_label === "strong"
@@ -835,6 +886,7 @@ export function answerPropertyQuestion({
         `Linked homeowners policies: ${linkedHomeownersPolicies.length}.`,
         `Equity visibility is ${propertyEquityPosition?.equity_visibility_status || "limited"}.`,
         `Property stack continuity is ${propertyStackAnalytics?.continuity_status || "not available"}.`,
+        stackCompletenessScore !== null ? `Stack completeness is ${stackCompletenessText}.` : "A stored stack completeness score is not available yet.",
       ];
       break;
     case "missing_property_facts":
@@ -871,6 +923,9 @@ export function answerPropertyQuestion({
       classifier_confidence: classification.confidence,
       evidence_fields_used: {
         valuation_confidence: latestValuation?.confidence_label || null,
+        stack_completeness_score: stackCompletenessScore,
+        stack_continuity_status: propertyStackAnalytics?.continuity_status || null,
+        stack_linkage_status: propertyStackAnalytics?.linkage_status || null,
         comp_fit_score: metadata.comp_fit_score ?? null,
         average_comp_recency_months: metadata.average_comp_recency_months ?? null,
         official_market_support: officialSupport,

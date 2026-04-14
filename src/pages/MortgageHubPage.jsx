@@ -17,6 +17,7 @@ import {
   listMortgageLoans,
 } from "../lib/supabase/mortgageData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { buildMortgageHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 
 const MORTGAGE_LOAN_TYPES = listMortgageLoanTypes();
@@ -370,7 +371,7 @@ export default function MortgageHubPage({ onNavigate }) {
         </div>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Mortgage Debug: household={householdState.context.householdId || "none"} | loans={mortgageLoans.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
         </div>

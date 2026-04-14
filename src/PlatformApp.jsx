@@ -3,6 +3,7 @@ import DemoOverlay from "./components/demo/DemoOverlay";
 import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
 import TopNav from "./components/layout/TopNav";
+import { hasAuthLandingState } from "./lib/auth/authLandingState";
 import { hasTierAccess, useAccessPortal } from "./lib/auth/accessPortal";
 import { clearLegacyHouseholdReviewStorage } from "./lib/domain/platformIntelligence/reviewWorkflowState";
 import { DemoModeProvider } from "./lib/demo/DemoModeContext";
@@ -302,7 +303,9 @@ export default function PlatformApp() {
     pathname === "/privacy-policy" ||
     pathname === "/terms-of-service";
   const isAuthRoute = pathname === "/login" || pathname === "/signup";
-  const resolvedPathname = accessPortal.isAuthenticated && isAuthRoute ? postAuthHome : pathname;
+  const preserveAuthLandingRoute = pathname === "/login" && hasAuthLandingState();
+  const resolvedPathname =
+    accessPortal.isAuthenticated && isAuthRoute && !preserveAuthLandingRoute ? postAuthHome : pathname;
   const route = getRouteByPath(resolvedPathname);
   const resolvedIsAuthRoute = resolvedPathname === "/login" || resolvedPathname === "/signup";
   const hasRouteAccess = hasTierAccess(accessPortal.currentTier, route.minimumTier || "free");
@@ -449,7 +452,7 @@ export default function PlatformApp() {
             <ContentContainer>
               <TopNav
                 title={route.title}
-                subtitle="Modular family continuity and asset-intelligence shell"
+                subtitle="Household continuity, protection, and asset intelligence"
                 onNavigate={navigate}
                 onUpgrade={handleOpenPricing}
                 currentPlanLabel={accessPortal.currentPlan.label}

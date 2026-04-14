@@ -3,6 +3,7 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
 import {
+  buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
   getHouseholdReviewDigestSnapshot,
   getHouseholdReviewWorkflowState,
@@ -12,6 +13,11 @@ import {
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import {
+  applyReviewWorkspaceFilters,
+  formatReviewWorkspaceFilterSummary,
+  parseReviewWorkspaceHashState,
+} from "../lib/reviewWorkspace/workspaceFilters";
 
 const REVIEW_WORKSPACE_VIEW_STORAGE_KEY = "vaultedshield_review_workspace_views_v1";
 
@@ -144,6 +150,10 @@ export default function ReviewWorkspacePage({ onNavigate }) {
   const { householdState, debug, intelligenceBundle, intelligence } = usePlatformShellData();
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const [reviewDigestSnapshot, setReviewDigestSnapshot] = useState(null);
+  const [assistantFilterState, setAssistantFilterState] = useState({
+    openedFromAssistant: false,
+    filters: null,
+  });
   const [statusFilter, setStatusFilter] = useState("active");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
@@ -162,6 +172,24 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     setReviewWorkflowState(getHouseholdReviewWorkflowState(reviewScope));
     setReviewDigestSnapshot(getHouseholdReviewDigestSnapshot(reviewScope));
   }, [reviewScope]);
+
+  useEffect(() => {
+    function syncAssistantFiltersFromHash() {
+      const nextState = parseReviewWorkspaceHashState(
+        typeof window !== "undefined" ? window.location.hash : "",
+        reviewScope.householdId || null
+      );
+      setAssistantFilterState({
+        openedFromAssistant: nextState.openedFromAssistant,
+        filters: nextState.filters,
+      });
+    }
+
+    syncAssistantFiltersFromHash();
+    if (typeof window === "undefined") return undefined;
+    window.addEventListener("hashchange", syncAssistantFiltersFromHash);
+    return () => window.removeEventListener("hashchange", syncAssistantFiltersFromHash);
+  }, [reviewScope.householdId]);
 
   useEffect(() => {
     const viewKey = `${reviewScope.userId || "guest"}:${reviewScope.householdId || "none"}`;
@@ -190,6 +218,14 @@ export default function ReviewWorkspacePage({ onNavigate }) {
   const visibleItems = useMemo(() => {
     let nextItems = [...queueItems];
 
+    if (assistantFilterState.filters) {
+      nextItems = applyReviewWorkspaceFilters(
+        nextItems,
+        assistantFilterState.filters,
+        reviewScope.householdId || null
+      );
+    }
+
     if (statusFilter === "active") {
       nextItems = nextItems.filter(
         (item) => item.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item.changed_since_review
@@ -215,7 +251,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     }
 
     return sortItems(nextItems, sortKey);
-  }, [assigneeFilter, queueItems, sourceFilter, sortKey, statusFilter]);
+  }, [assistantFilterState.filters, assigneeFilter, queueItems, reviewScope.householdId, sourceFilter, sortKey, statusFilter]);
 
   const metrics = useMemo(
     () => [
@@ -255,13 +291,18 @@ export default function ReviewWorkspacePage({ onNavigate }) {
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
+    const targetItem = queueItems.find((item) => item.id === itemId) || null;
     const nextState = {
       ...reviewWorkflowState,
-      [itemId]: {
-        ...(reviewWorkflowState[itemId] || {}),
-        status,
-        updated_at: new Date().toISOString(),
-      },
+      [itemId]: buildReviewWorkflowStateEntry({
+        item: targetItem,
+        currentEntry: reviewWorkflowState[itemId] || {},
+        householdId: reviewScope.householdId,
+        updates: {
+          status,
+          updated_at: new Date().toISOString(),
+        },
+      }),
     };
     setReviewWorkflowState(nextState);
     saveHouseholdReviewWorkflowState(reviewScope, nextState);
@@ -269,16 +310,21 @@ export default function ReviewWorkspacePage({ onNavigate }) {
 
   function handleAssignmentUpdate(itemId, assigneeKey) {
     if (!reviewScope.householdId || !itemId) return;
+    const targetItem = queueItems.find((item) => item.id === itemId) || null;
     const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
     const nextState = {
       ...reviewWorkflowState,
-      [itemId]: {
-        ...(reviewWorkflowState[itemId] || {}),
-        assignee_key: assignee?.key || "",
-        assignee_label: assignee?.label || "Unassigned",
-        assigned_at: assignee?.key ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      },
+      [itemId]: buildReviewWorkflowStateEntry({
+        item: targetItem,
+        currentEntry: reviewWorkflowState[itemId] || {},
+        householdId: reviewScope.householdId,
+        updates: {
+          assignee_key: assignee?.key || "",
+          assignee_label: assignee?.label || "Unassigned",
+          assigned_at: assignee?.key ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        },
+      }),
     };
     setReviewWorkflowState(nextState);
     saveHouseholdReviewWorkflowState(reviewScope, nextState);
@@ -289,11 +335,15 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     const nextState = { ...reviewWorkflowState };
     const updatedAt = new Date().toISOString();
     visibleItems.forEach((item) => {
-      nextState[item.id] = {
-        ...(reviewWorkflowState[item.id] || {}),
-        status,
-        updated_at: updatedAt,
-      };
+      nextState[item.id] = buildReviewWorkflowStateEntry({
+        item,
+        currentEntry: reviewWorkflowState[item.id] || {},
+        householdId: reviewScope.householdId,
+        updates: {
+          status,
+          updated_at: updatedAt,
+        },
+      });
     });
     setReviewWorkflowState(nextState);
     saveHouseholdReviewWorkflowState(reviewScope, nextState);
@@ -305,13 +355,17 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     const nextState = { ...reviewWorkflowState };
     const updatedAt = new Date().toISOString();
     visibleItems.forEach((item) => {
-      nextState[item.id] = {
-        ...(reviewWorkflowState[item.id] || {}),
-        assignee_key: assignee?.key || "",
-        assignee_label: assignee?.label || "Unassigned",
-        assigned_at: assignee?.key ? updatedAt : null,
-        updated_at: updatedAt,
-      };
+      nextState[item.id] = buildReviewWorkflowStateEntry({
+        item,
+        currentEntry: reviewWorkflowState[item.id] || {},
+        householdId: reviewScope.householdId,
+        updates: {
+          assignee_key: assignee?.key || "",
+          assignee_label: assignee?.label || "Unassigned",
+          assigned_at: assignee?.key ? updatedAt : null,
+          updated_at: updatedAt,
+        },
+      });
     });
     setReviewWorkflowState(nextState);
     saveHouseholdReviewWorkflowState(reviewScope, nextState);
@@ -376,6 +430,18 @@ export default function ReviewWorkspacePage({ onNavigate }) {
   }
 
   const sourceChoices = useMemo(() => sourceOptions(queueItems), [queueItems]);
+  const assistantFilterSummary = useMemo(
+    () => formatReviewWorkspaceFilterSummary(assistantFilterState.filters),
+    [assistantFilterState.filters]
+  );
+
+  function handleClearAssistantFilters() {
+    setAssistantFilterState({
+      openedFromAssistant: false,
+      filters: null,
+    });
+    onNavigate?.("/review-workspace");
+  }
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
@@ -394,6 +460,48 @@ export default function ReviewWorkspacePage({ onNavigate }) {
           </div>
         }
       />
+
+      {assistantFilterState.filters ? (
+        <SectionCard
+          title="Scoped Queue"
+          subtitle={
+            assistantFilterState.openedFromAssistant
+              ? "Opened from household assistant"
+              : "Queue filters were restored from the current route."
+          }
+        >
+          <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>Showing:</span>
+              {assistantFilterSummary.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#1d4ed8",
+                    background: "#dbeafe",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button type="button" onClick={handleClearAssistantFilters} style={actionStyle(false)}>
+                Clear Filters
+              </button>
+              <button type="button" onClick={() => onNavigate?.("/review-workspace")} style={actionStyle(true)}>
+                Back To Full Queue
+              </button>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title="Queue Summary" subtitle={reviewDigest.summary}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>

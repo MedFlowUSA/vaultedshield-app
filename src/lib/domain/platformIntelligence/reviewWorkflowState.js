@@ -1,3 +1,5 @@
+import { deriveReviewWorkspaceCandidateFromQueueItem } from "../../reviewWorkspace/workspaceFilters.js";
+
 const REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v2";
 const REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v2";
 const LEGACY_REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v1";
@@ -83,6 +85,71 @@ function toTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function toStableWorkflowMemoryKey(filters = null) {
+  if (!filters?.module || !filters?.issueType) return null;
+  return [
+    filters.module,
+    filters.issueType,
+    filters.assetId || "asset",
+    filters.recordId || "record",
+  ].join("|");
+}
+
+function resolveWorkflowMemoryState(item = {}, workflowState = {}) {
+  if (!item?.id) return {};
+  const directState = workflowState[item.id];
+  if (directState) return directState;
+
+  const candidateFilters = deriveReviewWorkspaceCandidateFromQueueItem(item, null);
+  const memoryKey = toStableWorkflowMemoryKey(candidateFilters);
+  if (!memoryKey) return {};
+
+  const matchedEntry = Object.values(workflowState || {}).find(
+    (entry) => entry?.resolution_key && entry.resolution_key === memoryKey
+  );
+
+  return matchedEntry || {};
+}
+
+export function buildReviewWorkflowStateEntry({
+  item = null,
+  currentEntry = {},
+  householdId = null,
+  updates = {},
+} = {}) {
+  const candidateFilters = item
+    ? deriveReviewWorkspaceCandidateFromQueueItem(item, householdId || null)
+    : currentEntry?.resolution_filters || null;
+  const resolutionKey = toStableWorkflowMemoryKey(candidateFilters);
+
+  return {
+    ...currentEntry,
+    ...updates,
+    ...(candidateFilters ? { resolution_filters: candidateFilters } : {}),
+    ...(resolutionKey ? { resolution_key: resolutionKey } : {}),
+    ...(item?.route ? { route: item.route } : {}),
+    ...(item?.label ? { label: item.label } : {}),
+    ...(item?.source ? { source: item.source } : {}),
+  };
+}
+
+export function isReviewWorkflowItemResolved(item = {}) {
+  return (
+    item?.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key &&
+    !item?.changed_since_review
+  );
+}
+
+export function filterActiveReviewWorkflowItems(items = []) {
+  return items.filter(
+    (item) => item?.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item?.changed_since_review
+  );
+}
+
+export function filterResolvedReviewWorkflowItems(items = []) {
+  return items.filter((item) => isReviewWorkflowItemResolved(item));
+}
+
 function resolveReviewScope(input) {
   if (!input) {
     return { key: null, householdId: null, userId: null };
@@ -152,7 +219,7 @@ export function saveHouseholdReviewDigestSnapshot(scopeInput, snapshot) {
 
 export function annotateReviewWorkflowItems(items = [], workflowState = {}) {
   return items.map((item) => {
-    const current = workflowState[item.id] || {};
+    const current = resolveWorkflowMemoryState(item, workflowState);
     const status = REVIEW_WORKFLOW_STATUSES[current.status]
       ? current.status
       : REVIEW_WORKFLOW_STATUSES.open.key;
@@ -173,6 +240,8 @@ export function annotateReviewWorkflowItems(items = [], workflowState = {}) {
       workflow_assignee_key: current.assignee_key || "",
       workflow_assignee_label: current.assignee_label || "Unassigned",
       workflow_assigned_at: current.assigned_at || null,
+      workflow_resolution_key: current.resolution_key || null,
+      workflow_resolution_filters: current.resolution_filters || null,
       changed_since_review: changedSinceReview,
       changed_since_review_label: changedSinceReview ? "Changed Since Review" : "",
     };
@@ -182,17 +251,18 @@ export function annotateReviewWorkflowItems(items = [], workflowState = {}) {
 export function buildHouseholdReviewDigest(items = [], previousSnapshot = null) {
   const currentSnapshot = {
     captured_at: new Date().toISOString(),
-    items: items.map((item) => ({
-      id: item.id,
-      label: item.label,
-      workflow_status: item.workflow_status,
-      workflow_assignee_key: item.workflow_assignee_key || "",
-      workflow_assignee_label: item.workflow_assignee_label || "Unassigned",
-      changed_since_review: Boolean(item.changed_since_review),
-      summary: item.summary,
-      change_signal: item.change_signal || "",
-    })),
-  };
+      items: items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        workflow_status: item.workflow_status,
+        workflow_assignee_key: item.workflow_assignee_key || "",
+        workflow_assignee_label: item.workflow_assignee_label || "Unassigned",
+        workflow_resolution_key: item.workflow_resolution_key || null,
+        changed_since_review: Boolean(item.changed_since_review),
+        summary: item.summary,
+        change_signal: item.change_signal || "",
+      })),
+    };
 
   const previousItemsById = Object.fromEntries(
     (previousSnapshot?.items || []).map((item) => [item.id, item])
@@ -250,6 +320,9 @@ export function buildHouseholdReviewDigest(items = [], previousSnapshot = null) 
     reopened_count: reopenedItems.length,
     improved_count: improvedItems.length,
     active_count: stillOpenItems.length,
+    resolved_count: currentSnapshot.items.filter(
+      (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key && !item.changed_since_review
+    ).length,
     assigned_count: assignedItems.length,
     reopened_items: reopenedItems,
     improved_items: improvedItems,

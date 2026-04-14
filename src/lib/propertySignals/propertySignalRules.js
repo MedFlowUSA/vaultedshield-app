@@ -1,3 +1,9 @@
+import {
+  formatCompletenessScore,
+  getCompletenessLabel,
+  normalizeCompletenessScore,
+} from "../assetLinks/linkedContext.js";
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -21,6 +27,7 @@ export const PROPERTY_SIGNAL_FLAG_LABELS = Object.freeze({
   valuationMissing: "No valuation on file",
   weakValuation: "Weak valuation support",
   linkageGap: "Property stack incomplete",
+  stackCompletenessGap: "Stack completeness still developing",
   debtVisibilityGap: "Debt visibility limited",
   protectionGap: "Protection linkage missing",
   incompleteFacts: "Property facts incomplete",
@@ -62,6 +69,7 @@ export function buildPropertySignalFlags({
   const strongCompCount = toNumber(metadata.strong_comp_count) ?? 0;
   const valuationRangeRatio = toNumber(metadata.valuation_range_ratio);
   const estimatedLtv = toNumber(propertyEquityPosition?.estimated_ltv);
+  const stackCompletenessScore = normalizeCompletenessScore(propertyStackAnalytics?.completeness_score);
   const invalidSavedValuation = Boolean(propertyEquityPosition?.review_flags?.includes("invalid_saved_valuation"));
   const missingFacts = getMissingPropertyFacts(property);
 
@@ -76,6 +84,8 @@ export function buildPropertySignalFlags({
       propertyStackAnalytics?.linkage_status === "property_only" ||
       linkedHomeownersPolicies.length === 0 ||
       (linkedMortgages.length === 0 && linkedHomeownersPolicies.length === 0),
+    stackCompletenessGap: stackCompletenessScore !== null && stackCompletenessScore < 0.75,
+    stackCompletenessCritical: stackCompletenessScore !== null && stackCompletenessScore < 0.4,
     debtVisibilityGap:
       propertyEquityPosition?.financing_status === "missing" ||
       propertyEquityPosition?.financing_status === "linked_balance_missing" ||
@@ -104,6 +114,7 @@ export function buildPropertySignalFlags({
       Boolean(propertyEquityPosition?.review_flags?.includes("ltv_review_elevated")),
     missingFacts,
     subjectCompleteness,
+    stackCompletenessScore,
   };
 }
 
@@ -155,16 +166,32 @@ export function buildPropertySignalReasons({
     );
   }
 
+  if (flags.stackCompletenessGap) {
+    const stackScoreText = formatCompletenessScore(flags.stackCompletenessScore);
+    const stackLabel = getCompletenessLabel(flags.stackCompletenessScore).toLowerCase();
+    reasons.push(
+      `The property operating graph is still ${stackLabel} at ${stackScoreText}, so value, liability, and protection context are not yet reading as one complete stack.`
+    );
+  }
+
   if (flags.protectionGap) {
     reasons.push("No linked homeowners protection record is visible, so value and coverage are not being reviewed together yet.");
   }
 
   if (flags.linkageGap) {
-    reasons.push(
-      propertyStackAnalytics?.linkage_status
-        ? `The property stack is still reading as ${String(propertyStackAnalytics.linkage_status).replace(/_/g, " ")}, not fully connected.`
-        : "The property stack is not fully linked yet, so the overall property read is fragmented."
-    );
+    if (linkedMortgages.length === 0 && linkedHomeownersPolicies.length === 0) {
+      reasons.push("Neither financing nor homeowners protection is linked yet, so the property stack still reads as an isolated asset.");
+    } else if (linkedHomeownersPolicies.length === 0) {
+      reasons.push("Homeowners protection is not linked yet, so the property stack is still missing its protection layer.");
+    } else if (linkedMortgages.length === 0) {
+      reasons.push("A linked liability is not visible yet, so the property stack is still missing financing context.");
+    } else {
+      reasons.push(
+        propertyStackAnalytics?.linkage_status
+          ? `The property stack is still reading as ${String(propertyStackAnalytics.linkage_status).replace(/_/g, " ")}, not fully connected.`
+          : "The property stack is not fully linked yet, so the overall property read is fragmented."
+      );
+    }
   }
 
   if (flags.equityPressure) {
@@ -203,6 +230,9 @@ export function buildPropertySignalConfidence({
   else if (latestValuation?.confidence_label === "moderate") confidence += 0.1;
 
   if (propertyStackAnalytics?.id) confidence += 0.08;
+  if ((flags.stackCompletenessScore ?? null) !== null) {
+    confidence += flags.stackCompletenessScore >= 0.75 ? 0.04 : 0;
+  }
   if (propertyEquityPosition) confidence += 0.08;
   if (propertyValuationHistory.length >= 2) confidence += 0.06;
   if (linkedMortgages.length > 0) confidence += 0.04;
@@ -213,6 +243,8 @@ export function buildPropertySignalConfidence({
   if (flags.incompleteFacts) confidence -= 0.08;
   if (flags.compQualityRisk) confidence -= 0.06;
   if (flags.marketSupportGap) confidence -= 0.04;
+  if (flags.stackCompletenessGap) confidence -= 0.05;
+  if (flags.stackCompletenessCritical) confidence -= 0.05;
 
   return Number(clamp(confidence, 0.22, 0.94).toFixed(2));
 }
@@ -224,6 +256,7 @@ export function derivePropertySignalLevel(flags = {}) {
 
   const severePressure =
     flags.equityPressure ||
+    flags.stackCompletenessCritical ||
     (flags.weakValuation && flags.compQualityRisk && (flags.debtVisibilityGap || flags.protectionGap)) ||
     (flags.valuationMissing && flags.incompleteFacts && (flags.debtVisibilityGap || flags.protectionGap));
 

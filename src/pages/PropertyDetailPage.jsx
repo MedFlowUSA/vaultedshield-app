@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
+import PropertyAIChat from "../components/property/PropertyAIChat";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -26,6 +27,7 @@ import {
   isSupabaseConfigured,
 } from "../lib/supabase/client";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import {
   getPropertyBundle,
   linkHomeownersToProperty,
@@ -53,7 +55,6 @@ import {
 import { buildPropertyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
-import { runPropertyAiAssistant } from "../utils/runPropertyAiAssistant";
 
 const PROPERTY_DOCUMENT_CLASSES = listPropertyDocumentClasses();
 const PROPERTY_TYPES = listPropertyTypes();
@@ -63,16 +64,6 @@ const DEFAULT_UPLOAD_FORM = {
   document_date: "",
   notes: "",
 };
-
-const PROPERTY_ASSISTANT_STARTERS = [
-  "How strong is this valuation?",
-  "How strong are the comps?",
-  "Why did this value change?",
-  "What official market support is being used?",
-  "Is financing and coverage linked cleanly?",
-  "What property facts are still missing?",
-  "What should I review first on this property?",
-];
 
 function actionButtonStyle(primary = false) {
   return {
@@ -400,8 +391,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const [runningValuation, setRunningValuation] = useState(false);
   const [valuationError, setValuationError] = useState("");
   const [valuationSuccess, setValuationSuccess] = useState("");
-  const [assistantQuestion, setAssistantQuestion] = useState("");
-  const [assistantHistory, setAssistantHistory] = useState([]);
   const [showPropertyReport, setShowPropertyReport] = useState(false);
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
@@ -533,11 +522,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setFactsDraft(buildPropertyFactsDraft(bundle?.property || null));
   }, [bundle?.property]);
 
-  useEffect(() => {
-    setAssistantHistory([]);
-    setAssistantQuestion("");
-  }, [propertyId]);
-
   const property = bundle?.property || null;
   const propertyType = property ? getPropertyType(property.property_type_key) : null;
   const linkedAsset = property?.assets || null;
@@ -560,7 +544,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const factsFiveLayout = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))";
   const tripleMetricLayout = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
   const fiveMetricLayout = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))";
-  const assistantFormLayout = isMobile ? "1fr" : "minmax(0, 1fr) auto";
   const baseInputStyle = { width: "100%", minWidth: 0, boxSizing: "border-box", padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" };
   const baseSelectStyle = { ...baseInputStyle, background: "#fff" };
   const actionStackStyle = { display: "flex", gap: "10px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" };
@@ -628,7 +611,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     return topComps.reduce((sum, value) => sum + value, 0) / topComps.length;
   }, [analyzedCompRows]);
   const propertyComps = useMemo(() => bundle?.propertyComps || [], [bundle?.propertyComps]);
-  const latestAssistantEntry = assistantHistory[0] || null;
   const propertyEquityPosition = bundle?.propertyEquityPosition || null;
   const propertyStackLinkageStatus = bundle?.propertyStackLinkageStatus || "property_only";
   const supabaseDiagnostics = getSupabaseConfigDiagnostics();
@@ -688,7 +670,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       }),
     [property, propertySignals, valuationChangeSummary]
   );
-
   const propertyStackPrompts = useMemo(() => {
     const prompts = [];
 
@@ -1119,38 +1100,9 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     setRunningValuation(false);
   }
 
-  function handleAssistantPrompt(questionText) {
-    const cleanQuestion = String(questionText || "").trim();
-    if (!cleanQuestion) return;
-
-    const response = runPropertyAiAssistant({
-      userQuestion: cleanQuestion,
-      property,
-      latestValuation: latestPropertyValuation,
-      valuationChangeSummary,
-      propertyEquityPosition,
-      propertyStackAnalytics,
-      linkedMortgages,
-      linkedHomeownersPolicies,
-      propertyId,
-      propertySignals,
-      propertyActionFeed,
-    });
-
-    setAssistantHistory((current) => [
-      {
-        id: `${Date.now()}-${current.length}`,
-        question: cleanQuestion,
-        response,
-      },
-      ...current,
-    ].slice(0, 6));
-    setAssistantQuestion("");
-  }
-
-  function handleAssistantSubmit(event) {
-    event.preventDefault();
-    handleAssistantPrompt(assistantQuestion);
+  function setSectionRef(key, node) {
+    if (!key) return;
+    sectionRefs.current[key] = node;
   }
 
   function scrollToPropertySection(section) {
@@ -1227,7 +1179,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </div>
           ) : null}
 
-          <div style={{ marginTop: "24px" }}>
+          <div
+            id="continuity-command"
+            ref={(node) => setSectionRef("continuity-command", node)}
+            style={{ marginTop: "24px" }}
+          >
             <SectionCard
               title="Property Command"
               subtitle="The strongest blockers, the risk if they sit, and the next move to keep this property stack healthy."
@@ -1441,184 +1397,31 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px" }}>
-            <SectionCard
-              title="Ask About This Property"
-              subtitle="Ask focused questions about the current value read, comp quality, market support, and property linkage using the live intelligence already loaded on this page."
-            >
-              <div style={{ display: "grid", gap: "18px" }}>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
-                  {PROPERTY_ASSISTANT_STARTERS.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => handleAssistantPrompt(prompt)}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: "999px",
-                        border: "1px solid #dbeafe",
-                        background: "#eff6ff",
-                        color: "#1d4ed8",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        maxWidth: "100%",
-                        textAlign: "left",
-                        ...wrapTextStyle,
-                      }}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-
-                <form onSubmit={handleAssistantSubmit} style={{ display: "grid", gap: "12px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: assistantFormLayout, gap: "12px", alignItems: "center" }}>
-                    <input
-                      value={assistantQuestion}
-                      onChange={(event) => setAssistantQuestion(event.target.value)}
-                      placeholder="Ask a question about this property..."
-                      style={{
-                        padding: "14px 16px",
-                        borderRadius: "14px",
-                        border: "1px solid #cbd5e1",
-                        background: "#ffffff",
-                        width: "100%",
-                        minWidth: 0,
-                        boxSizing: "border-box",
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!assistantQuestion.trim()}
-                      style={{
-                        padding: "12px 16px",
-                        borderRadius: "12px",
-                        border: "none",
-                        background: assistantQuestion.trim() ? "#0f172a" : "#94a3b8",
-                        color: "#ffffff",
-                        cursor: assistantQuestion.trim() ? "pointer" : "not-allowed",
-                        fontWeight: 700,
-                        ...(actionButtonLayoutStyle || {}),
-                      }}
-                    >
-                      Ask
-                    </button>
-                  </div>
-                </form>
-
-                {latestAssistantEntry ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "16px",
-                      padding: "20px 22px",
-                      borderRadius: "20px",
-                      background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
-                      border: "1px solid rgba(147, 197, 253, 0.28)",
-                    }}
-                  >
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Latest Answer
-                      </div>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{latestAssistantEntry.question}</div>
-                      <div style={{ color: "#0f172a", lineHeight: "1.8", fontSize: "16px", fontWeight: 600 }}>
-                        {latestAssistantEntry.response.answer_text}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      <StatusBadge label={`Intent: ${latestAssistantEntry.response.intent.replace(/_/g, " ")}`} tone="info" />
-                      <StatusBadge
-                        label={`Confidence: ${latestAssistantEntry.response.confidence_label}`}
-                        tone={
-                          latestAssistantEntry.response.confidence_label === "strong"
-                            ? "good"
-                            : latestAssistantEntry.response.confidence_label === "moderate"
-                              ? "warning"
-                              : "info"
-                        }
-                      />
-                    </div>
-
-                    {latestAssistantEntry.response.evidence_points?.length > 0 ? (
-                      <div>
-                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Supporting Evidence</div>
-                        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                          {latestAssistantEntry.response.evidence_points.map((point) => (
-                            <li key={point}>{point}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {(latestAssistantEntry.response.actions || []).length > 0 ? (
-                      <div>
-                        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Suggested Actions</div>
-                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
-                          {latestAssistantEntry.response.actions.map((action) => (
-                            <button
-                              key={action.id}
-                              type="button"
-                              onClick={() =>
-                                executeSmartAction(action, {
-                                  navigate: onNavigate,
-                                  scrollToSection: scrollToPropertySection,
-                                })
-                              }
-                              style={{
-                                padding: "10px 12px",
-                                borderRadius: "999px",
-                                border: "1px solid #dbeafe",
-                                background: "#ffffff",
-                                color: "#1d4ed8",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                                maxWidth: "100%",
-                                textAlign: "left",
-                                ...wrapTextStyle,
-                              }}
-                            >
-                              {action.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>Follow-Up Prompts</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", minWidth: 0 }}>
-                        {(latestAssistantEntry.response.followup_prompts || []).map((prompt) => (
-                          <button
-                            key={prompt}
-                            type="button"
-                            onClick={() => handleAssistantPrompt(prompt)}
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: "999px",
-                              border: "1px solid #dbeafe",
-                              background: "#ffffff",
-                              color: "#1d4ed8",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                              maxWidth: "100%",
-                              textAlign: "left",
-                              ...wrapTextStyle,
-                            }}
-                          >
-                            {prompt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ padding: "18px 20px", borderRadius: "18px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
-                    Ask about valuation strength, comp quality, market support, value change, or whether financing and protection are linked cleanly.
-                  </div>
-                )}
-              </div>
-            </SectionCard>
+            <PropertyAIChat
+              propertyId={property.id}
+              property={property}
+              propertyAnalyticsContext={bundle.propertyAnalytics?.[0] || {}}
+              latestPropertyValuation={latestPropertyValuation}
+              valuationChangeSummary={valuationChangeSummary}
+              propertyEquityPosition={propertyEquityPosition}
+              propertyStackAnalytics={propertyStackAnalytics}
+              linkedMortgages={linkedMortgages}
+              linkedHomeownersPolicies={linkedHomeownersPolicies}
+              propertySignals={propertySignals}
+              propertyDocuments={bundle.propertyDocuments || []}
+              propertySnapshots={bundle.propertySnapshots || []}
+              propertyAnalyticsRows={bundle.propertyAnalytics || []}
+              portalLinks={assetBundle?.portalLinks || []}
+              sectionLabels={{
+                "continuity-command": "Property Command",
+                "property-stack-analytics": "Stack Analytics",
+                "linked-context": "Linked Context",
+                valuation: "Virtual Valuation",
+                documents: "Property Documents",
+                portals: "Linked Portals",
+              }}
+              onJumpToSection={scrollToPropertySection}
+            />
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
@@ -1787,11 +1590,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <div
+            id="property-stack-analytics"
+            ref={(node) => setSectionRef("property-stack-analytics", node)}
+            style={{ marginTop: "24px" }}
+          >
             <SectionCard
               title="Property Stack Analytics"
               actions={
-                import.meta.env.DEV ? (
+                shouldShowDevDiagnostics() ? (
                   <button
                     type="button"
                     onClick={handleRefreshAnalytics}
@@ -1865,7 +1672,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <div
+            id="linked-context"
+            ref={(node) => setSectionRef("linked-context", node)}
+            style={{ marginTop: "24px" }}
+          >
             <SectionCard
               title="Linked Context"
               subtitle="See the property as part of one operating system across debt, protection, documents, and access continuity."
@@ -1884,7 +1695,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
-            <div ref={(node) => { sectionRefs.current.valuation = node; }}>
+            <div
+              id="valuation"
+              ref={(node) => {
+                sectionRefs.current.valuation = node;
+              }}
+            >
             <SectionCard title="Virtual Valuation">
               {latestPropertyValuation ? (
                 <div style={{ display: "grid", gap: "14px" }}>
@@ -2199,6 +2015,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
+            <div id="documents" ref={(node) => setSectionRef("documents", node)}>
             <SectionCard title="Property Documents">
               {bundle.propertyDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -2221,6 +2038,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 <EmptyState title="No property documents yet" description="Property-specific document records will appear here as uploads are classified and linked." />
               )}
             </SectionCard>
+            </div>
 
             <SectionCard title="Property Document Intake">
               <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px", minWidth: 0 }}>
@@ -2328,6 +2146,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
+            <div id="portals" ref={(node) => setSectionRef("portals", node)}>
             <SectionCard title="Linked Portals">
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -2348,6 +2167,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 <EmptyState title="No linked portals yet" description="Portal continuity records will surface here through the linked platform asset when county, tax, mortgage, or homeowners access continuity is mapped." />
               )}
             </SectionCard>
+            </div>
 
             <SectionCard title="Notes / Tasks / Alerts">
               {assetBundle ? (
@@ -2366,7 +2186,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Property Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | assetLinkCount={propertyAssetLinks.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationCompOrigin={compDataOrigin} | valuationProviderMode={providerMode} | valuationProviderKey={latestPropertyValuation?.metadata?.provider_key || "none"} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}

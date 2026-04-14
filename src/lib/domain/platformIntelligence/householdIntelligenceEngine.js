@@ -1,9 +1,9 @@
 import {
   createEmptyHouseholdIntelligenceSchema,
-} from "./householdIntelligenceSchema";
-import { buildPropertyOperatingGraphSummary } from "../../assetLinks/linkedContext";
-import { getPolicyDetailRoute, getPolicyEntryLabel } from "../../navigation/insurancePolicyRouting";
-import { getHouseholdBlankState } from "../../onboarding/isHouseholdBlank";
+} from "./householdIntelligenceSchema.js";
+import { buildPropertyOperatingGraphSummary } from "../../assetLinks/linkedContext.js";
+import { getPolicyDetailRoute, getPolicyEntryLabel } from "../../navigation/insurancePolicyRouting.js";
+import { getHouseholdBlankState } from "../../onboarding/isHouseholdBlank.js";
 
 const CRITICAL_ASSET_CATEGORIES = [
   "insurance",
@@ -1256,8 +1256,20 @@ function summarizeHouseholdEvidencePoint(label, value) {
   return `${label}: ${value || "—"}`;
 }
 
+function formatGraphPercent(score) {
+  const numeric = Number(score);
+  if (!Number.isFinite(numeric)) return "—";
+  return `${Math.round(numeric * 100)}%`;
+}
+
 function buildHouseholdAssistantFollowups(intent) {
   const map = {
+    property_operating_graph: [
+      "Which property stack needs attention first?",
+      "What is limiting continuity most?",
+      "Are portal and access records in good shape?",
+      "What should I review first?",
+    ],
     priority_review: [
       "What changed since last review?",
       "Which item is most urgent?",
@@ -1360,6 +1372,9 @@ function buildHouseholdAssistantActions(intent, { queueItems = [], householdMap 
         action_key: topDependency.smart_action_keys?.[0] || null,
       });
     }
+  } else if (intent === "property_operating_graph") {
+    actions.push({ id: "open-property", label: "Open property stack", route: "/property" });
+    actions.push({ id: "open-household-report", label: "Open household report", route: "/reports" });
   } else if (intent === "continuity_status") {
     const topArea = householdMap?.focus_areas?.[0];
     if (topArea?.route) {
@@ -1411,6 +1426,9 @@ export function classifyHouseholdQuestion(questionText = "") {
   if (/(portal|access|recovery|emergency access)/.test(text)) {
     return { intent: "portal_readiness", confidence: "moderate", keywords: ["portal"] };
   }
+  if (/(property stack|operating graph|property graph|property linkage|property connected|linked protection.*property|linked liabilities.*property)/.test(text)) {
+    return { intent: "property_operating_graph", confidence: "strong", keywords: ["property_graph"] };
+  }
   if (/(insurance|policy|coi)/.test(text)) {
     return { intent: "insurance_strength", confidence: "moderate", keywords: ["insurance"] };
   }
@@ -1443,6 +1461,7 @@ export function answerHouseholdQuestion({
     (item) => item.workflow_status !== "reviewed" || item.changed_since_review
   );
   const dependencySignals = safeMap.dependency_signals || buildCrossAssetDependencySignals(bundle, [], intelligence);
+  const operatingGraphSummary = buildPropertyOperatingGraphSummary(bundle || {});
 
   let answerText = safeMap.bottom_line;
   let evidencePoints = [
@@ -1532,6 +1551,32 @@ export function answerHouseholdQuestion({
       confidenceLabel = bundle.portalReadiness?.portalCount ? "moderate" : "limited";
       break;
     }
+    case "property_operating_graph": {
+      const propertyGraphPriority = priorityEngine?.priorities?.find((item) => item.source === "Operating Graph") || null;
+      answerText =
+        operatingGraphSummary.propertyCount === 0
+          ? "A property operating graph is not visible yet because there are no property stacks loaded into the current household view."
+          : propertyGraphPriority
+            ? `${propertyGraphPriority.title} is the clearest property-stack issue right now because the operating graph still shows partial linkage across value, liability, protection, or portal continuity.`
+            : operatingGraphSummary.partialCount > 0
+              ? `The property operating graph is still developing because ${operatingGraphSummary.partialCount} visible property stack${operatingGraphSummary.partialCount === 1 ? " appears" : "s appear"} partially connected.`
+              : "The visible property operating graph appears reasonably connected right now, with no major stack break standing out above the rest.";
+      evidencePoints = [
+        summarizeHouseholdEvidencePoint(
+          "Average stack completeness",
+          operatingGraphSummary.averageCompletenessScore !== null
+            ? `${formatGraphPercent(operatingGraphSummary.averageCompletenessScore)} (${String(operatingGraphSummary.averageCompletenessLabel || "—").toLowerCase()})`
+            : "—"
+        ),
+        summarizeHouseholdEvidencePoint("Partial property stacks", operatingGraphSummary.partialCount || 0),
+        summarizeHouseholdEvidencePoint("Missing protections", operatingGraphSummary.missingProtectionCount || 0),
+        summarizeHouseholdEvidencePoint("Missing liabilities", operatingGraphSummary.missingLiabilityCount || 0),
+        summarizeHouseholdEvidencePoint("Portal continuity weaknesses", operatingGraphSummary.portalWeaknessCount || 0),
+        propertyGraphPriority?.blocker || null,
+      ].filter(Boolean);
+      confidenceLabel = operatingGraphSummary.propertyCount > 0 ? "strong" : "limited";
+      break;
+    }
     case "insurance_strength": {
       const insuranceArea = safeMap.focus_areas?.find((item) => item.key === "insurance_review_strength");
       const weakestPolicy = activeQueue.find((item) => String(item.route || "").startsWith("/insurance/"));
@@ -1597,6 +1642,7 @@ export function answerHouseholdQuestion({
         "reviewDigest",
         "queueItems",
         "bundle.portalReadiness",
+        "buildPropertyOperatingGraphSummary(bundle)",
         "dependencySignals",
       ],
     },

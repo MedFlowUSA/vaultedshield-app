@@ -1,3 +1,8 @@
+import {
+  buildPropertyOperatingGraphSummary,
+  formatCompletenessScore,
+} from "../../assetLinks/linkedContext.js";
+
 function getUrgencyMeta(level = "warning") {
   if (level === "critical") {
     return {
@@ -34,6 +39,81 @@ function formatImpact(score = 0) {
   if (score >= 75) return "High household impact";
   if (score >= 60) return "Meaningful household impact";
   return "Worth reviewing soon";
+}
+
+function buildPropertyGraphPriorityRow(bundle = null) {
+  const graphSummary = buildPropertyOperatingGraphSummary(bundle || {});
+  if (!graphSummary.propertyCount) return null;
+
+  const {
+    averageCompletenessScore,
+    averageCompletenessLabel,
+    completeCount,
+    partialCount,
+    missingProtectionCount,
+    missingLiabilityCount,
+    portalWeaknessCount,
+  } = graphSummary;
+
+  const hasPressure =
+    partialCount > 0 ||
+    missingProtectionCount > 0 ||
+    missingLiabilityCount > 0 ||
+    portalWeaknessCount > 0 ||
+    (averageCompletenessScore !== null && averageCompletenessScore < 0.95);
+
+  if (!hasPressure) return null;
+
+  const normalizedScore = averageCompletenessScore ?? 0;
+  const urgency =
+    normalizedScore < 0.4 || (missingProtectionCount > 0 && missingLiabilityCount > 0)
+      ? "critical"
+      : normalizedScore < 0.75 || partialCount > 0 || portalWeaknessCount > 0
+        ? "warning"
+        : "ready";
+  const priorityScore = Math.max(
+    58,
+    Math.round(
+      62 +
+        (missingProtectionCount > 0 ? 10 : 0) +
+        (missingLiabilityCount > 0 ? 8 : 0) +
+        Math.min(10, partialCount * 3) +
+        Math.min(8, portalWeaknessCount * 2) +
+        (averageCompletenessScore !== null ? (1 - averageCompletenessScore) * 22 : 10)
+    )
+  );
+  const blockerParts = [
+    averageCompletenessScore !== null
+      ? `Average stack completeness is ${formatCompletenessScore(averageCompletenessScore)} and currently reads ${String(averageCompletenessLabel || "limited").toLowerCase()}.`
+      : "A stored property stack completeness score is not available yet.",
+    partialCount > 0
+      ? `${partialCount} propert${partialCount === 1 ? "y appears" : "ies appear"} partially connected.`
+      : `${completeCount} complete property stack${completeCount === 1 ? " is" : "s are"} currently visible.`,
+    missingProtectionCount > 0
+      ? `${missingProtectionCount} propert${missingProtectionCount === 1 ? "y still does" : "ies still do"} not show linked protection.`
+      : null,
+    missingLiabilityCount > 0
+      ? `${missingLiabilityCount} propert${missingLiabilityCount === 1 ? "y still does" : "ies still do"} not show linked liabilities.`
+      : null,
+  ].filter(Boolean);
+  const consequence =
+    portalWeaknessCount > 0
+      ? "Household property review is still fragmented because stack linkage and portal continuity are not reading cleanly together."
+      : "Household property review is still fragmented because the asset, liability, and protection triangle is not consistently connected.";
+
+  return {
+    id: "property-stack-completeness",
+    title: "Property stack completeness is still developing",
+    blocker: blockerParts.join(" "),
+    consequence,
+    nextAction: "Open property stack review",
+    route: "/property",
+    source: "Operating Graph",
+    urgency,
+    urgencyMeta: getUrgencyMeta(urgency),
+    priorityScore,
+    impactLabel: formatImpact(priorityScore),
+  };
 }
 
 export function buildHouseholdScorecard(householdMap = null) {
@@ -105,6 +185,7 @@ export function buildHouseholdPriorityEngine({
   commandCenter = null,
   housingCommand = null,
   emergencyAccessCommand = null,
+  bundle = null,
 } = {}) {
   const dependencyIssues = Array.isArray(householdMap?.dependency_signals?.priority_issues)
     ? householdMap.dependency_signals.priority_issues
@@ -132,6 +213,8 @@ export function buildHouseholdPriorityEngine({
     };
   });
 
+  const propertyGraphRow = buildPropertyGraphPriorityRow(bundle);
+
   function normalizeCommandRows(rows = [], source = "Command", baseScore = 72) {
     return rows.map((item, index) => {
       const urgency = item.urgency || "warning";
@@ -155,6 +238,7 @@ export function buildHouseholdPriorityEngine({
 
   const rows = [
     ...dependencyRows,
+    ...(propertyGraphRow ? [propertyGraphRow] : []),
     ...normalizeCommandRows(commandCenter?.blockers || [], "Household Command", 74),
     ...normalizeCommandRows(housingCommand?.blockers || [], "Housing", 78),
     ...normalizeCommandRows(emergencyAccessCommand?.blockers || [], "Access", 80),

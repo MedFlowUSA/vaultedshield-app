@@ -13,6 +13,7 @@ import {
   uploadGenericAssetDocument,
 } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
 import { convertImageToFile } from "../utils/imageToFile";
@@ -815,7 +816,7 @@ export default function UploadCenterPage() {
         <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>{loadError}</div>
       ) : null}
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7", overflowWrap: "anywhere" }}>
           Upload Debug: household={householdState.context.householdId || "none"} | asset={assetId || "none"} | storageConfigured={supabaseConfigured ? "yes" : "no"} | queue={queue.length} | uploadedPaths={queue.map((item) => item.storagePath).filter(Boolean).join(", ") || "none"} | documentIds={queue.map((item) => item.documentId).filter(Boolean).join(", ") || "none"} | error={loadError || "none"}
         </div>

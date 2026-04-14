@@ -2,6 +2,11 @@ import {
   answerPropertyQuestion,
   classifyPropertyQuestion,
 } from "../lib/domain/propertyValuation/valuationEngine.js";
+import {
+  formatCompletenessScore,
+  getCompletenessLabel,
+  normalizeCompletenessScore,
+} from "../lib/assetLinks/linkedContext.js";
 
 function confidenceLabelFromScore(confidence = 0) {
   if (confidence >= 0.8) return "strong";
@@ -23,7 +28,12 @@ function normalizeSignalSentence(propertySignals) {
   if (!propertySignals) return "";
   const signalLabel = String(propertySignals.signalLevel || "monitor").replace(/_/g, " ");
   const topReason = propertySignals.reasons?.[0] || "the current property support stack is still mixed";
-  return `Overall, this property currently reads as ${signalLabel} because ${topReason.charAt(0).toLowerCase()}${topReason.slice(1)}`;
+  const stackScore = normalizeCompletenessScore(propertySignals?.metadata?.stackCompletenessScore);
+  const stackSentence =
+    stackScore !== null
+      ? ` The operating graph currently reads ${getCompletenessLabel(stackScore).toLowerCase()} at ${formatCompletenessScore(stackScore)} completeness.`
+      : "";
+  return `Overall, this property currently reads as ${signalLabel} because ${topReason.charAt(0).toLowerCase()}${topReason.slice(1)}.${stackSentence}`.trim();
 }
 
 function buildReviewFirstAnswer(propertyActionFeed = [], propertySignals = null, fallbackText = "") {
@@ -31,10 +41,10 @@ function buildReviewFirstAnswer(propertyActionFeed = [], propertySignals = null,
   const signalSentence = normalizeSignalSentence(propertySignals);
 
   if (!topAction) {
-    return [signalSentence, fallbackText].filter(Boolean).join(". ") + ".";
+    return [signalSentence, fallbackText].filter(Boolean).join(" ").trim();
   }
 
-  return `${signalSentence}. The clearest next review is ${topAction.title.toLowerCase()} because ${topAction.summary.charAt(0).toLowerCase()}${topAction.summary.slice(1)}`;
+  return `${signalSentence} The clearest next review is ${topAction.title.toLowerCase()} because ${topAction.summary.charAt(0).toLowerCase()}${topAction.summary.slice(1)}`.trim();
 }
 
 export function runPropertyAiAssistant({
@@ -96,6 +106,11 @@ export function runPropertyAiAssistant({
   const evidence = unique([
     ...(baseResponse.evidence_points || []),
     ...(asksReviewPriority && propertyActionFeed[0] ? [propertyActionFeed[0].summary] : []),
+    ...(propertySignals?.metadata?.stackCompletenessScore !== null && propertySignals?.metadata?.stackCompletenessScore !== undefined
+      ? [
+          `Property stack completeness is ${formatCompletenessScore(propertySignals.metadata.stackCompletenessScore)} and currently reads ${String(propertySignals.metadata.stackCompletenessLabel || getCompletenessLabel(propertySignals.metadata.stackCompletenessScore)).toLowerCase()}.`,
+        ]
+      : []),
     ...(propertySignals?.reasons || []).slice(0, 2),
   ]).slice(0, 5);
 

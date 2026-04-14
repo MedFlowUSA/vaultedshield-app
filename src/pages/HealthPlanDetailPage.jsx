@@ -18,6 +18,7 @@ import {
   uploadHealthDocument,
 } from "../lib/supabase/healthData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildHealthCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -636,7 +637,7 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Health Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 health_plan_id={healthPlan.id} | asset_id={linkedAsset?.id || "none"} | household_id={healthPlan.household_id || "none"} | documents={bundle.healthDocuments.length} | snapshots={bundle.healthSnapshots.length} | analytics={bundle.healthAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | healthDocumentIds={uploadQueue.map((item) => item.healthDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || "none"}

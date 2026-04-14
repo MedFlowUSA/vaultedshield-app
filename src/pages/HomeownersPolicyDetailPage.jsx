@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import HomeownersLinkedContextCard from "../components/homeowners/HomeownersLinkedContextCard";
@@ -31,6 +31,7 @@ import {
   uploadHomeownersDocument,
 } from "../lib/supabase/homeownersData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
@@ -66,6 +67,54 @@ function getStatusTone(status) {
   if (status === "active") return "good";
   if (status === "cancelled" || status === "nonrenewed" || status === "expired") return "warning";
   return "info";
+}
+
+class HomeownersDetailRecoveryBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    if (import.meta.env.DEV) {
+      console.error("[VaultedShield] Homeowners detail render failure", error);
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <SectionCard
+          title="Homeowners detail recovery"
+          subtitle="VaultedShield hit a live rendering issue on this homeowners view, so the page was reduced to a safe fallback instead of failing blank."
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                color: "#9a3412",
+                lineHeight: "1.6",
+              }}
+            >
+              {this.state.error?.message || "Homeowners detail could not be fully rendered."}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>
+              The route is still available, and the recovery state keeps the protection side of the stack from disappearing entirely.
+            </div>
+          </div>
+        </SectionCard>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
@@ -121,64 +170,76 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   }, [reviewScope]);
 
   const loadHomeownersBundle = useCallback(async (targetHomeownersPolicyId, options = {}) => {
-    const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId, platformScope);
-    if (result.error || !result.data?.homeownersPolicy) {
+    try {
+      const result = await getHomeownersPolicyBundle(targetHomeownersPolicyId, platformScope);
+      if (result.error || !result.data?.homeownersPolicy) {
+        if (!options.silent) {
+          setBundle(null);
+          setAssetBundle(null);
+          setLoadError(result.error?.message || "Homeowners policy bundle could not be loaded.");
+        }
+        return { data: null, error: result.error || new Error("Homeowners policy bundle could not be loaded.") };
+      }
+
+      setBundle(result.data);
+      if (!options.silent) setLoadError("");
+      if (!options.silent) setLinkError("");
+
+      const linkedAssetId = result.data.homeownersPolicy.assets?.id;
+      if (linkedAssetId) {
+        const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
+        if (!assetResult.error) {
+          setAssetBundle(assetResult.data || null);
+        } else if (!options.silent) {
+          setAssetBundle(null);
+          setLoadError(assetResult.error.message || "");
+        }
+      } else {
+        setAssetBundle(null);
+      }
+
+      if (result.data.homeownersPolicy?.id) {
+        const propertyLinksResult = await listHomeownersPropertyLinks(result.data.homeownersPolicy.id);
+        const nextPropertyLinks = propertyLinksResult.data || [];
+        setPropertyLinks(nextPropertyLinks);
+        if (!options.silent && propertyLinksResult.error) {
+          setLinkError(propertyLinksResult.error.message || "");
+        }
+
+        const linkedPropertyAssetIds = nextPropertyLinks
+          .map((link) => link.properties?.assets?.id)
+          .filter(Boolean);
+        const propertyAssetLinksResult = await listAssetLinksForAssets(linkedPropertyAssetIds, platformScope);
+        setLinkedPropertyAssetLinks(propertyAssetLinksResult.data || []);
+        if (!options.silent && propertyAssetLinksResult.error) {
+          setLinkError(propertyAssetLinksResult.error.message || "");
+        }
+      } else {
+        setLinkedPropertyAssetLinks([]);
+      }
+
+      if (result.data.homeownersPolicy?.household_id) {
+        const propertiesResult = await listProperties(
+          platformScope.householdId || result.data.homeownersPolicy.household_id
+        );
+        setAvailableProperties(propertiesResult.data || []);
+        if (!options.silent && propertiesResult.error) {
+          setLinkError(propertiesResult.error.message || "");
+        }
+      }
+
+      return { data: result.data, error: null };
+    } catch (error) {
       if (!options.silent) {
         setBundle(null);
         setAssetBundle(null);
-        setLoadError(result.error?.message || "Homeowners policy bundle could not be loaded.");
+        setPropertyLinks([]);
+        setLinkedPropertyAssetLinks([]);
+        setAvailableProperties([]);
+        setLoadError(error?.message || "Homeowners policy bundle could not be loaded.");
       }
-      return { data: null, error: result.error || new Error("Homeowners policy bundle could not be loaded.") };
+      return { data: null, error: error || new Error("Homeowners policy bundle could not be loaded.") };
     }
-
-    setBundle(result.data);
-    if (!options.silent) setLoadError("");
-    if (!options.silent) setLinkError("");
-
-    const linkedAssetId = result.data.homeownersPolicy.assets?.id;
-    if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
-      if (!assetResult.error) {
-        setAssetBundle(assetResult.data || null);
-      } else if (!options.silent) {
-        setAssetBundle(null);
-        setLoadError(assetResult.error.message || "");
-      }
-    } else {
-      setAssetBundle(null);
-    }
-
-    if (result.data.homeownersPolicy?.id) {
-      const propertyLinksResult = await listHomeownersPropertyLinks(result.data.homeownersPolicy.id);
-      const nextPropertyLinks = propertyLinksResult.data || [];
-      setPropertyLinks(nextPropertyLinks);
-      if (!options.silent && propertyLinksResult.error) {
-        setLinkError(propertyLinksResult.error.message || "");
-      }
-
-      const linkedPropertyAssetIds = nextPropertyLinks
-        .map((link) => link.properties?.assets?.id)
-        .filter(Boolean);
-      const propertyAssetLinksResult = await listAssetLinksForAssets(linkedPropertyAssetIds, platformScope);
-      setLinkedPropertyAssetLinks(propertyAssetLinksResult.data || []);
-      if (!options.silent && propertyAssetLinksResult.error) {
-        setLinkError(propertyAssetLinksResult.error.message || "");
-      }
-    } else {
-      setLinkedPropertyAssetLinks([]);
-    }
-
-    if (result.data.homeownersPolicy?.household_id) {
-      const propertiesResult = await listProperties(
-        platformScope.householdId || result.data.homeownersPolicy.household_id
-      );
-      setAvailableProperties(propertiesResult.data || []);
-      if (!options.silent && propertiesResult.error) {
-        setLinkError(propertiesResult.error.message || "");
-      }
-    }
-
-    return { data: result.data, error: null };
   }, [platformScope]);
 
   useEffect(() => {
@@ -186,9 +247,11 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     let active = true;
     async function loadBundle() {
       setLoading(true);
-      await loadHomeownersBundle(homeownersPolicyId);
-      if (!active) return;
-      setLoading(false);
+      try {
+        await loadHomeownersBundle(homeownersPolicyId);
+      } finally {
+        if (active) setLoading(false);
+      }
     }
     loadBundle();
     return () => {
@@ -216,6 +279,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     () => bundle?.homeownersAssetLinks || [],
     [bundle?.homeownersAssetLinks]
   );
+  const bundleWarnings = useMemo(() => bundle?.bundleWarnings || [], [bundle?.bundleWarnings]);
   const linkageStatus = getHomeownersLinkageStatus({
     linkedProperties: propertyLinks,
   });
@@ -484,12 +548,37 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
         }
       />
 
-      {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading homeowners policy bundle...</div></SectionCard>
-      ) : !homeownersPolicy ? (
-        <EmptyState title="Homeowners policy not found" description={loadError || "This homeowners detail page could not load a matching policy record."} />
-      ) : (
-        <>
+      <HomeownersDetailRecoveryBoundary>
+        {loading ? (
+          <SectionCard><div style={{ color: "#64748b" }}>Loading homeowners policy bundle...</div></SectionCard>
+        ) : !homeownersPolicy ? (
+          <EmptyState title="Homeowners policy not found" description={loadError || "This homeowners detail page could not load a matching policy record."} />
+        ) : (
+          <>
+          {bundleWarnings.length > 0 ? (
+            <SectionCard
+              title="Partial visibility"
+              subtitle="The core homeowners policy loaded, but some supporting policy context is still unavailable. VaultedShield is showing the verified data that could be read safely."
+            >
+              <div style={{ display: "grid", gap: "8px" }}>
+                {bundleWarnings.map((warning) => (
+                  <div
+                    key={warning.area}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "12px",
+                      background: "#fff7ed",
+                      border: "1px solid #fdba74",
+                      color: "#9a3412",
+                      lineHeight: "1.6",
+                    }}
+                  >
+                    {warning.message}
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
           <SummaryPanel items={summaryItems} />
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={homeownersPolicyType?.display_name || homeownersPolicy.homeowners_policy_type_key} tone="info" />
@@ -892,15 +981,16 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Homeowners Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 homeowners_policy_id={homeownersPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={homeownersPolicy.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | homeownersAssetLinks={homeownersAssetLinks.length} | linkedPropertyAssetLinks={linkedPropertyAssetLinks.length} | documents={bundle.homeownersDocuments.length} | snapshots={bundle.homeownersSnapshots.length} | analytics={bundle.homeownersAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | homeownersDocumentIds={uploadQueue.map((item) => item.homeownersDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
               </div>
             </SectionCard>
           ) : null}
-        </>
-      )}
+          </>
+        )}
+      </HomeownersDetailRecoveryBoundary>
     </div>
   );
 }

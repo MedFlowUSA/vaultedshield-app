@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
+import MortgageAIChat from "../components/mortgage/MortgageAIChat";
 import MortgageLinkedContextCard from "../components/mortgage/MortgageLinkedContextCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -32,6 +33,7 @@ import {
   uploadMortgageDocument,
 } from "../lib/supabase/mortgageData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
@@ -62,10 +64,59 @@ function getStatusTone(status) {
   return "info";
 }
 
+class MortgageDetailRecoveryBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    if (import.meta.env.DEV) {
+      console.error("[VaultedShield] Mortgage detail render failure", error);
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <SectionCard
+          title="Mortgage detail recovery"
+          subtitle="VaultedShield hit a live rendering issue on this mortgage view, so the page was reduced to a safe fallback instead of failing blank."
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "12px",
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                color: "#9a3412",
+                lineHeight: "1.6",
+              }}
+            >
+              {this.state.error?.message || "Mortgage detail could not be fully rendered."}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>
+              The core route is still available. A follow-up debugging pass should now have a stable recovery surface instead of an empty shell.
+            </div>
+          </div>
+        </SectionCard>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
+  const sectionRefs = useRef({});
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [propertyLinks, setPropertyLinks] = useState([]);
@@ -103,64 +154,76 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const scopeKey = `${platformScope.authUserId || "guest"}:${platformScope.householdId || "none"}:${platformScope.ownershipMode}`;
 
   const loadMortgageBundle = useCallback(async (targetMortgageLoanId, options = {}) => {
-    const result = await getMortgageLoanBundle(targetMortgageLoanId, platformScope);
-    if (result.error || !result.data?.mortgageLoan) {
+    try {
+      const result = await getMortgageLoanBundle(targetMortgageLoanId, platformScope);
+      if (result.error || !result.data?.mortgageLoan) {
+        if (!options.silent) {
+          setBundle(null);
+          setAssetBundle(null);
+          setLoadError(result.error?.message || "Mortgage loan bundle could not be loaded.");
+        }
+        return { data: null, error: result.error || new Error("Mortgage loan bundle could not be loaded.") };
+      }
+
+      setBundle(result.data);
+      if (!options.silent) setLoadError("");
+      if (!options.silent) setLinkError("");
+
+      const linkedAssetId = result.data.mortgageLoan.assets?.id;
+      if (linkedAssetId) {
+        const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
+        if (!assetResult.error) {
+          setAssetBundle(assetResult.data || null);
+        } else if (!options.silent) {
+          setAssetBundle(null);
+          setLoadError(assetResult.error.message || "");
+        }
+      } else {
+        setAssetBundle(null);
+      }
+
+      if (result.data.mortgageLoan?.id) {
+        const propertyLinksResult = await listMortgagePropertyLinks(result.data.mortgageLoan.id);
+        const nextPropertyLinks = propertyLinksResult.data || [];
+        setPropertyLinks(nextPropertyLinks);
+        if (!options.silent && propertyLinksResult.error) {
+          setLinkError(propertyLinksResult.error.message || "");
+        }
+
+        const linkedPropertyAssetIds = nextPropertyLinks
+          .map((link) => link.properties?.assets?.id)
+          .filter(Boolean);
+        const propertyAssetLinksResult = await listAssetLinksForAssets(linkedPropertyAssetIds, platformScope);
+        setLinkedPropertyAssetLinks(propertyAssetLinksResult.data || []);
+        if (!options.silent && propertyAssetLinksResult.error) {
+          setLinkError(propertyAssetLinksResult.error.message || "");
+        }
+      } else {
+        setLinkedPropertyAssetLinks([]);
+      }
+
+      if (result.data.mortgageLoan?.household_id) {
+        const propertiesResult = await listProperties(
+          platformScope.householdId || result.data.mortgageLoan.household_id
+        );
+        setAvailableProperties(propertiesResult.data || []);
+        if (!options.silent && propertiesResult.error) {
+          setLinkError(propertiesResult.error.message || "");
+        }
+      }
+
+      return { data: result.data, error: null };
+    } catch (error) {
       if (!options.silent) {
         setBundle(null);
         setAssetBundle(null);
-        setLoadError(result.error?.message || "Mortgage loan bundle could not be loaded.");
+        setPropertyLinks([]);
+        setLinkedPropertyAssetLinks([]);
+        setAvailableProperties([]);
+        setLoadError(error?.message || "Mortgage loan bundle could not be loaded.");
       }
-      return { data: null, error: result.error || new Error("Mortgage loan bundle could not be loaded.") };
+      return { data: null, error: error || new Error("Mortgage loan bundle could not be loaded.") };
     }
-
-    setBundle(result.data);
-    if (!options.silent) setLoadError("");
-    if (!options.silent) setLinkError("");
-
-    const linkedAssetId = result.data.mortgageLoan.assets?.id;
-    if (linkedAssetId) {
-      const assetResult = await getAssetDetailBundle(linkedAssetId, platformScope);
-      if (!assetResult.error) {
-        setAssetBundle(assetResult.data || null);
-      } else if (!options.silent) {
-        setAssetBundle(null);
-        setLoadError(assetResult.error.message || "");
-      }
-    } else {
-      setAssetBundle(null);
-    }
-
-    if (result.data.mortgageLoan?.id) {
-      const propertyLinksResult = await listMortgagePropertyLinks(result.data.mortgageLoan.id);
-      const nextPropertyLinks = propertyLinksResult.data || [];
-      setPropertyLinks(nextPropertyLinks);
-      if (!options.silent && propertyLinksResult.error) {
-        setLinkError(propertyLinksResult.error.message || "");
-      }
-
-      const linkedPropertyAssetIds = nextPropertyLinks
-        .map((link) => link.properties?.assets?.id)
-        .filter(Boolean);
-      const propertyAssetLinksResult = await listAssetLinksForAssets(linkedPropertyAssetIds, platformScope);
-      setLinkedPropertyAssetLinks(propertyAssetLinksResult.data || []);
-      if (!options.silent && propertyAssetLinksResult.error) {
-        setLinkError(propertyAssetLinksResult.error.message || "");
-      }
-    } else {
-      setLinkedPropertyAssetLinks([]);
-    }
-
-    if (result.data.mortgageLoan?.household_id) {
-      const propertiesResult = await listProperties(
-        platformScope.householdId || result.data.mortgageLoan.household_id
-      );
-      setAvailableProperties(propertiesResult.data || []);
-      if (!options.silent && propertiesResult.error) {
-        setLinkError(propertiesResult.error.message || "");
-      }
-    }
-
-    return { data: result.data, error: null };
   }, [platformScope]);
 
   useEffect(() => {
@@ -168,9 +231,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     let active = true;
     async function loadBundle() {
       setLoading(true);
-      await loadMortgageBundle(mortgageLoanId);
-      if (!active) return;
-      setLoading(false);
+      try {
+        await loadMortgageBundle(mortgageLoanId);
+      } finally {
+        if (active) setLoading(false);
+      }
     }
     loadBundle();
     return () => {
@@ -187,6 +252,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     () => bundle?.mortgageAssetLinks || [],
     [bundle?.mortgageAssetLinks]
   );
+  const bundleWarnings = useMemo(() => bundle?.bundleWarnings || [], [bundle?.bundleWarnings]);
   const linkageStatus = getMortgageLinkageStatus({
     linkedProperties: propertyLinks,
   });
@@ -261,6 +327,18 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const propertyRailLayout = isTablet ? "1fr" : "1.1fr 1fr";
   const documentRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
   const dualLayout = isTablet ? "1fr" : "1fr 1fr";
+
+  function setSectionRef(key, node) {
+    if (!key) return;
+    sectionRefs.current[key] = node;
+  }
+
+  function scrollToMortgageSection(section) {
+    const target = sectionRefs.current[section];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
 
   function enqueueFiles(fileList) {
     const entries = Array.from(fileList || []).map((file) => ({
@@ -417,12 +495,37 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
         }
       />
 
-      {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading mortgage loan bundle...</div></SectionCard>
-      ) : !mortgageLoan ? (
-        <EmptyState title="Mortgage loan not found" description={loadError || "This mortgage detail page could not load a matching loan record."} />
-      ) : (
-        <>
+      <MortgageDetailRecoveryBoundary>
+        {loading ? (
+          <SectionCard><div style={{ color: "#64748b" }}>Loading mortgage loan bundle...</div></SectionCard>
+        ) : !mortgageLoan ? (
+          <EmptyState title="Mortgage loan not found" description={loadError || "This mortgage detail page could not load a matching loan record."} />
+        ) : (
+          <>
+          {bundleWarnings.length > 0 ? (
+            <SectionCard
+              title="Partial visibility"
+              subtitle="The core mortgage record loaded, but some supporting mortgage context is still unavailable. VaultedShield is showing the verified data that could be read safely."
+            >
+              <div style={{ display: "grid", gap: "8px" }}>
+                {bundleWarnings.map((warning) => (
+                  <div
+                    key={warning.area}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "12px",
+                      background: "#fff7ed",
+                      border: "1px solid #fdba74",
+                      color: "#9a3412",
+                      lineHeight: "1.6",
+                    }}
+                  >
+                    {warning.message}
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
           <SummaryPanel items={summaryItems} />
           <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <StatusBadge label={mortgageLoanType?.display_name || mortgageLoan.mortgage_loan_type_key} tone="info" />
@@ -433,7 +536,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             />
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <div
+            id="continuity-command"
+            ref={(node) => setSectionRef("continuity-command", node)}
+            style={{ marginTop: "24px" }}
+          >
             <SectionCard
               title="Mortgage Command"
               subtitle="The strongest loan blockers, why they matter, and what to do next on this mortgage."
@@ -493,6 +600,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: detailRailLayout, gap: "18px" }}>
+            <div id="loan-summary" ref={(node) => setSectionRef("loan-summary", node)}>
             <SectionCard title="Mortgage Loan Summary">
               <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Loan Name:</strong> {mortgageLoan.loan_name || linkedAsset?.asset_name || "Limited visibility"}</div>
@@ -505,6 +613,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 <div><strong>Status:</strong> <StatusBadge label={mortgageLoan.current_status || "unknown"} tone={getStatusTone(mortgageLoan.current_status)} /></div>
               </div>
             </SectionCard>
+            </div>
 
             <SectionCard title="Linked Platform Asset Summary">
               {linkedAsset ? (
@@ -616,6 +725,27 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
+          <div style={{ marginTop: "24px" }}>
+            <MortgageAIChat
+              mortgageLoanId={mortgageLoan.id}
+              mortgageLoan={mortgageLoan}
+              mortgageAnalytics={bundle.mortgageAnalytics?.[0] || {}}
+              mortgageReview={mortgageReview}
+              mortgageDocuments={bundle.mortgageDocuments || []}
+              mortgageSnapshots={bundle.mortgageSnapshots || []}
+              mortgageAnalyticsRows={bundle.mortgageAnalytics || []}
+              propertyLinks={propertyLinks}
+              linkedContext={mortgageLinkedContext}
+              sectionLabels={{
+                "continuity-command": "Mortgage Command",
+                "loan-summary": "Loan Summary",
+                "linked-context": "Linked Context",
+                documents: "Mortgage Documents",
+              }}
+              onJumpToSection={scrollToMortgageSection}
+            />
+          </div>
+
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
             <SectionCard title="Linked Property">
               {propertyLinks.length > 0 ? (
@@ -708,7 +838,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <div
+            id="linked-context"
+            ref={(node) => setSectionRef("linked-context", node)}
+            style={{ marginTop: "24px" }}
+          >
             <SectionCard
               title="Linked Context"
               subtitle="Read this mortgage as part of the broader operating graph across property, protection, documents, and access continuity."
@@ -727,6 +861,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
+            <div id="documents" ref={(node) => setSectionRef("documents", node)}>
             <SectionCard title="Mortgage Documents">
               {bundle.mortgageDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
@@ -750,6 +885,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 <EmptyState title="No mortgage documents yet" description="Mortgage-specific document records will appear here as uploads are classified and linked." />
               )}
             </SectionCard>
+            </div>
 
             <SectionCard title="Mortgage Document Intake">
               <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
@@ -851,15 +987,16 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             </SectionCard>
           </div>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <SectionCard title="Mortgage Debug">
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 mortgage_loan_id={mortgageLoan.id} | asset_id={linkedAsset?.id || "none"} | household_id={mortgageLoan.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | mortgageAssetLinks={mortgageAssetLinks.length} | linkedPropertyAssetLinks={linkedPropertyAssetLinks.length} | documents={bundle.mortgageDocuments.length} | snapshots={bundle.mortgageSnapshots.length} | analytics={bundle.mortgageAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | mortgageDocumentIds={uploadQueue.map((item) => item.mortgageDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
               </div>
             </SectionCard>
           ) : null}
-        </>
-      )}
+          </>
+        )}
+      </MortgageDetailRecoveryBoundary>
     </div>
   );
 }

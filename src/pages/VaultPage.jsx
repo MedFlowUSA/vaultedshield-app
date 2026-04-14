@@ -8,6 +8,7 @@ import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeVaultModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { listHouseholdDocuments } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_DOCUMENTS = [];
@@ -159,7 +160,7 @@ export default function VaultPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px" }}>
           Household Debug: {householdState.context.householdId || "none"} | Source: {householdState.context.source} | Documents: {documents.length}
         </div>

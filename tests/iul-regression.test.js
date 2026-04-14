@@ -17,10 +17,57 @@ import {
   buildPolicyAiAssistantResponse,
   classifyPolicyAiAssistantIntent,
 } from "../src/lib/policyAi/policyAiAssistantModule.js";
+import {
+  POLICY_QUESTION_TYPES,
+  classifyPolicyQuestionType,
+} from "../src/utils/policyQuestionClassifier.js";
+import { generatePolicyResponse } from "../src/utils/policyResponseEngine.js";
+import {
+  MORTGAGE_QUESTION_TYPES,
+  classifyMortgageQuestionType,
+} from "../src/utils/mortgageQuestionClassifier.js";
+import { generateMortgageResponse } from "../src/utils/mortgageResponseEngine.js";
+import {
+  PROPERTY_QUESTION_TYPES,
+  classifyPropertyQuestionType,
+} from "../src/utils/propertyQuestionClassifier.js";
+import { generatePropertyResponse } from "../src/utils/propertyResponseEngine.js";
+import { routeGlobalAssistantRequest } from "../src/utils/globalAssistantRouter.js";
 import { runPolicyAiAssistant } from "../src/utils/runPolicyAiAssistant.js";
 import { runPortfolioAiAssistant } from "../src/utils/runPortfolioAiAssistant.js";
 import { runPropertyAiAssistant } from "../src/utils/runPropertyAiAssistant.js";
 import { runRetirementAiAssistant } from "../src/utils/runRetirementAiAssistant.js";
+import {
+  buildHouseholdPriorityEngine,
+  buildHouseholdScorecard,
+} from "../src/lib/domain/platformIntelligence/householdOperatingSystem.js";
+import { answerHouseholdQuestion } from "../src/lib/domain/platformIntelligence/householdIntelligenceEngine.js";
+import {
+  applyReviewWorkspaceFilters,
+  buildHouseholdAssistantReviewActions,
+  buildReviewWorkspaceRoute,
+  deriveReviewWorkspaceCandidateFromQueueItem,
+  parseReviewWorkspaceHashState,
+} from "../src/lib/reviewWorkspace/workspaceFilters.js";
+import {
+  annotateReviewWorkflowItems,
+  buildReviewWorkflowStateEntry,
+} from "../src/lib/domain/platformIntelligence/reviewWorkflowState.js";
+import { buildWorkflowAwareHouseholdContext } from "../src/lib/domain/platformIntelligence/workflowMemory.js";
+import { normalizeIssueInput } from "../src/lib/domain/issues/issueTypes.js";
+import {
+  findExistingHouseholdIssueByIdentity,
+  ignoreHouseholdIssue,
+  listOpenIssuesForAsset,
+  listOpenIssuesForHousehold,
+  resolveHouseholdIssue,
+  upsertHouseholdIssue,
+} from "../src/lib/supabase/issueData.js";
+import {
+  buildDetectedIssues,
+  buildDetectedIssuesFingerprint,
+} from "../src/lib/intelligence/issues/buildDetectedIssues.js";
+import { syncDetectedIssues } from "../src/lib/intelligence/issues/syncDetectedIssues.js";
 import {
   getStructuredData,
   getStructuredStrategyRows,
@@ -51,6 +98,12 @@ import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconst
 import { buildIulReaderModel } from "../src/features/iul-reader/readerModel.js";
 import { buildIulV2Analytics } from "../src/lib/insurance/iulV2Analytics.js";
 import { resolveResponsiveLayout } from "../src/lib/ui/responsiveLayout.js";
+import { normalizeHashPath } from "../src/lib/navigation/useHashRoute.js";
+import {
+  clearAuthLandingStateFromUrl,
+  getAuthLandingState,
+  hasAuthLandingState,
+} from "../src/lib/auth/authLandingState.js";
 import {
   clearVaultedShieldSessionArtifacts,
   consumeAccountDeletionFlash,
@@ -58,6 +111,7 @@ import {
   requiresDeletionReauth,
   setAccountDeletionFlash,
 } from "../src/lib/auth/requestAccountDeletion.js";
+import { assembleModuleBundle } from "../src/lib/supabase/moduleBundleState.js";
 
 function field(value, confidence = "high", displayValue = null) {
   return {
@@ -75,6 +129,40 @@ function runTest(name, fn) {
   } catch (error) {
     console.error(`FAIL ${name}`);
     throw error;
+  }
+}
+
+async function runAsyncTest(name, fn) {
+  try {
+    await fn();
+    console.log(`PASS ${name}`);
+  } catch (error) {
+    console.error(`FAIL ${name}`);
+    throw error;
+  }
+}
+
+function withWindowMock(windowMock, fn) {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+
+  globalThis.window = windowMock;
+  globalThis.document = windowMock?.document || { title: "VaultedShield" };
+
+  try {
+    fn();
+  } finally {
+    if (typeof previousWindow === "undefined") {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+
+    if (typeof previousDocument === "undefined") {
+      delete globalThis.document;
+    } else {
+      globalThis.document = previousDocument;
+    }
   }
 }
 
@@ -106,6 +194,493 @@ class MemoryStorage {
   setItem(key, value) {
     this.values.set(String(key), String(value));
   }
+}
+
+function createIssueSupabaseDouble({ rows = [], currentUserId = "user-1" } = {}) {
+  const state = {
+    rows: rows.map((row) => ({ ...row })),
+    currentUserId,
+    nextId: rows.length + 1,
+  };
+
+  function cloneRow(row) {
+    return row ? { ...row } : row;
+  }
+
+  function applyRowFilters(rowsToFilter, filters = []) {
+    return rowsToFilter.filter((row) =>
+      filters.every((filter) => {
+        if (filter.operator === "is") {
+          return (row?.[filter.column] ?? null) === filter.value;
+        }
+        if (filter.operator === "in") {
+          return Array.isArray(filter.value) && filter.value.includes(row?.[filter.column]);
+        }
+        return row?.[filter.column] === filter.value;
+      })
+    );
+  }
+
+  function applyRowOrder(rowsToSort, orders = []) {
+    const nextRows = [...rowsToSort];
+    for (let index = orders.length - 1; index >= 0; index -= 1) {
+      const order = orders[index];
+      nextRows.sort((left, right) => {
+        const leftValue = left?.[order.column] ?? null;
+        const rightValue = right?.[order.column] ?? null;
+        if (leftValue === rightValue) return 0;
+        if (leftValue === null) return 1;
+        if (rightValue === null) return -1;
+        if (leftValue > rightValue) return order.ascending ? 1 : -1;
+        return order.ascending ? -1 : 1;
+      });
+    }
+    return nextRows;
+  }
+
+  class QueryBuilder {
+    constructor(table) {
+      this.table = table;
+      this.action = "select";
+      this.filters = [];
+      this.orders = [];
+      this.limitCount = null;
+      this.payload = null;
+      this.selectColumns = "*";
+    }
+
+    select(columns = "*") {
+      this.selectColumns = columns;
+      return this;
+    }
+
+    eq(column, value) {
+      this.filters.push({ column, value, operator: "eq" });
+      return this;
+    }
+
+    is(column, value) {
+      this.filters.push({ column, value, operator: "is" });
+      return this;
+    }
+
+    in(column, value) {
+      this.filters.push({ column, value, operator: "in" });
+      return this;
+    }
+
+    order(column, { ascending = false } = {}) {
+      this.orders.push({ column, ascending });
+      return this;
+    }
+
+    limit(count) {
+      this.limitCount = count;
+      return this;
+    }
+
+    insert(payload) {
+      this.action = "insert";
+      this.payload = Array.isArray(payload) ? payload : [payload];
+      return this;
+    }
+
+    update(payload) {
+      this.action = "update";
+      this.payload = { ...payload };
+      return this;
+    }
+
+    async execute() {
+      if (this.table !== "household_issues") {
+        return {
+          data: null,
+          error: new Error(`Unsupported fake table ${this.table}`),
+        };
+      }
+
+      if (this.action === "insert") {
+        const insertedRows = this.payload.map((entry) => {
+          const timestamp = entry.updated_at || entry.last_detected_at || new Date().toISOString();
+          const row = {
+            id: entry.id || `issue-${state.nextId++}`,
+            created_at: entry.created_at || timestamp,
+            updated_at: timestamp,
+            ...entry,
+          };
+          state.rows.push(row);
+          return cloneRow(row);
+        });
+        return { data: insertedRows, error: null };
+      }
+
+      if (this.action === "update") {
+        const matchingRows = applyRowFilters(state.rows, this.filters);
+        const updatedRows = matchingRows.map((row) => {
+          const nextRow = {
+            ...row,
+            ...this.payload,
+            updated_at: this.payload.updated_at || new Date().toISOString(),
+          };
+          const rowIndex = state.rows.findIndex((entry) => entry.id === row.id);
+          state.rows[rowIndex] = nextRow;
+          return cloneRow(nextRow);
+        });
+        return { data: updatedRows, error: null };
+      }
+
+      let selectedRows = applyRowFilters(state.rows, this.filters).map(cloneRow);
+      selectedRows = applyRowOrder(selectedRows, this.orders);
+      if (Number.isInteger(this.limitCount)) {
+        selectedRows = selectedRows.slice(0, this.limitCount);
+      }
+      return { data: selectedRows, error: null };
+    }
+
+    async maybeSingle() {
+      const result = await this.execute();
+      if (result.error) return result;
+      if (!Array.isArray(result.data) || result.data.length === 0) {
+        return { data: null, error: null };
+      }
+      if (result.data.length > 1) {
+        return {
+          data: null,
+          error: new Error(`Expected a single ${this.table} row but found multiple.`),
+        };
+      }
+      return { data: result.data[0], error: null };
+    }
+
+    async single() {
+      const result = await this.execute();
+      if (result.error) return result;
+      if (!Array.isArray(result.data) || result.data.length !== 1) {
+        return {
+          data: null,
+          error: new Error(`Expected a single ${this.table} row.`),
+        };
+      }
+      return { data: result.data[0], error: null };
+    }
+
+    then(resolve, reject) {
+      return this.execute().then(resolve, reject);
+    }
+  }
+
+  return {
+    from(table) {
+      return new QueryBuilder(table);
+    },
+    auth: {
+      async getUser() {
+        return {
+          data: {
+            user: state.currentUserId ? { id: state.currentUserId } : null,
+          },
+          error: null,
+        };
+      },
+    },
+    __state: state,
+  };
+}
+
+function buildPropertyMissingHomeownersDetectionContext({
+  householdId = "H1",
+  properties = [
+    {
+      id: "property-1",
+      asset_id: "A1",
+      property_name: "Primary Residence",
+      address_line_1: "123 Main St",
+      city: "San Jose",
+      state: "CA",
+    },
+  ],
+} = {}) {
+  return {
+    householdId,
+    intelligence: {
+      review_flags: ["properties_missing_homeowners_link"],
+    },
+    bundle: {
+      household: { id: householdId },
+      propertyStackSummary: {
+        propertiesMissingHomeownersLink: properties,
+      },
+      portalReadiness: {
+        criticalAssetsWithoutLinkedPortals: [],
+      },
+      retirementAccounts: [],
+      retirementSummary: {
+        retirementDocumentsByAccountId: {},
+      },
+      warranties: [],
+      warrantySummary: {
+        warrantyDocumentsById: {},
+      },
+      documentCountsByCategory: {
+        estate: 1,
+      },
+      emergencyContacts: [{ id: "contact-1" }],
+      keyProfessionalContacts: [{ id: "contact-2" }],
+    },
+    savedPolicyRows: [],
+  };
+}
+
+function buildAllSignalDetectionContext({ householdId = "H1" } = {}) {
+  return {
+    householdId,
+    intelligence: {
+      review_flags: [
+        "properties_missing_homeowners_link",
+        "missing_retirement_docs",
+        "missing_estate_docs",
+        "household_contacts_sparse",
+        "warranties_missing_proof_of_purchase_prompt",
+      ],
+    },
+    bundle: {
+      household: { id: householdId },
+      propertyStackSummary: {
+        propertiesMissingHomeownersLink: [
+          {
+            id: "property-1",
+            asset_id: "asset-property-1",
+            property_name: "Primary Residence",
+            address_line_1: "123 Main St",
+            city: "San Jose",
+            state: "CA",
+          },
+        ],
+      },
+      portalReadiness: {
+        criticalAssetsWithoutLinkedPortals: [
+          {
+            id: "asset-portal-1",
+            asset_name: "Primary Home",
+            asset_category: "property",
+          },
+        ],
+      },
+      retirementAccounts: [
+        {
+          id: "retirement-1",
+          asset_id: "asset-retirement-1",
+          account_name: "401(k)",
+          provider_name: "Fidelity",
+        },
+      ],
+      retirementSummary: {
+        retirementDocumentsByAccountId: {},
+      },
+      warranties: [
+        {
+          id: "warranty-1",
+          asset_id: "asset-warranty-1",
+          covered_item_name: "Kitchen Refrigerator",
+          provider_name: "Best Buy",
+        },
+      ],
+      warrantySummary: {
+        warrantyDocumentsById: {},
+      },
+      documentCountsByCategory: {
+        estate: 0,
+      },
+      emergencyContacts: [],
+      keyProfessionalContacts: [],
+    },
+    savedPolicyRows: [
+      {
+        policy_id: "policy-1",
+        carrier: "Mutual Life",
+        product: "Accumulator UL",
+        latest_statement_date: null,
+        continuity_score: 41,
+      },
+    ],
+  };
+}
+
+function buildHouseholdAssistantFixture({
+  includeAssets = true,
+  includeDocuments = true,
+  includePortals = true,
+} = {}) {
+  const householdMap = {
+    bottom_line:
+      "Household continuity is usable, but protection linkage and support records still need review.",
+    overall_score: includeAssets ? 61 : 24,
+    overall_status: includeAssets ? "Moderate" : "At Risk",
+    visibility_gaps: includeAssets
+      ? [
+          "Some property and protection records are not yet fully connected.",
+          "Document support is still uneven across the visible household file.",
+        ]
+      : [
+          "Core household records are still sparse.",
+          "Document support is still missing across the current household file.",
+        ],
+    strength_signals: includeAssets
+      ? ["Insurance visibility is present enough to support targeted review."]
+      : [],
+    focus_areas: [
+      {
+        key: "cross_asset_alignment",
+        title: "Cross-Asset Alignment",
+        score: includeAssets ? 58 : 20,
+        status: includeAssets ? "Moderate" : "Weak",
+        summary: "Cross-module records are only partially aligned right now.",
+        route: "/dashboard",
+        action_label: "Open household review",
+        metrics: [{ label: "Priority issues", value: includeAssets ? 1 : 0 }],
+      },
+      {
+        key: "insurance_review_strength",
+        title: "Insurance Review Strength",
+        score: includeAssets ? 66 : 28,
+        status: includeAssets ? "Moderate" : "Weak",
+        summary: "Insurance support is usable but still not complete.",
+        route: "/insurance",
+        action_label: "Open insurance review",
+        metrics: [{ label: "Weak continuity", value: includeAssets ? 1 : 0 }],
+      },
+      {
+        key: "property_debt_linkage",
+        title: "Property / Debt Linkage",
+        score: includeAssets ? 52 : 18,
+        status: includeAssets ? "Moderate" : "Weak",
+        summary: "Property and debt relationships still need cleanup.",
+        route: "/property",
+        action_label: "Open property review",
+        metrics: [{ label: "Linked properties", value: includeAssets ? 1 : 0 }],
+      },
+      {
+        key: "document_readiness",
+        title: "Document Readiness",
+        score: includeDocuments ? 57 : 12,
+        status: includeDocuments ? "Moderate" : "Weak",
+        summary: "Document readiness is improving, but coverage is still uneven.",
+        route: "/upload-center",
+        action_label: "Open document review",
+        metrics: [{ label: "Documents", value: includeDocuments ? 2 : 0 }],
+      },
+      {
+        key: "continuity_operations",
+        title: "Continuity Operations",
+        score: includePortals ? 60 : 14,
+        status: includePortals ? "Moderate" : "Weak",
+        summary: "Portal and access continuity remain in progress.",
+        route: "/portals",
+        action_label: "Open portal review",
+        metrics: [{ label: "Portals", value: includePortals ? 1 : 0 }],
+      },
+    ],
+    dependency_signals: {
+      alignment_strength: {
+        score: includeAssets ? 54 : 18,
+        status: includeAssets ? "Moderate" : "Weak",
+      },
+      dependency_flags: includeAssets
+        ? [
+            {
+              key: "property-coverage-gap",
+              title: "Property protection linkage is incomplete",
+              explanation: "A property record is visible without linked homeowners protection.",
+              supporting_evidence: ["Primary property does not yet show linked homeowners coverage."],
+              route: "/property",
+              action_label: "Open property stack review",
+            },
+          ]
+        : [],
+      priority_issues: includeAssets
+        ? [
+            {
+              id: "property-stack-gap",
+              label: "Review property stack linkage",
+              summary: "A primary property record is missing linked homeowners protection.",
+              change_signal: "Property continuity remains partial until protection is linked.",
+              route: "/property",
+              action_label: "Open property stack review",
+              priority_score: 86,
+            },
+          ]
+        : [],
+    },
+  };
+
+  const bundle = {
+    assets: includeAssets ? [{ id: "asset-1", asset_category: "property" }] : [],
+    documents: includeDocuments ? [{ id: "doc-1" }, { id: "doc-2" }] : [],
+    portalReadiness: {
+      portalCount: includePortals ? 1 : 0,
+      missingRecoveryCount: includePortals ? 0 : 1,
+    },
+    propertyStackSummary: {
+      propertyCount: includeAssets ? 1 : 0,
+      mortgageCount: includeAssets ? 1 : 0,
+      homeownersCount: includeAssets ? 0 : 0,
+      assetGraphSummary: {
+        completePropertyAssetGraph: [],
+        partialPropertyAssetGraph: includeAssets ? [{ id: "property-1" }] : [],
+        propertiesMissingAssetGraphHomeownersLink: includeAssets ? [{ id: "property-1" }] : [],
+        propertiesMissingAssetGraphMortgageLink: [],
+      },
+      propertiesMissingHomeownersLink: includeAssets ? [{ id: "property-1" }] : [],
+      propertiesMissingMortgageLink: [],
+    },
+  };
+
+  const reviewDigest = {
+    summary: includeAssets
+      ? "One active household review item is limiting a cleaner continuity read."
+      : "No saved review digest is available yet.",
+    reopened_count: 0,
+    improved_count: 0,
+    active_count: includeAssets ? 1 : 0,
+    bullets: includeAssets
+      ? ["Property protection linkage is still missing from the current household stack."]
+      : [],
+  };
+
+  const queueItems = includeAssets
+    ? [
+        {
+          id: "queue-1",
+          label: "Primary property stack",
+          summary: "Protection linkage is still missing from the main property stack.",
+          route: "/property",
+          action_label: "Open property stack review",
+          workflow_status: "open",
+          workflow_label: "Open",
+          changed_since_review: false,
+          workflow_assignee_label: "Unassigned",
+          workflow_assignee_key: "",
+        },
+      ]
+    : [];
+
+  const scorecard = buildHouseholdScorecard(householdMap);
+  const priorityEngine = buildHouseholdPriorityEngine({
+    householdMap,
+    commandCenter: { blockers: [] },
+    housingCommand: { blockers: [] },
+    emergencyAccessCommand: { blockers: [] },
+    bundle,
+  });
+
+  return {
+    householdMap,
+    bundle,
+    reviewDigest,
+    queueItems,
+    scorecard,
+    priorityEngine,
+  };
 }
 
 runTest("parseIllustrationDocument rejects implausible future issue dates", () => {
@@ -781,7 +1356,7 @@ runTest("buildPropertyActionFeed prioritizes core property review moves", () => 
   assert.equal(actions.length > 0, true);
   assert.equal(actions[0].category, "valuation_setup");
   assert.equal(actions.some((item) => item.category === "data_completion"), true);
-  assert.equal(actions.some((item) => item.category === "coverage_review"), true);
+  assert.equal(actions.some((item) => item.category === "operating_graph"), true);
 });
 
 runTest("runPropertyAiAssistant references property signals for risk and review questions", () => {
@@ -878,6 +1453,78 @@ runTest("runPropertyAiAssistant references property signals for risk and review 
   assert.equal(response.signal_level, propertySignals.signalLevel);
   assert.equal(response.answer.includes("review"), true);
   assert.equal(response.evidence.length > 0, true);
+});
+
+runTest("household assistant explains property operating graph pressure with completeness evidence", () => {
+  const bundle = {
+    propertyStackSummary: {
+      propertyCount: 2,
+      mortgageCount: 1,
+      homeownersCount: 1,
+      analyticsByPropertyId: {
+        "property-1": { completeness_score: 0.42 },
+        "property-2": { completeness_score: 0.58 },
+      },
+      propertiesMissingHomeownersLink: [{ id: "property-1" }],
+      propertiesMissingMortgageLink: [{ id: "property-2" }],
+      assetGraphSummary: {
+        completePropertyAssetGraph: [],
+        partialPropertyAssetGraph: [{ id: "property-1" }, { id: "property-2" }],
+        propertiesMissingAssetGraphHomeownersLink: [{ id: "property-1" }],
+        propertiesMissingAssetGraphMortgageLink: [{ id: "property-2" }],
+      },
+    },
+    documentCountsByCategory: {
+      property: 1,
+      mortgage: 0,
+      homeowners: 0,
+    },
+    portalReadiness: {
+      linkedPortalCount: 0,
+      criticalAssetsWithoutLinkedPortals: [{ asset_category: "property" }],
+    },
+    documents: [],
+  };
+  const householdMap = {
+    bottom_line: "Household continuity is only partially supported right now.",
+    overall_score: 58,
+    overall_status: "Moderate",
+    focus_areas: [],
+    visibility_gaps: ["Property linkage is still developing."],
+    dependency_signals: { priority_issues: [] },
+  };
+  const priorityEngine = buildHouseholdPriorityEngine({
+    householdMap,
+    commandCenter: { blockers: [] },
+    housingCommand: { blockers: [] },
+    emergencyAccessCommand: { blockers: [] },
+    bundle,
+  });
+
+  const response = answerHouseholdQuestion({
+    questionText: "Which property stack needs attention first, and why?",
+    householdMap,
+    reviewDigest: {
+      summary: "No saved review digest is available yet.",
+      reopened_count: 0,
+      improved_count: 0,
+      active_count: 0,
+    },
+    queueItems: [],
+    intelligence: null,
+    bundle,
+    scorecard: {
+      weakestDimension: { label: "Property", score: 54 },
+      strongestDimension: { label: "Protection", score: 71 },
+    },
+    priorityEngine,
+  });
+
+  assert.equal(response.intent, "property_operating_graph");
+  assert.equal(response.confidence_label, "strong");
+  assert.equal(/property-stack issue|operating graph/i.test(response.answer_text), true);
+  assert.equal(response.evidence_points.some((point) => point.includes("50%")), true);
+  assert.equal(response.actions.some((action) => action.route === "/property"), true);
 });
 
 runTest("buildRetirementSignals returns a healthy account signal", () => {
@@ -1285,6 +1932,166 @@ runTest("runPolicyAiAssistant references product policy signals in risk answers"
   assert.equal(response.answer.includes("Policy signal: at risk."), true);
   assert.equal(response.intent, "risk_summary");
   assert.equal(response.confidence, policySignals.confidence);
+});
+
+runTest("classifyPolicyQuestionType maps the first supported policy assistant prompts", () => {
+  assert.equal(
+    classifyPolicyQuestionType("Is this policy performing well?"),
+    POLICY_QUESTION_TYPES.performance
+  );
+  assert.equal(
+    classifyPolicyQuestionType("Why is this rated weak?"),
+    POLICY_QUESTION_TYPES.policy_health
+  );
+  assert.equal(
+    classifyPolicyQuestionType("Are we ahead of illustration?"),
+    POLICY_QUESTION_TYPES.illustration_vs_actual
+  );
+  assert.equal(
+    classifyPolicyQuestionType("How much are charges affecting this?"),
+    POLICY_QUESTION_TYPES.charges
+  );
+  assert.equal(
+    classifyPolicyQuestionType("Is there anything missing?"),
+    POLICY_QUESTION_TYPES.missing_data
+  );
+  assert.equal(
+    classifyPolicyQuestionType("Compare this to another policy"),
+    POLICY_QUESTION_TYPES.comparison
+  );
+});
+
+runTest("generatePolicyResponse returns structured grounded policy-engine output", () => {
+  const response = generatePolicyResponse({
+    question: "How much are charges affecting this?",
+    type: POLICY_QUESTION_TYPES.charges,
+    policy: {
+      values: {
+        cash_value: {
+          display_value: "$100,000",
+        },
+      },
+      loans: {
+        loan_balance: {
+          display_value: "$12,000",
+        },
+      },
+    },
+    analytics: {
+      charge_summary: {
+        total_coi: 6500,
+        coi_confidence: "moderate",
+      },
+    },
+    precomputed: {
+      comparisonRow: {
+        cash_value: "$100,000",
+        latest_statement_date: "2025-12-31",
+        loan_balance: "$12,000",
+        total_coi: "$6,500",
+        charge_visibility_status: "moderate",
+        missing_fields: ["planned_premium"],
+      },
+      chargeSummary: {
+        total_coi: 6500,
+        coi_confidence: "moderate",
+      },
+      statementTimeline: [{ statement_date: "2025-12-31" }, { statement_date: "2024-12-31" }],
+      policyInterpretation: {
+        charge_summary_explanation:
+          "Visible charges are meaningful and should be reviewed alongside cash-value movement.",
+        growth_summary: "Growth appears positive, but visible deductions are present.",
+        bottom_line_summary: "This policy is readable, but visible pressure remains.",
+        review_items: ["Confirm planned premium support"],
+      },
+      trendSummary: {
+        summary: "Cash value increased modestly across the visible statement period.",
+      },
+      reviewReport: {
+        sections: [
+          {
+            kind: "bullets",
+            bullets: ["Review current-year statement support"],
+          },
+        ],
+      },
+      policyContinuity: {
+        score: 74,
+        explanation: "Statement support is present but not complete.",
+        penalties: [{ reason: "Planned premium support is still incomplete." }],
+      },
+    },
+  });
+
+  assert.equal(response.source, "policy_engine");
+  assert.equal(response.confidence, "medium");
+  assert.equal(response.answer.includes("Visible charges are meaningful"), true);
+  assert.equal(Array.isArray(response.supporting_data.why), true);
+  assert.equal(response.supporting_data.why.length > 0, true);
+  assert.equal(Array.isArray(response.supporting_data.facts), true);
+  assert.equal(
+    response.supporting_data.facts.some(
+      (fact) => fact.label === "Visible COI" && fact.value.includes("$6,500")
+    ),
+    true
+  );
+  assert.equal(
+    response.supporting_data.uncertainties.some((item) =>
+      item.toLowerCase().includes("planned premium")
+    ),
+    true
+  );
+  assert.equal(
+    response.disclaimers.some((item) => item.toLowerCase().includes("not financial advice")),
+    true
+  );
+});
+
+runTest("generatePolicyResponse stays honest when illustration support is missing", () => {
+  const response = generatePolicyResponse({
+    question: "Are we ahead of illustration?",
+    type: POLICY_QUESTION_TYPES.illustration_vs_actual,
+    policy: {},
+    analytics: {},
+    precomputed: {
+      comparisonRow: {
+        missing_fields: ["latest_statement_date", "cash_value", "planned_premium"],
+      },
+      chargeSummary: {},
+      statementTimeline: [],
+      policyInterpretation: {
+        bottom_line_summary: "Current policy visibility is limited.",
+        review_items: ["Upload current annual statement"],
+      },
+      trendSummary: {
+        summary: "Statement history is too thin for a trend read.",
+      },
+      reviewReport: {
+        sections: [],
+      },
+      policyContinuity: {
+        score: 24,
+        explanation: "Continuity is limited because statement coverage is thin.",
+        penalties: [{ reason: "Latest statement date is still incomplete." }],
+      },
+      iulV2: {
+        missingData: ["Illustration pages are not yet visible."],
+      },
+    },
+  });
+
+  assert.equal(response.source, "policy_engine");
+  assert.equal(response.confidence, "low");
+  assert.equal(
+    response.answer.toLowerCase().includes("cannot be fully determined"),
+    true
+  );
+  assert.equal(
+    response.supporting_data.uncertainties.some((item) =>
+      item.toLowerCase().includes("illustration")
+    ),
+    true
+  );
 });
 
 runTest("runPortfolioAiAssistant answers priority questions", () => {
@@ -3126,6 +3933,1256 @@ runTest("normalizeExplicitVaultedPolicyScope blocks guest-shared overrides witho
   assert.equal(guestScope.blocked, true);
   assert.equal(guestScope.mode, "blocked");
   assert.equal(guestScope.source, "guest_test_scope_missing_user");
+});
+
+runTest("normalizeHashPath keeps hash auth callbacks on the login route", () => {
+  assert.equal(normalizeHashPath("#/login?type=signup&access_token=test-token"), "/login");
+  assert.equal(normalizeHashPath("#/login?error_description=Link+expired"), "/login");
+  assert.equal(normalizeHashPath(""), "/dashboard");
+});
+
+runTest("getAuthLandingState recognizes verification callbacks from hash parameters", () => {
+  withWindowMock(
+    {
+      location: {
+        hash: "#/login?type=signup&access_token=token-123",
+        search: "",
+        pathname: "/",
+      },
+      history: { replaceState() {} },
+      document: { title: "VaultedShield" },
+    },
+    () => {
+      const landing = getAuthLandingState();
+      assert.equal(landing.status, "verification_complete");
+      assert.equal(/verification is complete/i.test(landing.message), true);
+      assert.equal(hasAuthLandingState(), true);
+    }
+  );
+});
+
+runTest("getAuthLandingState surfaces provider errors cleanly", () => {
+  withWindowMock(
+    {
+      location: {
+        hash: "#/login?error_description=Link+expired",
+        search: "",
+        pathname: "/",
+      },
+      history: { replaceState() {} },
+      document: { title: "VaultedShield" },
+    },
+    () => {
+      const landing = getAuthLandingState();
+      assert.equal(landing.status, "error");
+      assert.equal(landing.message, "Link expired");
+    }
+  );
+});
+
+runTest("clearAuthLandingStateFromUrl removes auth callback params but preserves the login route", () => {
+  const calls = [];
+  withWindowMock(
+    {
+      location: {
+        hash: "#/login?type=signup&access_token=token-123",
+        search: "",
+        pathname: "/",
+      },
+      history: {
+        replaceState(_state, _title, nextUrl) {
+          calls.push(nextUrl);
+        },
+      },
+      document: { title: "VaultedShield" },
+    },
+    () => {
+      clearAuthLandingStateFromUrl();
+      assert.deepEqual(calls, ["/#/login"]);
+    }
+  );
+});
+
+runTest("assembleModuleBundle keeps the core mortgage record available when child reads fail", () => {
+  const result = assembleModuleBundle({
+    coreResult: {
+      data: { id: "mortgage-1", loan_name: "Beach House Mortgage", assets: { id: "asset-1" } },
+      error: null,
+    },
+    coreKey: "mortgageLoan",
+    missingMessage: "Mortgage loan bundle could not be loaded.",
+    collections: [
+      {
+        key: "mortgageDocuments",
+        area: "documents",
+        label: "Mortgage documents",
+        result: {
+          data: [],
+          error: new Error('relation "public.mortgage_documents" does not exist'),
+        },
+      },
+      {
+        key: "mortgageSnapshots",
+        area: "snapshots",
+        label: "Mortgage snapshots",
+        result: {
+          data: [],
+          error: null,
+        },
+      },
+      {
+        key: "mortgageAnalytics",
+        area: "analytics",
+        label: "Mortgage analytics",
+        result: {
+          data: [],
+          error: new Error("Analytics read blocked"),
+        },
+      },
+      {
+        key: "mortgageAssetLinks",
+        area: "asset_links",
+        label: "Mortgage linked context",
+        result: {
+          data: [],
+          error: null,
+        },
+      },
+    ],
+  });
+
+  assert.equal(result.error, null);
+  assert.equal(result.data?.mortgageLoan?.id, "mortgage-1");
+  assert.equal(result.data?.isPartialBundle, true);
+  assert.deepEqual(
+    result.data?.bundleWarnings?.map((warning) => warning.area),
+    ["documents", "analytics"]
+  );
+});
+
+runTest("assembleModuleBundle keeps the core homeowners record available when child reads fail", () => {
+  const result = assembleModuleBundle({
+    coreResult: {
+      data: { id: "homeowners-1", policy_name: "Primary Home Coverage", assets: { id: "asset-2" } },
+      error: null,
+    },
+    coreKey: "homeownersPolicy",
+    missingMessage: "Homeowners policy bundle could not be loaded.",
+    collections: [
+      {
+        key: "homeownersDocuments",
+        area: "documents",
+        label: "Homeowners documents",
+        result: {
+          data: [],
+          error: new Error("Documents read blocked"),
+        },
+      },
+      {
+        key: "homeownersSnapshots",
+        area: "snapshots",
+        label: "Homeowners snapshots",
+        result: {
+          data: [],
+          error: null,
+        },
+      },
+      {
+        key: "homeownersAnalytics",
+        area: "analytics",
+        label: "Homeowners analytics",
+        result: {
+          data: [],
+          error: null,
+        },
+      },
+      {
+        key: "homeownersAssetLinks",
+        area: "asset_links",
+        label: "Homeowners linked context",
+        result: {
+          data: [],
+          error: new Error("Linked context unavailable"),
+        },
+      },
+    ],
+  });
+
+  assert.equal(result.error, null);
+  assert.equal(result.data?.homeownersPolicy?.id, "homeowners-1");
+  assert.equal(result.data?.isPartialBundle, true);
+  assert.deepEqual(
+    result.data?.bundleWarnings?.map((warning) => warning.area),
+    ["documents", "asset_links"]
+  );
+});
+
+runTest("mortgage and property question classifiers stay deterministic", () => {
+  assert.equal(classifyMortgageQuestionType("Is escrow visible?"), MORTGAGE_QUESTION_TYPES.escrow);
+  assert.equal(
+    classifyPropertyQuestionType("Is this property stack complete?"),
+    PROPERTY_QUESTION_TYPES.stack_completeness
+  );
+});
+
+runTest("globalAssistantRouter returns a structured policy envelope with section targets", () => {
+  const response = routeGlobalAssistantRequest({
+    assistantType: "policy",
+    question: "Are we ahead of illustration?",
+    recordContext: {
+      values: { cash_value: "$75,000.00" },
+      loans: { loan_balance: "$0.00" },
+    },
+    analyticsContext: {
+      comparison_summary: {
+        latest_statement_date: "2025-12-31",
+        cash_value: "$75,000.00",
+        loan_balance: "$0.00",
+        total_coi: 1800,
+        missing_fields: [],
+        continuity_score: 84,
+      },
+      charge_summary: {
+        total_coi: 1800,
+        coi_confidence: "strong",
+      },
+    },
+    precomputed: {
+      comparisonRow: {
+        latest_statement_date: "2025-12-31",
+        cash_value: "$75,000.00",
+        loan_balance: "$0.00",
+        total_coi: 1800,
+        missing_fields: [],
+        continuity_score: 84,
+      },
+      chargeSummary: {
+        total_coi: 1800,
+        coi_confidence: "strong",
+      },
+      statementTimeline: [],
+      policyInterpretation: {
+        bottom_line_summary: "This policy is readable from the available support.",
+        growth_summary: "Cash value support appears stable.",
+        charge_summary_explanation: "Visible charges look manageable.",
+        review_items: ["Review illustration alignment."],
+      },
+      trendSummary: {
+        summary: "Visible statements show a stable read.",
+      },
+      reviewReport: {
+        sections: [{ kind: "bullets", bullets: ["Review illustration alignment."] }],
+      },
+      iulV2: {
+        illustrationComparison: {
+          shortExplanation: "Actual performance is close to the visible illustration checkpoint.",
+          selectedMetricLabel: "Accumulation Value",
+          selectedMetricData: {
+            illustratedDisplay: "$78,000",
+            actualDisplay: "$75,000",
+          },
+          varianceDisplay: "-$3,000",
+        },
+      },
+    },
+  });
+
+  assert.equal(response.assistantType, "policy");
+  assert.equal(response.type, POLICY_QUESTION_TYPES.illustration_vs_actual);
+  assert.equal(Array.isArray(response.whyThisRead), true);
+  assert.equal(Array.isArray(response.sectionTargets), true);
+  assert.equal(response.sectionTargets.includes("illustration-proof"), true);
+});
+
+runTest("globalAssistantRouter returns a structured household envelope with section targets", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const response = routeGlobalAssistantRequest({
+    assistantType: "household",
+    question: "What should I review first?",
+    recordContext: fixture.householdMap,
+    analyticsContext: {
+      summary: {
+        generated_at: "2026-04-12T00:00:00.000Z",
+      },
+    },
+    precomputed: {
+      reviewDigest: fixture.reviewDigest,
+      queueItems: fixture.queueItems,
+      bundle: fixture.bundle,
+      scorecard: fixture.scorecard,
+      priorityEngine: fixture.priorityEngine,
+    },
+  });
+
+  assert.equal(response.assistantType, "household");
+  assert.equal(response.type, "priority_review");
+  assert.equal(response.source, "household_engine");
+  assert.equal(Array.isArray(response.whyThisRead), true);
+  assert.equal(Array.isArray(response.supportingData.facts), true);
+  assert.equal(response.sectionTargets.includes("household-priority"), true);
+  assert.equal(response.sectionTargets.includes("action-required"), true);
+  assert.equal(response.reviewAction?.target, "review_workspace");
+  assert.equal(response.reviewAction?.filters?.module, "property");
+});
+
+runTest("mortgage structured response stays explainable and local", () => {
+  const response = generateMortgageResponse({
+    question: "Is escrow visible?",
+    type: MORTGAGE_QUESTION_TYPES.escrow,
+    mortgage: {
+      id: "mortgage-1",
+      loan_name: "Primary Mortgage",
+      current_status: "active",
+      lender_key: "chase",
+      mortgage_loan_type_key: "fixed_rate_mortgage",
+      origination_date: "2020-01-01",
+      maturity_date: "2050-01-01",
+    },
+    analytics: {},
+    precomputed: {
+      mortgageDocuments: [{ id: "doc-1", document_class_key: "escrow_analysis" }],
+      mortgageSnapshots: [
+        {
+          id: "snap-1",
+          snapshot_date: "2025-01-01",
+          normalized_mortgage: {
+            payment_metrics: { monthly_payment: 2400 },
+            rate_terms: { interest_rate: "5.75%" },
+            balance_metrics: { current_principal_balance: 320000, payoff_amount: 321500 },
+            escrow_metrics: { escrow_present: true, escrow_balance: 1800 },
+          },
+        },
+      ],
+      propertyLinks: [{ id: "link-1", is_primary: true }],
+    },
+  });
+
+  assert.equal(typeof response.answer, "string");
+  assert.equal(Array.isArray(response.whyThisRead), true);
+  assert.equal(Array.isArray(response.supportingData.facts), true);
+  assert.equal(response.source, "mortgage_engine");
+  assert.equal(response.sectionTargets.includes("loan-summary"), true);
+});
+
+runTest("property structured response stays explainable and local", () => {
+  const response = generatePropertyResponse({
+    question: "How strong is the property record?",
+    type: PROPERTY_QUESTION_TYPES.stack_completeness,
+    property: {
+      id: "property-1",
+      property_address: "123 Test St",
+      city: "San Diego",
+      state: "CA",
+      postal_code: "92101",
+      square_feet: 1800,
+      beds: 3,
+      baths: 2,
+      year_built: 1995,
+    },
+    analytics: {},
+    precomputed: {
+      latestPropertyValuation: {
+        confidence_label: "moderate",
+        confidence_score: 0.64,
+        midpoint_estimate: 850000,
+        comps_count: 3,
+        metadata: {
+          official_market_support: "mixed",
+          review_flags: ["limited_comp_support"],
+        },
+      },
+      propertyStackAnalytics: {
+        completeness_score: 0.72,
+        continuity_status: "moderate",
+        linkage_status: "partial",
+        has_homeowners: false,
+      },
+      propertyEquityPosition: {
+        equity_visibility_status: "moderate",
+        financing_status: "visible",
+        protection_status: "missing",
+        primary_mortgage_balance: 450000,
+      },
+      linkedMortgages: [{ id: "mortgage-1" }],
+      linkedHomeownersPolicies: [],
+      propertySignals: {
+        signalLevel: "monitor",
+        confidence: 0.62,
+        reasons: ["Protection linkage is missing.", "Valuation support is mixed."],
+      },
+      propertyDocuments: [{ id: "doc-1" }],
+    },
+  });
+
+  assert.equal(typeof response.answer, "string");
+  assert.equal(Array.isArray(response.whyThisRead), true);
+  assert.equal(Array.isArray(response.supportingData.facts), true);
+  assert.equal(response.source, "property_engine");
+  assert.equal(response.sectionTargets.includes("property-stack-analytics"), true);
+});
+
+runTest("household structured response stays deterministic and workflow-native", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const request = {
+    assistantType: "household",
+    question: "Why is household readiness rated this way?",
+    recordContext: fixture.householdMap,
+    analyticsContext: {},
+    precomputed: {
+      reviewDigest: fixture.reviewDigest,
+      queueItems: fixture.queueItems,
+      bundle: fixture.bundle,
+      scorecard: fixture.scorecard,
+      priorityEngine: fixture.priorityEngine,
+    },
+  };
+
+  const first = routeGlobalAssistantRequest(request);
+  const second = routeGlobalAssistantRequest(request);
+
+  assert.equal(typeof first.answer, "string");
+  assert.equal(Array.isArray(first.whyThisRead), true);
+  assert.equal(Array.isArray(first.safeReviewFocus), true);
+  assert.equal(Array.isArray(first.actions), true);
+  assert.equal(Array.isArray(first.followupPrompts), true);
+  assert.equal(Array.isArray(first.reviewActions), true);
+  assert.deepEqual(first, second);
+});
+
+runTest("household assistant review actions map deterministically to workspace filters", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const actions = buildHouseholdAssistantReviewActions({
+    intent: "property_operating_graph",
+    queueItems: fixture.queueItems,
+    householdId: "household-1",
+  });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].target, "review_workspace");
+  assert.equal(actions[0].filters.module, "property");
+  assert.equal(actions[0].filters.issueType, "missing_protection");
+  assert.equal(actions[0].filters.householdId, "household-1");
+  assert.equal(actions[0].route.includes("/review-workspace?"), true);
+});
+
+runTest("review workspace route parsing restores assistant filters safely", () => {
+  const route = buildReviewWorkspaceRoute({
+    filters: {
+      module: "property",
+      issueType: "missing_protection",
+      severity: "high",
+      householdId: "household-1",
+      recordId: "property-1",
+    },
+    openedFromAssistant: true,
+  });
+  const parsed = parseReviewWorkspaceHashState(`#${route}`, "household-1");
+
+  assert.equal(parsed.openedFromAssistant, true);
+  assert.equal(parsed.invalid, false);
+  assert.deepEqual(parsed.filters, {
+    module: "property",
+    issueType: "missing_protection",
+    severity: "high",
+    householdId: "household-1",
+    recordId: "property-1",
+  });
+});
+
+runTest("invalid or stale review workspace filters fail safely", () => {
+  const invalidModule = parseReviewWorkspaceHashState(
+    "#/review-workspace?origin=household_assistant&module=unknown&issueType=missing_protection",
+    "household-1"
+  );
+  const staleHousehold = parseReviewWorkspaceHashState(
+    "#/review-workspace?origin=household_assistant&module=property&issueType=missing_protection&householdId=other-household",
+    "household-1"
+  );
+
+  assert.equal(invalidModule.filters, null);
+  assert.equal(invalidModule.openedFromAssistant, false);
+  assert.equal(staleHousehold.filters, null);
+  assert.equal(staleHousehold.openedFromAssistant, false);
+});
+
+runTest("review workspace filter application scopes queue items and clearing returns default queue", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const derivedFilter = deriveReviewWorkspaceCandidateFromQueueItem(fixture.queueItems[0], "household-1");
+  const filtered = applyReviewWorkspaceFilters(fixture.queueItems, derivedFilter, "household-1");
+  const cleared = applyReviewWorkspaceFilters(fixture.queueItems, null, "household-1");
+
+  assert.equal(derivedFilter.module, "property");
+  assert.equal(derivedFilter.issueType, "missing_protection");
+  assert.equal(filtered.length, 1);
+  assert.equal(cleared.length, fixture.queueItems.length);
+  assert.equal(buildReviewWorkspaceRoute(), "/review-workspace");
+});
+
+runTest("review workflow memory persists by normalized issue filter when queue ids change", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const originalItem = fixture.queueItems[0];
+  const workflowState = {
+    [originalItem.id]: buildReviewWorkflowStateEntry({
+      item: originalItem,
+      householdId: "household-1",
+      updates: {
+        status: "reviewed",
+        updated_at: "2026-04-13T08:00:00.000Z",
+      },
+    }),
+  };
+  const replacementItem = {
+    ...originalItem,
+    id: `${originalItem.id}:replacement`,
+  };
+  const annotated = annotateReviewWorkflowItems([replacementItem], workflowState);
+
+  assert.equal(annotated[0].workflow_status, "reviewed");
+  assert.equal(Boolean(annotated[0].workflow_resolution_key), true);
+});
+
+runTest("workflow-aware household context suppresses resolved issues and updates readiness", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const reviewedState = {
+    [fixture.queueItems[0].id]: buildReviewWorkflowStateEntry({
+      item: fixture.queueItems[0],
+      householdId: "household-1",
+      updates: {
+        status: "reviewed",
+        updated_at: "2026-04-13T08:00:00.000Z",
+      },
+    }),
+  };
+  const annotatedQueue = annotateReviewWorkflowItems(fixture.queueItems, reviewedState);
+  const workflowContext = buildWorkflowAwareHouseholdContext({
+    householdMap: fixture.householdMap,
+    queueItems: annotatedQueue,
+    reviewDigest: fixture.reviewDigest,
+    bundle: fixture.bundle,
+  });
+
+  assert.equal(workflowContext.activeQueueItems.length, annotatedQueue.length - 1);
+  assert.equal(workflowContext.resolvedQueueItems.length, 1);
+  assert.equal(/active household queue is currently clear|held out of active priority/i.test(workflowContext.householdMap.bottom_line), true);
+  assert.equal(workflowContext.scorecard.overallScore >= fixture.scorecard.overallScore, true);
+});
+
+runTest("household assistant stops surfacing reviewed issues as the next active priority", () => {
+  const fixture = buildHouseholdAssistantFixture();
+  const reviewedState = Object.fromEntries(
+    fixture.queueItems.map((item, index) => [
+      item.id,
+      buildReviewWorkflowStateEntry({
+        item,
+        householdId: "household-1",
+        updates: {
+          status: "reviewed",
+          updated_at: `2026-04-13T08:0${index}:00.000Z`,
+        },
+      }),
+    ])
+  );
+  const annotatedQueue = annotateReviewWorkflowItems(fixture.queueItems, reviewedState);
+  const response = routeGlobalAssistantRequest({
+    assistantType: "household",
+    question: "What needs attention first?",
+    recordContext: fixture.householdMap,
+    analyticsContext: {},
+    precomputed: {
+      reviewDigest: fixture.reviewDigest,
+      queueItems: annotatedQueue,
+      bundle: fixture.bundle,
+    },
+  });
+
+  assert.equal(response.reviewAction, null);
+  assert.equal(response.answer.includes(fixture.queueItems[0].label), false);
+});
+
+runTest("mortgage and property assistants stay honest when core data is missing", () => {
+  const mortgageResponse = generateMortgageResponse({
+    question: "What is missing here?",
+    type: MORTGAGE_QUESTION_TYPES.missing_data,
+    mortgage: {
+      id: "mortgage-missing",
+      current_status: "active",
+      mortgage_loan_type_key: "fixed_rate_mortgage",
+    },
+    analytics: {},
+    precomputed: {
+      mortgageDocuments: [],
+      mortgageSnapshots: [],
+      propertyLinks: [],
+    },
+  });
+
+  const propertyResponse = generatePropertyResponse({
+    question: "What is missing from this property?",
+    type: PROPERTY_QUESTION_TYPES.missing_data,
+    property: {
+      id: "property-missing",
+      property_address: "",
+      city: "",
+      state: "",
+      postal_code: "",
+    },
+    analytics: {},
+    precomputed: {
+      latestPropertyValuation: null,
+      linkedMortgages: [],
+      linkedHomeownersPolicies: [],
+      propertyDocuments: [],
+      portalLinks: [],
+    },
+  });
+
+  assert.equal(/monthly statement/i.test(mortgageResponse.answer), true);
+  assert.equal(/saved virtual valuation is not available/i.test(propertyResponse.answer), true);
+});
+
+runTest("household assistant stays honest when household visibility is thin", () => {
+  const fixture = buildHouseholdAssistantFixture({
+    includeAssets: false,
+    includeDocuments: false,
+    includePortals: false,
+  });
+  const response = routeGlobalAssistantRequest({
+    assistantType: "household",
+    question: "What is limiting continuity most?",
+    recordContext: fixture.householdMap,
+    analyticsContext: {},
+    precomputed: {
+      reviewDigest: fixture.reviewDigest,
+      queueItems: fixture.queueItems,
+      bundle: fixture.bundle,
+      scorecard: fixture.scorecard,
+      priorityEngine: fixture.priorityEngine,
+    },
+  });
+
+  assert.equal(response.confidence, "low");
+  assert.equal(/more complete household review/i.test(response.uncertainty), true);
+  assert.equal(Array.isArray(response.supportingData.uncertainties), true);
+  assert.equal(response.supportingData.uncertainties.length > 0, true);
+});
+
+runTest("assistant section targets stay string-only and deterministic", () => {
+  const first = routeGlobalAssistantRequest({
+    assistantType: "property",
+    question: "Does this property have protection?",
+    recordContext: {
+      id: "property-2",
+      property_address: "456 Main St",
+      city: "San Jose",
+      state: "CA",
+      postal_code: "95112",
+      square_feet: 1400,
+      beds: 2,
+      baths: 2,
+      year_built: 1988,
+    },
+    analyticsContext: {},
+    precomputed: {
+      latestPropertyValuation: {
+        confidence_label: "strong",
+        confidence_score: 0.82,
+        midpoint_estimate: 910000,
+        comps_count: 4,
+        metadata: { official_market_support: "aligned", review_flags: [] },
+      },
+      propertyStackAnalytics: {
+        completeness_score: 0.88,
+        continuity_status: "strong",
+        linkage_status: "connected",
+        has_homeowners: true,
+      },
+      propertyEquityPosition: {
+        equity_visibility_status: "strong",
+        financing_status: "visible",
+        protection_status: "visible",
+        primary_mortgage_balance: 380000,
+      },
+      linkedMortgages: [{ id: "mortgage-2" }],
+      linkedHomeownersPolicies: [{ id: "homeowners-1" }],
+      propertyDocuments: [{ id: "doc-2" }],
+      portalLinks: [{ id: "portal-1", portal_profiles: { institution_name: "County Portal" } }],
+      propertySignals: {
+        signalLevel: "healthy",
+        confidence: 0.84,
+        reasons: ["Protection and liability links are visible."],
+      },
+    },
+  });
+
+  const second = routeGlobalAssistantRequest({
+    assistantType: "property",
+    question: "Does this property have protection?",
+    recordContext: {
+      id: "property-2",
+      property_address: "456 Main St",
+      city: "San Jose",
+      state: "CA",
+      postal_code: "95112",
+      square_feet: 1400,
+      beds: 2,
+      baths: 2,
+      year_built: 1988,
+    },
+    analyticsContext: {},
+    precomputed: {
+      latestPropertyValuation: {
+        confidence_label: "strong",
+        confidence_score: 0.82,
+        midpoint_estimate: 910000,
+        comps_count: 4,
+        metadata: { official_market_support: "aligned", review_flags: [] },
+      },
+      propertyStackAnalytics: {
+        completeness_score: 0.88,
+        continuity_status: "strong",
+        linkage_status: "connected",
+        has_homeowners: true,
+      },
+      propertyEquityPosition: {
+        equity_visibility_status: "strong",
+        financing_status: "visible",
+        protection_status: "visible",
+        primary_mortgage_balance: 380000,
+      },
+      linkedMortgages: [{ id: "mortgage-2" }],
+      linkedHomeownersPolicies: [{ id: "homeowners-1" }],
+      propertyDocuments: [{ id: "doc-2" }],
+      portalLinks: [{ id: "portal-1", portal_profiles: { institution_name: "County Portal" } }],
+      propertySignals: {
+        signalLevel: "healthy",
+        confidence: 0.84,
+        reasons: ["Protection and liability links are visible."],
+      },
+    },
+  });
+
+  assert.equal(first.sectionTargets.every((target) => typeof target === "string" && target.length > 0), true);
+  assert.deepEqual(first, second);
+});
+
+runTest("normalizeIssueInput validates and cleans the canonical issue payload", () => {
+  const normalized = normalizeIssueInput({
+    household_id: "H1",
+    module_key: "Property",
+    issue_type: "Coverage Gap",
+    issue_key: "property_missing_homeowners",
+    asset_id: "A1",
+    record_id: null,
+    title: "Primary property is missing homeowners coverage",
+    summary: "Protection linkage was not identified.",
+    severity: "high",
+    priority: "medium",
+    source_system: "property_engine",
+    metadata: { area: "stack" },
+  });
+
+  assert.equal(normalized.household_id, "H1");
+  assert.equal(normalized.module_key, "property");
+  assert.equal(normalized.issue_type, "coverage_gap");
+  assert.equal(normalized.issue_key, "property_missing_homeowners");
+  assert.equal(normalized.severity, "high");
+  assert.equal(normalized.priority, "medium");
+  assert.deepEqual(normalized.metadata, { area: "stack" });
+  assert.equal(normalized.evidence, null);
+});
+
+runTest("detected issue adapters map the first-pass household prompt families into canonical issues", () => {
+  const detected = buildDetectedIssues(buildAllSignalDetectionContext());
+  const moduleKeys = new Set(detected.map((issue) => issue.module_key));
+
+  assert.equal(moduleKeys.has("property"), true);
+  assert.equal(moduleKeys.has("portals"), true);
+  assert.equal(moduleKeys.has("retirement"), true);
+  assert.equal(moduleKeys.has("estate"), true);
+  assert.equal(moduleKeys.has("contacts"), true);
+  assert.equal(moduleKeys.has("insurance"), true);
+  assert.equal(moduleKeys.has("warranties"), true);
+  assert.equal(detected.every((issue) => typeof issue.detection_hash === "string" && issue.detection_hash.length > 0), true);
+});
+
+runTest("detected issue adapters stay deterministic for the same source signals", () => {
+  const context = buildAllSignalDetectionContext();
+  const first = buildDetectedIssues(context);
+  const second = buildDetectedIssues(context);
+
+  assert.deepEqual(first, second);
+  assert.equal(buildDetectedIssuesFingerprint(first), buildDetectedIssuesFingerprint(second));
+});
+
+await runAsyncTest("detected property coverage gap becomes one canonical open household issue", async () => {
+  const context = buildPropertyMissingHomeownersDetectionContext();
+  const detected = buildDetectedIssues(context);
+  const supabase = createIssueSupabaseDouble();
+
+  assert.equal(detected.length, 1);
+  assert.equal(detected[0].module_key, "property");
+  assert.equal(detected[0].issue_type, "coverage_gap");
+  assert.equal(detected[0].issue_key, "property_missing_homeowners:a1");
+
+  const syncResult = await syncDetectedIssues(context, {
+    supabase,
+    currentUserId: "user-1",
+    now: "2026-04-13T12:00:00.000Z",
+  });
+
+  assert.equal(syncResult.createdCount, 1);
+  assert.equal(syncResult.updatedCount, 0);
+  assert.equal(syncResult.reopenedCount, 0);
+  assert.equal(syncResult.totalProcessed, 1);
+  assert.equal(syncResult.issues[0].status, "open");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("detected property coverage gap refreshes the same row when evidence changes", async () => {
+  const firstContext = buildPropertyMissingHomeownersDetectionContext();
+  const secondContext = buildPropertyMissingHomeownersDetectionContext({
+    properties: [
+      {
+        id: "property-1",
+        asset_id: "A1",
+        property_name: "Primary Residence",
+        address_line_1: "789 Updated Ave",
+        city: "San Jose",
+        state: "CA",
+      },
+    ],
+  });
+  const supabase = createIssueSupabaseDouble();
+
+  const firstDetected = buildDetectedIssues(firstContext);
+  const secondDetected = buildDetectedIssues(secondContext);
+  assert.notEqual(firstDetected[0].detection_hash, secondDetected[0].detection_hash);
+
+  const firstSync = await syncDetectedIssues(firstContext, {
+    supabase,
+    currentUserId: "user-1",
+    now: "2026-04-13T12:00:00.000Z",
+  });
+  const secondSync = await syncDetectedIssues(secondContext, {
+    supabase,
+    currentUserId: "user-1",
+    now: "2026-04-13T13:00:00.000Z",
+  });
+
+  assert.equal(secondSync.createdCount, 0);
+  assert.equal(secondSync.updatedCount, 1);
+  assert.equal(secondSync.reopenedCount, 0);
+  assert.equal(secondSync.issues[0].id, firstSync.issues[0].id);
+  assert.equal(secondSync.issues[0].detection_hash, secondDetected[0].detection_hash);
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("detected property coverage gap reopens the same row after resolution", async () => {
+  const context = buildPropertyMissingHomeownersDetectionContext();
+  const supabase = createIssueSupabaseDouble();
+
+  const firstSync = await syncDetectedIssues(context, {
+    supabase,
+    currentUserId: "user-1",
+    now: "2026-04-13T12:00:00.000Z",
+  });
+
+  await resolveHouseholdIssue(
+    firstSync.issues[0].id,
+    {
+      resolution_reason: "temporarily_cleared",
+      resolution_note: "Marked resolved during review.",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T12:30:00.000Z",
+    }
+  );
+
+  const secondSync = await syncDetectedIssues(context, {
+    supabase,
+    currentUserId: "user-2",
+    now: "2026-04-13T13:00:00.000Z",
+  });
+
+  assert.equal(secondSync.createdCount, 0);
+  assert.equal(secondSync.updatedCount, 0);
+  assert.equal(secondSync.reopenedCount, 1);
+  assert.equal(secondSync.issues[0].id, firstSync.issues[0].id);
+  assert.equal(secondSync.issues[0].status, "open");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("detected property coverage gaps stay separate when asset scope differs", async () => {
+  const context = buildPropertyMissingHomeownersDetectionContext({
+    properties: [
+      {
+        id: "property-1",
+        asset_id: "A1",
+        property_name: "Primary Residence",
+        address_line_1: "123 Main St",
+        city: "San Jose",
+        state: "CA",
+      },
+      {
+        id: "property-2",
+        asset_id: "A2",
+        property_name: "Lake House",
+        address_line_1: "456 Lake Rd",
+        city: "Truckee",
+        state: "CA",
+      },
+    ],
+  });
+  const supabase = createIssueSupabaseDouble();
+
+  const syncResult = await syncDetectedIssues(context, {
+    supabase,
+    currentUserId: "user-1",
+    now: "2026-04-13T12:00:00.000Z",
+  });
+
+  assert.equal(syncResult.createdCount, 2);
+  assert.equal(syncResult.totalProcessed, 2);
+  assert.equal(new Set(syncResult.issues.map((issue) => issue.issue_key)).size, 2);
+  assert.equal(supabase.__state.rows.length, 2);
+});
+
+await runAsyncTest("household issue lifecycle inserts first detection as one open issue", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const issue = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Protection linkage was not identified.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+      evidence: { linkedHomeowners: false },
+      metadata: { section: "property-stack" },
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  assert.equal(issue.status, "open");
+  assert.equal(issue.first_detected_at, "2026-04-13T09:00:00.000Z");
+  assert.equal(issue.last_detected_at, "2026-04-13T09:00:00.000Z");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("household issue lifecycle refreshes repeated detection without duplication", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const first = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Initial summary",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+      evidence: { version: 1 },
+      metadata: { stage: "initial" },
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  const second = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Updated summary",
+      severity: "critical",
+      priority: "medium",
+      source_system: "property_engine",
+      evidence: { version: 2 },
+      metadata: { stage: "refresh" },
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  assert.equal(second.id, first.id);
+  assert.equal(second.summary, "Updated summary");
+  assert.equal(second.severity, "critical");
+  assert.equal(second.last_detected_at, "2026-04-13T10:00:00.000Z");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("household issue lifecycle reopens the same row after resolve and redetection", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const detected = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Protection linkage was not identified.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  const resolved = await resolveHouseholdIssue(
+    detected.id,
+    {
+      resolution_reason: "link_verified",
+      resolution_note: "Coverage was confirmed during review.",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  const reopened = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Fresh evidence shows protection linkage is still incomplete.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-2",
+      now: "2026-04-13T11:00:00.000Z",
+    }
+  );
+
+  assert.equal(resolved.status, "resolved");
+  assert.equal(reopened.id, detected.id);
+  assert.equal(reopened.status, "open");
+  assert.equal(reopened.reopened_at, "2026-04-13T11:00:00.000Z");
+  assert.equal(reopened.reopened_by, "user-2");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("household issue lifecycle reopens the same row after ignore and redetection", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const detected = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "portal",
+      issue_type: "continuity_gap",
+      issue_key: "primary_portal_missing_recovery",
+      asset_id: "A1",
+      title: "Primary portal continuity is incomplete",
+      summary: "Recovery contact data is still missing.",
+      severity: "medium",
+      priority: "low",
+      source_system: "portal_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  const ignored = await ignoreHouseholdIssue(
+    detected.id,
+    {
+      resolution_note: "Temporarily ignored during setup cleanup.",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  const reopened = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "portal",
+      issue_type: "continuity_gap",
+      issue_key: "primary_portal_missing_recovery",
+      asset_id: "A1",
+      title: "Primary portal continuity is incomplete",
+      summary: "Recovery contact data is still missing after the latest read.",
+      severity: "medium",
+      priority: "low",
+      source_system: "portal_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-3",
+      now: "2026-04-13T11:00:00.000Z",
+    }
+  );
+
+  assert.equal(ignored.status, "ignored");
+  assert.equal(reopened.id, detected.id);
+  assert.equal(reopened.status, "open");
+  assert.equal(reopened.reopened_at, "2026-04-13T11:00:00.000Z");
+  assert.equal(reopened.reopened_by, "user-3");
+  assert.equal(supabase.__state.rows.length, 1);
+});
+
+await runAsyncTest("household issue lifecycle creates a new row for a distinct issue key", async () => {
+  const supabase = createIssueSupabaseDouble();
+  await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Protection linkage was not identified.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  const second = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_portal",
+      asset_id: "A1",
+      title: "Primary property portal continuity is incomplete",
+      summary: "Portal support is still missing.",
+      severity: "medium",
+      priority: "low",
+      source_system: "property_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  assert.equal(second.issue_key, "property_missing_portal");
+  assert.equal(supabase.__state.rows.length, 2);
+});
+
+await runAsyncTest("household issue lookup and open issue listing stay deterministic", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const first = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      record_id: "property-1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Protection linkage was not identified.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+  await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "portal",
+      issue_type: "continuity_gap",
+      issue_key: "primary_portal_missing_recovery",
+      asset_id: "A1",
+      title: "Primary portal continuity is incomplete",
+      summary: "Recovery contact data is still missing.",
+      severity: "critical",
+      priority: "high",
+      source_system: "portal_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+  await upsertHouseholdIssue(
+    {
+      household_id: "H2",
+      module_key: "mortgage",
+      issue_type: "document_gap",
+      issue_key: "mortgage_missing_statement",
+      asset_id: "A2",
+      title: "Mortgage statement support is thin",
+      summary: "A current monthly statement was not identified.",
+      severity: "medium",
+      priority: "medium",
+      source_system: "mortgage_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-2",
+      now: "2026-04-13T11:00:00.000Z",
+    }
+  );
+
+  const existing = await findExistingHouseholdIssueByIdentity(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      record_id: "property-1",
+    },
+    { supabase }
+  );
+  const openForAsset = await listOpenIssuesForAsset("A1", { supabase });
+  const openForHousehold = await listOpenIssuesForHousehold("H1", { supabase });
+
+  assert.equal(existing.id, first.id);
+  assert.equal(openForAsset.length, 2);
+  assert.equal(openForAsset[0].severity, "critical");
+  assert.equal(openForHousehold.length, 2);
+  assert.equal(openForHousehold[0].severity, "critical");
 });
 
 console.log("All IUL regression checks passed.");

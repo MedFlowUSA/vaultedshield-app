@@ -22,6 +22,7 @@ import {
   REVIEW_WORKFLOW_STATUSES,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildAssetDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
@@ -908,7 +909,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </SectionCard>
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Asset Debug: asset={assetId} | household={householdState.context.householdId || "none"} | documents={bundle.documents.length} | alerts={bundle.alerts.length} | tasks={bundle.tasks.length} | portals={bundle.portalLinks.length} | error={loadError || "none"}
         </div>

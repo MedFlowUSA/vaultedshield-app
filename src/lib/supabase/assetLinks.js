@@ -1,8 +1,8 @@
-import { getSupabaseClient } from "./client";
+import { getSupabaseClient } from "./client.js";
 import {
   appendHouseholdScope,
   buildScopedAccessError,
-} from "./platformScope";
+} from "./platformScope.js";
 
 function getClientOrError() {
   const supabase = getSupabaseClient();

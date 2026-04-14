@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  answerHouseholdQuestion,
   buildHouseholdReviewReport,
 } from "../lib/domain/platformIntelligence";
 import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
+import HouseholdAIChat from "../components/household/HouseholdAIChat";
 import {
+  buildReviewWorkflowStateEntry,
   buildReviewAssignmentOptions,
   buildHouseholdReviewDigest,
   getHouseholdReviewDigestSnapshot,
@@ -14,10 +15,12 @@ import {
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
+import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
 import {
   buildHouseholdOnboardingChecklist,
@@ -597,10 +600,9 @@ export default function DashboardPage({ onNavigate }) {
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const [reviewDigestSnapshot, setReviewDigestSnapshot] = useState(null);
   const [showHouseholdReport, setShowHouseholdReport] = useState(false);
-  const [assistantQuestion, setAssistantQuestion] = useState("");
-  const [assistantHistory, setAssistantHistory] = useState([]);
   const [demoAssistantQuestion, setDemoAssistantQuestion] = useState("");
   const [demoAssistantHistory, setDemoAssistantHistory] = useState([]);
+  const sectionRefs = useRef({});
   const savedPolicyCount = savedPolicies.length;
   const loadError = errors.householdData || "";
   const policyCompareError = errors.insurancePortfolio || "";
@@ -760,34 +762,59 @@ export default function DashboardPage({ onNavigate }) {
     () => buildEmergencyAccessCommand(intelligenceBundle || {}),
     [intelligenceBundle]
   );
-  const householdScorecard = useMemo(
-    () => buildHouseholdScorecard(householdMap),
-    [householdMap]
-  );
-  const householdPriorityEngine = useMemo(
+  const workflowAwareHouseholdContext = useMemo(
     () =>
-      buildHouseholdPriorityEngine({
+      buildWorkflowAwareHouseholdContext({
         householdMap,
+        queueItems,
+        reviewDigest,
         commandCenter,
         housingCommand: housingCommandCenter,
         emergencyAccessCommand,
+        bundle: intelligenceBundle,
       }),
-    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+    [
+      commandCenter,
+      emergencyAccessCommand,
+      householdMap,
+      housingCommandCenter,
+      intelligenceBundle,
+      queueItems,
+      reviewDigest,
+    ]
   );
+  const householdScorecard = workflowAwareHouseholdContext.scorecard || buildHouseholdScorecard(householdMap);
+  const householdPriorityEngine =
+    workflowAwareHouseholdContext.priorityEngine ||
+    buildHouseholdPriorityEngine({
+      householdMap,
+      commandCenter,
+      housingCommand: housingCommandCenter,
+      emergencyAccessCommand,
+      bundle: intelligenceBundle,
+    });
+  const assistantHouseholdMap = workflowAwareHouseholdContext.householdMap || householdMap;
+  const assistantReviewDigest = workflowAwareHouseholdContext.reviewDigest || reviewDigest;
+  const assistantQueueItems = workflowAwareHouseholdContext.activeQueueItems || activeQueueItems;
+  const resolvedQueueItems = workflowAwareHouseholdContext.resolvedQueueItems || reviewedQueueItems;
+  const workflowResolutionMemory = workflowAwareHouseholdContext.resolutionMemory || {
+    activeIssueCount: activeQueueItems.length,
+    resolvedIssueCount: reviewedQueueItems.length,
+    recentlyResolved: [],
+  };
   const householdReviewReport = useMemo(
     () =>
       showHouseholdReport
         ? buildHouseholdReviewReport({
             bundle: intelligenceBundle || {},
             intelligence,
-            householdMap,
+            householdMap: assistantHouseholdMap,
             queueItems,
-            reviewDigest,
+            reviewDigest: assistantReviewDigest,
           })
         : null,
-    [showHouseholdReport, intelligenceBundle, intelligence, householdMap, queueItems, reviewDigest]
+    [showHouseholdReport, intelligenceBundle, intelligence, assistantHouseholdMap, queueItems, assistantReviewDigest]
   );
-  const latestAssistantEntry = assistantHistory[assistantHistory.length - 1] || null;
   const moduleRows = useMemo(
     () => [
       {
@@ -866,18 +893,47 @@ export default function DashboardPage({ onNavigate }) {
   const sectionRadius = isMobile ? "20px" : "24px";
   const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))";
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
+  const householdAssistantSectionLabels = useMemo(
+    () => ({
+      "household-priority": "Priority Review Queue",
+      "household-review-digest": "Household Review Digest",
+      "household-risk-map": "Risk And Continuity Map",
+      "property-operating-graph": "Property Operating Graph",
+      "action-required": "Action Required",
+      "insurance-intelligence": "Insurance Intelligence",
+      "module-overview": "Module Overview",
+    }),
+    []
+  );
+
+  function setSectionRef(key, node) {
+    if (!key) return;
+    sectionRefs.current[key] = node;
+  }
+
+  function scrollToDashboardSection(section) {
+    const target = sectionRefs.current[section];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
 
   function handleReviewWorkflowUpdate(itemId, status) {
     const householdId = householdState.context.householdId;
     if (!householdId || !itemId) return;
+    const targetItem = queueItems.find((item) => item.id === itemId) || null;
 
     const nextState = {
       ...reviewWorkflowState,
-      [itemId]: {
-        ...(reviewWorkflowState[itemId] || {}),
-        status,
-        updated_at: new Date().toISOString(),
-      },
+      [itemId]: buildReviewWorkflowStateEntry({
+        item: targetItem,
+        currentEntry: reviewWorkflowState[itemId] || {},
+        householdId,
+        updates: {
+          status,
+          updated_at: new Date().toISOString(),
+        },
+      }),
     };
 
     setReviewWorkflowState(nextState);
@@ -887,16 +943,21 @@ export default function DashboardPage({ onNavigate }) {
   function handleReviewAssignmentUpdate(itemId, assigneeKey) {
     const householdId = householdState.context.householdId;
     if (!householdId || !itemId) return;
+    const targetItem = queueItems.find((item) => item.id === itemId) || null;
     const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
     const nextState = {
       ...reviewWorkflowState,
-      [itemId]: {
-        ...(reviewWorkflowState[itemId] || {}),
-        assignee_key: assignee?.key || "",
-        assignee_label: assignee?.label || "Unassigned",
-        assigned_at: assignee?.key ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      },
+      [itemId]: buildReviewWorkflowStateEntry({
+        item: targetItem,
+        currentEntry: reviewWorkflowState[itemId] || {},
+        householdId,
+        updates: {
+          assignee_key: assignee?.key || "",
+          assignee_label: assignee?.label || "Unassigned",
+          assigned_at: assignee?.key ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        },
+      }),
     };
 
     setReviewWorkflowState(nextState);
@@ -917,45 +978,6 @@ export default function DashboardPage({ onNavigate }) {
       window.setTimeout(() => window.print(), 80);
     }
   }
-
-  function handleAskHouseholdAssistant(questionText) {
-    const trimmed = String(questionText || "").trim();
-    if (!trimmed) return;
-
-    const response = answerHouseholdQuestion({
-      questionText: trimmed,
-      householdMap,
-      reviewDigest,
-      queueItems,
-      intelligence,
-      bundle: intelligenceBundle || {},
-      scorecard: householdScorecard,
-      priorityEngine: householdPriorityEngine,
-    });
-
-    setAssistantHistory((current) => [
-      ...current,
-      {
-        id: `${Date.now()}-${current.length}`,
-        question: trimmed,
-        response,
-      },
-    ]);
-    setAssistantQuestion("");
-  }
-
-  const starterPrompts = [
-    "Am I doing okay financially?",
-    "What should I review first?",
-    "What changed since last review?",
-    "Why is household readiness rated this way?",
-    "What is limiting continuity most?",
-    "Are my assets and protection aligned?",
-    "What parts of my household are under-supported?",
-    "How strong is the insurance side right now?",
-    "Are portal and access records in good shape?",
-    "What is hurting my household score most?",
-  ];
 
   const blankHousehold = useMemo(
     () => getHouseholdBlankState(intelligenceBundle || {}, savedPolicyRows || []),
@@ -1593,7 +1615,7 @@ export default function DashboardPage({ onNavigate }) {
             ) : null}
           </section>
 
-          {import.meta.env.DEV ? (
+          {shouldShowDevDiagnostics() ? (
             <div style={{ color: "#64748b", fontSize: "12px" }}>
               household={householdState.context.householdId || "none"} | onboardingBlank=yes | assets={blankHousehold.setupCounts.assets} | documents={blankHousehold.setupCounts.documents} | policies={blankHousehold.setupCounts.policies} | emergencyContacts={blankHousehold.setupCounts.emergencyContacts}
             </div>
@@ -1708,6 +1730,31 @@ export default function DashboardPage({ onNavigate }) {
 
           <div
             style={{
+              marginTop: "24px",
+              padding: "18px 20px",
+              borderRadius: "20px",
+              background: "rgba(15,23,42,0.42)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              display: "grid",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>Property Stack Snapshot</div>
+              <div style={{ color: "#94a3b8", lineHeight: "1.7", maxWidth: "760px" }}>
+                A quick household read on how well property, financing, protection, documents, and portal continuity connect before drill-in.
+              </div>
+            </div>
+            <OperatingGraphSummaryCards
+              cards={operatingGraphSummary.cards.slice(0, 5)}
+              highlights={operatingGraphSummary.highlights.slice(0, 3)}
+              onNavigate={onNavigate}
+              theme="dark"
+            />
+          </div>
+
+          <div
+            style={{
               marginTop: "28px",
               display: "grid",
               gridTemplateColumns: isTablet ? "1fr" : "1.1fr 0.9fr",
@@ -1785,6 +1832,7 @@ export default function DashboardPage({ onNavigate }) {
                 display: "grid",
                 gap: "14px",
               }}
+              ref={(node) => setSectionRef("household-priority", node)}
             >
               <div style={{ display: "grid", gap: "8px" }}>
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
@@ -2055,6 +2103,8 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          id="property-operating-graph"
+          ref={(node) => setSectionRef("property-operating-graph", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -2065,9 +2115,9 @@ export default function DashboardPage({ onNavigate }) {
           }}
         >
           <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "20px", fontWeight: 700 }}>Operating Graph</div>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Property Stack Operating Graph</div>
             <div style={{ color: "#94a3b8", lineHeight: "1.8", maxWidth: "900px" }}>
-              VaultedShield now surfaces how well property, financing, protection, documents, and portal continuity connect before you drill into a single module.
+              See how many property records are fully connected across financing, protection, documents, and portal continuity before you drill into a single module.
             </div>
           </div>
 
@@ -2084,6 +2134,7 @@ export default function DashboardPage({ onNavigate }) {
         ) : null}
 
         <section
+          data-demo-id="dashboard-household-assistant"
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -2096,7 +2147,7 @@ export default function DashboardPage({ onNavigate }) {
           <div>
             <div style={{ fontSize: "20px", fontWeight: 700 }}>Ask VaultedShield</div>
             <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-              Ask for a plain-English read on household score, priorities, continuity, changes since review, insurance strength, or access readiness.
+              Ask for a structured cross-household read on priority, continuity, changes since review, insurance strength, access readiness, or property-stack alignment.
             </div>
           </div>
 
@@ -2121,167 +2172,24 @@ export default function DashboardPage({ onNavigate }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            {starterPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => handleAskHouseholdAssistant(prompt)}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(147,197,253,0.18)",
-                  background: "rgba(59,130,246,0.10)",
-                  color: "#dbeafe",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: "12px",
-                }}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px" }}>
-            <input
-              value={assistantQuestion}
-              onChange={(event) => setAssistantQuestion(event.target.value)}
-              placeholder="Ask VaultedShield what matters most"
-              style={{
-                padding: "12px 14px",
-                borderRadius: "12px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(15,23,42,0.55)",
-                color: "#e2e8f0",
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleAskHouseholdAssistant(assistantQuestion);
-                }
-              }}
-            />
-            <button type="button" onClick={() => handleAskHouseholdAssistant(assistantQuestion)} style={buttonStyle(true)}>
-              Ask
-            </button>
-          </div>
-
-          {latestAssistantEntry ? (
-            <div
-              style={{
-                padding: "20px",
-                borderRadius: "20px",
-                background: "rgba(15,23,42,0.42)",
-                border: "1px solid rgba(255,255,255,0.05)",
-                display: "grid",
-                gap: "14px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "13px", color: "#93c5fd", fontWeight: 700 }}>Latest Answer</div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: "999px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color:
-                      latestAssistantEntry.response.confidence_label === "strong"
-                        ? "#bbf7d0"
-                        : latestAssistantEntry.response.confidence_label === "moderate"
-                          ? "#fde68a"
-                          : "#cbd5e1",
-                    background:
-                      latestAssistantEntry.response.confidence_label === "strong"
-                        ? "rgba(34,197,94,0.12)"
-                        : latestAssistantEntry.response.confidence_label === "moderate"
-                          ? "rgba(245,158,11,0.12)"
-                          : "rgba(148,163,184,0.12)",
-                  }}
-                >
-                  {latestAssistantEntry.response.confidence_label}
-                </div>
-              </div>
-              <div style={{ fontSize: "13px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-                {latestAssistantEntry.question}
-              </div>
-              <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#e2e8f0" }}>
-                {latestAssistantEntry.response.answer_text}
-              </div>
-              {latestAssistantEntry.response.evidence_points?.length > 0 ? (
-                <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#cbd5e1" }}>
-                  {latestAssistantEntry.response.evidence_points.map((point) => (
-                    <li key={point} style={{ lineHeight: "1.7" }}>
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {(latestAssistantEntry.response.actions || []).length > 0 ? (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {latestAssistantEntry.response.actions.map((action) => (
-                    <button
-                      key={action.id}
-                      type="button"
-                      onClick={() => executeSmartAction(action, { navigate: onNavigate })}
-                      style={buttonStyle(false)}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {(latestAssistantEntry.response.followup_prompts || []).map((prompt) => (
-                  <button
-                    key={prompt.id}
-                    type="button"
-                    onClick={() => handleAskHouseholdAssistant(prompt.label)}
-                    style={{
-                      padding: "7px 11px",
-                      borderRadius: "999px",
-                      border: "1px solid rgba(147,197,253,0.18)",
-                      background: "rgba(59,130,246,0.08)",
-                      color: "#dbeafe",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                      fontSize: "12px",
-                    }}
-                  >
-                    {prompt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {assistantHistory.length > 1 ? (
-            <div style={{ display: "grid", gap: "10px" }}>
-              <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>This Session</div>
-              {assistantHistory.slice(-3).reverse().map((entry) => (
-                <div
-                  key={entry.id}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "16px",
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#93c5fd", fontWeight: 700 }}>{entry.question}</div>
-                  <div style={{ marginTop: "8px", fontSize: "14px", lineHeight: "1.7", color: "#cbd5e1" }}>
-                    {entry.response.answer_text}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
+          <HouseholdAIChat
+            householdId={householdState.context.householdId || "dashboard-household"}
+            householdMap={assistantHouseholdMap}
+            intelligence={intelligence}
+            reviewDigest={assistantReviewDigest}
+            queueItems={assistantQueueItems}
+            bundle={intelligenceBundle || {}}
+            scorecard={householdScorecard}
+            priorityEngine={householdPriorityEngine}
+            onNavigate={onNavigate}
+            sectionLabels={householdAssistantSectionLabels}
+            onJumpToSection={scrollToDashboardSection}
+          />
         </section>
 
         <section
+          id="household-review-digest"
+          ref={(node) => setSectionRef("household-review-digest", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -2293,7 +2201,7 @@ export default function DashboardPage({ onNavigate }) {
             <div>
               <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Review Digest</div>
               <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-                {reviewDigest.summary}
+                {assistantReviewDigest.summary}
               </div>
             </div>
             <button onClick={handleRefreshDigestSnapshot} style={buttonStyle(false)}>
@@ -2310,9 +2218,10 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             {[
-              { label: "Reopened", value: reviewDigest.reopened_count },
-              { label: "Improved", value: reviewDigest.improved_count },
-              { label: "Active", value: reviewDigest.active_count },
+              { label: "Reopened", value: assistantReviewDigest.reopened_count },
+              { label: "Improved", value: assistantReviewDigest.improved_count },
+              { label: "Active", value: assistantReviewDigest.active_count },
+              { label: "Resolved", value: workflowResolutionMemory.resolvedIssueCount },
               {
                 label: "Last Snapshot",
                 value: reviewDigestSnapshot?.captured_at
@@ -2340,8 +2249,8 @@ export default function DashboardPage({ onNavigate }) {
           </div>
 
           <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
-            {(reviewDigest.bullets.length > 0
-              ? reviewDigest.bullets
+            {(assistantReviewDigest.bullets.length > 0
+              ? assistantReviewDigest.bullets
               : ["Save a review snapshot to start tracking what changed across the household queue."]).map((item) => (
               <li key={item} style={{ lineHeight: "1.7" }}>
                 {item}
@@ -2351,6 +2260,8 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          id="household-risk-map"
+          ref={(node) => setSectionRef("household-risk-map", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -2362,7 +2273,7 @@ export default function DashboardPage({ onNavigate }) {
             <div>
               <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Risk and Continuity Map</div>
               <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-                {householdMap.bottom_line}
+                {assistantHouseholdMap.bottom_line}
               </div>
             </div>
             <div
@@ -2378,10 +2289,10 @@ export default function DashboardPage({ onNavigate }) {
                 Household Readiness
               </div>
               <div style={{ marginTop: "6px", fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em" }}>
-                {displayValue(householdMap.overall_score)}
+                {displayValue(assistantHouseholdMap.overall_score)}
               </div>
               <div style={{ marginTop: "6px", fontSize: "14px", fontWeight: 600, color: "#f8fafc" }}>
-                {householdMap.overall_status}
+                {assistantHouseholdMap.overall_status}
               </div>
             </div>
           </div>
@@ -2394,7 +2305,7 @@ export default function DashboardPage({ onNavigate }) {
               gap: "18px",
             }}
           >
-            {householdMap.focus_areas.map((area) => {
+            {assistantHouseholdMap.focus_areas.map((area) => {
               const tone = getStatusColors(area.status);
               return (
                 <div
@@ -2763,11 +2674,11 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {[
-                      { label: "Active", value: activeQueueItems.length },
+                      { label: "Active", value: assistantQueueItems.length },
                       { label: "Changed", value: changedSinceReviewItems.length },
                       { label: "Pending Docs", value: pendingDocumentsCount },
                       { label: "Follow Up", value: followUpCount },
-                      { label: "Reviewed", value: reviewedQueueItems.length },
+                      { label: "Reviewed", value: resolvedQueueItems.length },
                   ].map((metric) => (
                     <span
                       key={metric.label}
@@ -2792,7 +2703,7 @@ export default function DashboardPage({ onNavigate }) {
                 These are the most practical household review items currently limiting stronger continuity and cross-asset clarity.
               </div>
               <div style={{ marginTop: "16px", display: "grid", gap: "12px" }}>
-                {(activeQueueItems.length > 0 ? activeQueueItems : queueItems).map((item, index) => (
+                {(assistantQueueItems.length > 0 ? assistantQueueItems : queueItems).map((item, index) => (
                   <div
                     key={item.id}
                     style={{
@@ -2909,11 +2820,11 @@ export default function DashboardPage({ onNavigate }) {
                 ))}
               </div>
               </div>
-              {reviewedQueueItems.length > 0 ? (
+              {resolvedQueueItems.length > 0 ? (
                 <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                   <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Recently Reviewed</div>
                   <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
-                    {reviewedQueueItems.slice(0, 3).map((item) => (
+                    {resolvedQueueItems.slice(0, 3).map((item) => (
                       <div
                         key={`reviewed-${item.id}`}
                         style={{
@@ -2950,8 +2861,8 @@ export default function DashboardPage({ onNavigate }) {
               >
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>Strength Signals</div>
                 <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
-                  {(householdMap.strength_signals.length > 0
-                    ? householdMap.strength_signals
+                  {(assistantHouseholdMap.strength_signals.length > 0
+                    ? assistantHouseholdMap.strength_signals
                     : ["Household strengths will become more visible as more linked records and review support are added."]).map((item) => (
                     <li key={item} style={{ lineHeight: "1.7" }}>
                       {item}
@@ -2970,8 +2881,8 @@ export default function DashboardPage({ onNavigate }) {
               >
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>Visibility Gaps</div>
                 <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
-                  {(householdMap.visibility_gaps.length > 0
-                    ? householdMap.visibility_gaps
+                  {(assistantHouseholdMap.visibility_gaps.length > 0
+                    ? assistantHouseholdMap.visibility_gaps
                     : ["No major visibility gaps are currently standing out across the visible household records."]).map((item) => (
                     <li key={item} style={{ lineHeight: "1.7" }}>
                       {item}
@@ -2984,6 +2895,8 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          id="action-required"
+          ref={(node) => setSectionRef("action-required", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -3009,6 +2922,8 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          id="insurance-intelligence"
+          ref={(node) => setSectionRef("insurance-intelligence", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -3050,6 +2965,8 @@ export default function DashboardPage({ onNavigate }) {
         </section>
 
         <section
+          id="module-overview"
+          ref={(node) => setSectionRef("module-overview", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
@@ -3143,7 +3060,7 @@ export default function DashboardPage({ onNavigate }) {
           )}
         </section>
 
-        {import.meta.env.DEV ? (
+        {shouldShowDevDiagnostics() ? (
           <div style={{ color: "#64748b", fontSize: "12px" }}>
             household={householdState.context.householdId || "none"} | assets={counts?.assetCount ?? 0} | policies={savedPolicyCount} | weakCoi={weakPolicyRows.length} | missingStatements={missingStatementCount} | dependencyFlags={householdMap.dependency_signals?.dependency_flags?.length || 0} | dependencyPriority={householdMap.dependency_signals?.priority_issues?.length || 0} | totalCharges={totalVisibleCharges > 0 ? formatCurrency(totalVisibleCharges) : "--"} | error={loadError || policyCompareError || "none"}
           </div>

@@ -5,6 +5,11 @@ import { resolvePlatformDataScope } from "./platformShellScope";
 import { getHouseholdIntelligenceBundle, getHouseholdPlatformCounts } from "../supabase/platformData";
 import { compareVaultedPolicies, listVaultedPolicies } from "../supabase/vaultedPolicies";
 import { usePlatformHousehold } from "../supabase/usePlatformHousehold";
+import {
+  buildDetectedIssues,
+  buildDetectedIssuesFingerprint,
+} from "./issues/buildDetectedIssues.js";
+import { syncDetectedIssues } from "./issues/syncDetectedIssues.js";
 
 const PlatformShellDataContext = createContext(null);
 
@@ -51,10 +56,12 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
   const [insuranceState, setInsuranceState] = useState(buildEmptyInsuranceState);
   const householdLoadRef = useRef({ requestKey: "", inFlight: false });
   const insuranceLoadRef = useRef({ requestKey: "", inFlight: false });
+  const issueSyncRef = useRef({ householdId: "", fingerprint: "", inFlight: false });
 
   useEffect(() => {
     householdLoadRef.current = { requestKey: "", inFlight: false };
     insuranceLoadRef.current = { requestKey: "", inFlight: false };
+    issueSyncRef.current = { householdId: "", fingerprint: "", inFlight: false };
     setCountsState({ data: null, error: "", loading: false });
     setBundleState({ data: null, error: "", loading: false });
     setInsuranceState({
@@ -223,6 +230,85 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
     () => (bundleState.data ? buildHouseholdIntelligence(bundleState.data) : null),
     [bundleState.data]
   );
+
+  useEffect(() => {
+    if (!authUserId || !householdId || !bundleState.data || !intelligence) {
+      return;
+    }
+    if (bundleState.loading || insuranceState.loading) {
+      return;
+    }
+
+    const detectedIssues = buildDetectedIssues({
+      householdId,
+      bundle: bundleState.data,
+      intelligence,
+      savedPolicyRows: insuranceRows,
+    });
+    const fingerprint = buildDetectedIssuesFingerprint(detectedIssues);
+    const syncKey = `${householdId}:${fingerprint}`;
+
+    if (
+      issueSyncRef.current.householdId === householdId &&
+      issueSyncRef.current.fingerprint === fingerprint
+    ) {
+      return;
+    }
+    if (issueSyncRef.current.inFlight && issueSyncRef.current.fingerprint === fingerprint) {
+      return;
+    }
+
+    issueSyncRef.current = {
+      householdId,
+      fingerprint,
+      inFlight: true,
+    };
+
+    let cancelled = false;
+
+    syncDetectedIssues(
+      {
+        householdId,
+        bundle: bundleState.data,
+        intelligence,
+        savedPolicyRows: insuranceRows,
+      },
+      {
+        currentUserId: authUserId,
+      }
+    ).catch((error) => {
+      if (cancelled) return;
+      console.error("[VaultedShield] detected issue sync failed.", {
+        householdId,
+        syncKey,
+        error,
+      });
+      issueSyncRef.current = {
+        householdId: "",
+        fingerprint: "",
+        inFlight: false,
+      };
+    }).finally(() => {
+      if (cancelled) return;
+      issueSyncRef.current = {
+        householdId,
+        fingerprint,
+        inFlight: false,
+      };
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authUserId,
+    bundleState.data,
+    bundleState.loading,
+    householdId,
+    insuranceRows,
+    insuranceState.loading,
+    intelligence,
+  ]);
 
   const value = useMemo(
     () => ({

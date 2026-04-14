@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
-import PolicyAIChatBox from "../components/policy/PolicyAIChatBox";
+import PolicyAIChat from "../components/policy/PolicyAIChat";
 import PolicySignalsSummaryCard from "../components/policy/PolicySignalsSummaryCard";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
@@ -705,6 +705,12 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   function setSectionRef(key, node) {
     if (!key) return;
     sectionRefs.current[key] = node;
+    if (key === "policy_overview") sectionRefs.current["policy-metrics"] = node;
+    if (key === "confidence") sectionRefs.current["evidence-ledger"] = node;
+    if (key === "interpretation") sectionRefs.current["trust-read"] = node;
+    if (key === "policy_ai_assistant") sectionRefs.current["comparison-read"] = node;
+    if (key === "annual_review") sectionRefs.current["annual-review"] = node;
+    if (key === "illustration-proof") sectionRefs.current["illustration-proof"] = node;
   }
 
   function getSectionHighlight(key) {
@@ -1491,14 +1497,35 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
 
           <PolicySignalsSummaryCard policySignals={policySignals} />
 
-          <PolicyAIChatBox
+          <PolicyAIChat
             key={policyId}
+            policyId={policyId}
+            policy={bundle.policy}
+            parsedPolicy={normalizedPolicy}
+            analytics={normalizedAnalytics}
+            comparisonRow={comparisonRow}
+            chargeSummary={chargeSummary}
+            statementTimeline={statementTimeline}
             policyInterpretation={policyInterpretation}
             trendSummary={trendSummary}
-            comparisonData={comparisonRow}
-            signalsOutput={comparisonRow?.policy_signals || null}
+            reviewReport={reviewReport}
             policySignals={policySignals}
+            iulV2={iulV2}
             comparisonOptions={policyAiComparisonOptions}
+            householdContext={{
+              householdId: debug.householdId || null,
+              sharedFallbackActive: Boolean(debug.sharedFallbackActive),
+              scopedMortgageCount: debug.scopedMortgageCount || 0,
+            }}
+            sectionLabels={{
+              "illustration-proof": "Illustration Proof",
+              "evidence-ledger": "Evidence Gaps",
+              "trust-read": "Trust Read",
+              "annual-review": "Annual Review",
+              "policy-metrics": "Policy Metrics",
+              "comparison-read": "Policy Assistant",
+            }}
+            onJumpToSection={scrollToPolicySection}
             onLatestEntryChange={(entry) =>
               setLatestPolicyAiEntry(entry ? { ...entry, policyId } : null)
             }
@@ -2006,7 +2033,10 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                       border: "1px solid rgba(147, 197, 253, 0.28)",
                     }}
                   >
-                    <div style={{ display: "grid", gap: "6px" }}>
+                    <div
+                      ref={(node) => setSectionRef("illustration-proof", node)}
+                      style={{ display: "grid", gap: "6px" }}
+                    >
                         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                         IUL Monitoring Read
                       </div>
@@ -2708,6 +2738,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                           currentPolicyAiEntry
                             ? {
                                 intent: currentPolicyAiEntry.intent || null,
+                                type: currentPolicyAiEntry.type || null,
                                 question: currentPolicyAiEntry.question || null,
                                 evidence: currentPolicyAiEntry.response?.evidence || [],
                                 missing_data: currentPolicyAiEntry.response?.missingData || [],

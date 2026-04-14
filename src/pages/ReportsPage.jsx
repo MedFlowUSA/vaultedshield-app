@@ -345,8 +345,9 @@ export default function ReportsPage({ onNavigate }) {
         commandCenter,
         housingCommand: housingCommandCenter,
         emergencyAccessCommand,
+        bundle,
       }),
-    [commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+    [bundle, commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
   );
   const householdReport = useMemo(
     () =>
@@ -1210,6 +1211,30 @@ export default function ReportsPage({ onNavigate }) {
           >
             {rankedPolicies[0] ? getPolicyEntryLabel(rankedPolicies[0]) : "Open Insurance Hub"}
           </button>
+        </div>
+
+        <div
+          style={{
+            padding: "22px 24px",
+            borderRadius: "18px",
+            background: "#f8fafc",
+            border: "1px solid rgba(148, 163, 184, 0.18)",
+            display: "grid",
+            gap: "14px",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Stack Snapshot</div>
+            <div style={{ color: "#475569", lineHeight: "1.8" }}>
+              The household operating graph stays visible across reports, so linked liabilities, protections, documents, and portal continuity do not disappear behind the review queue.
+            </div>
+          </div>
+          <OperatingGraphSummaryCards
+            cards={operatingGraphSummary.cards}
+            highlights={operatingGraphSummary.highlights.slice(0, 4)}
+            onNavigate={onNavigate}
+            theme="light"
+          />
         </div>
 
         {activeReport === "insurance" ? (

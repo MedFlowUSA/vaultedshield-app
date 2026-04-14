@@ -1,6 +1,7 @@
 import SectionCard from "../shared/SectionCard";
 import StatusBadge from "../shared/StatusBadge";
 import { PROPERTY_SIGNAL_FLAG_LABELS } from "../../lib/propertySignals/propertySignalRules";
+import { formatCompletenessScore } from "../../lib/assetLinks/linkedContext";
 
 function getSignalTone(signalLevel) {
   if (signalLevel === "healthy") return "good";
@@ -47,6 +48,10 @@ export default function PropertySignalsSummaryCard({ propertySignals }) {
       label: PROPERTY_SIGNAL_FLAG_LABELS[key] || key,
     }));
   const confidencePercent = Math.round((propertySignals.confidence ?? 0) * 100);
+  const stackScore = propertySignals.metadata?.stackCompletenessScore;
+  const stackLabel = propertySignals.metadata?.stackCompletenessLabel || "Limited";
+  const stackTone = propertySignals.metadata?.stackCompletenessTone || "info";
+  const stackContinuityStatus = propertySignals.metadata?.stackContinuityStatus || "continuity limited";
 
   return (
     <SectionCard title="Property Signals Summary" subtitle="Deterministic property read from valuation, equity, linkage, and fact completeness." accent={accent.border}>
@@ -78,6 +83,8 @@ export default function PropertySignalsSummaryCard({ propertySignals }) {
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <StatusBadge label={propertySignals.signalLevel.replace(/_/g, " ")} tone={getSignalTone(propertySignals.signalLevel)} />
+            <StatusBadge label={`Stack ${formatCompletenessScore(stackScore)} ${stackLabel}`} tone={stackTone} />
+            <StatusBadge label={`Continuity ${stackContinuityStatus}`} tone={stackTone === "alert" ? "warning" : "info"} />
             <StatusBadge label={`${confidenceLabel(propertySignals.confidence)} ${confidencePercent}%`} tone="info" />
           </div>
         </div>

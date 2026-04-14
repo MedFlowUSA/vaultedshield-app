@@ -8,6 +8,7 @@ import { summarizePortalModule } from "../lib/domain/platformIntelligence/module
 import { buildPortalHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { getPortalHubBundle } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
+import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const FILTERS = [
@@ -422,7 +423,7 @@ export default function PortalHubPage({ onNavigate }) {
         )}
       </div>
 
-      {import.meta.env.DEV ? (
+      {shouldShowDevDiagnostics() ? (
         <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
           Portal Debug: household={householdState.context.householdId || "none"} | portals={bundle.portals.length} | links={bundle.links.length} | assets_without_links={bundle.readiness.criticalAssetsWithoutLinkedPortals.length} | error={loadError || "none"}
         </div>

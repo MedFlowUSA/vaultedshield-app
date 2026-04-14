@@ -1,4 +1,8 @@
 import {
+  getCompletenessLabel,
+  getCompletenessTone,
+} from "../assetLinks/linkedContext.js";
+import {
   buildPropertySignalConfidence,
   buildPropertySignalFlags,
   buildPropertySignalReasons,
@@ -63,6 +67,7 @@ export function buildPropertySignals({
       valuationMissing: Boolean(flags.valuationMissing),
       weakValuation: Boolean(flags.weakValuation),
       linkageGap: Boolean(flags.linkageGap),
+      stackCompletenessGap: Boolean(flags.stackCompletenessGap),
       debtVisibilityGap: Boolean(flags.debtVisibilityGap),
       protectionGap: Boolean(flags.protectionGap),
       incompleteFacts: Boolean(flags.incompleteFacts),
@@ -74,6 +79,11 @@ export function buildPropertySignals({
     metadata: {
       missingFacts: flags.missingFacts || [],
       subjectCompleteness: flags.subjectCompleteness ?? null,
+      stackCompletenessScore: flags.stackCompletenessScore ?? null,
+      stackCompletenessLabel: getCompletenessLabel(flags.stackCompletenessScore),
+      stackCompletenessTone: getCompletenessTone(flags.stackCompletenessScore),
+      stackContinuityStatus: propertyStackAnalytics?.continuity_status || null,
+      stackLinkageStatus: propertyStackAnalytics?.linkage_status || null,
     },
   };
 }
