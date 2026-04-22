@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -40,6 +41,8 @@ function getStatusTone(status) {
 
 export default function WarrantyHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const warrantyReadinessRef = useRef(null);
+  const createWarrantyRef = useRef(null);
   const [warranties, setWarranties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -103,6 +106,43 @@ export default function WarrantyHubPage({ onNavigate }) {
   }, [warranties]);
 
   const warrantyRead = useMemo(() => summarizeWarrantyModule(warranties), [warranties]);
+  const warrantyPlainLanguageGuide = useMemo(() => {
+    const isEmpty = warranties.length === 0;
+
+    return {
+      title: "Keep this module practical, not technical",
+      summary: isEmpty
+        ? "Think of this as the place for protections you will forget about until they suddenly matter."
+        : warrantyRead.headline,
+      transition: isEmpty
+        ? "You do not need every receipt or contract loaded on day one. A few core warranties are enough to make this page useful and less intimidating."
+        : "This page should tell you in simple terms what is covered, what is expiring, and what deserves attention before you go deeper.",
+      quickFacts: [
+        `${warranties.length} warrant${warranties.length === 1 ? "y is" : "ies are"} currently tracked.`,
+        `${warrantyRead.metrics.expiringSoon || 0} contract${warrantyRead.metrics.expiringSoon === 1 ? "" : "s"} are expiring soon.`,
+        `${warrantyRead.metrics.missingExpiration || 0} contract${warrantyRead.metrics.missingExpiration === 1 ? "" : "s"} still need an expiration date.`,
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Keeps small protections from slipping through the cracks",
+          detail: "It helps the household see what is covered, what is active, and what might quietly expire.",
+        },
+        {
+          label: "Best First Step",
+          value: isEmpty ? "Add the warranty most likely to matter" : "Review contracts expiring soon",
+          detail: isEmpty
+            ? "A home warranty, HVAC contract, or appliance plan is usually enough to make the module feel grounded."
+            : "The fastest wins usually come from recording expiration dates and getting the key contracts in one place.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Perfect contract detail and long-tail items",
+          detail: "The first goal is simple visibility. Technical depth can come later if the household actually needs it.",
+        },
+      ],
+    };
+  }, [warranties.length, warrantyRead]);
 
   async function handleCreateWarranty(event) {
     event.preventDefault();
@@ -151,7 +191,21 @@ export default function WarrantyHubPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={warrantyPlainLanguageGuide.title}
+        summary={warrantyPlainLanguageGuide.summary}
+        transition={warrantyPlainLanguageGuide.transition}
+        quickFacts={warrantyPlainLanguageGuide.quickFacts}
+        cards={warrantyPlainLanguageGuide.cards}
+        primaryActionLabel={warranties.length > 0 ? "Add Another Warranty" : "Create First Warranty"}
+        onPrimaryAction={() => createWarrantyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        secondaryActionLabel={warranties.length > 0 ? "See Warranty Readiness" : "See Starter Guidance"}
+        onSecondaryAction={() => warrantyReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        showAnalysisDivider={false}
+      />
+
+      <div ref={warrantyReadinessRef} style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Coverage Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -185,7 +239,34 @@ export default function WarrantyHubPage({ onNavigate }) {
             <EmptyState
               title="No warranties yet"
               description="Create the first warranty or service contract to start building a usable protection record with documents, renewal visibility, and later review support."
-            />
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                  Good starter records for this module:
+                </div>
+                <div style={{ display: "grid", gap: "8px", color: "#64748b", fontSize: "14px" }}>
+                  <div>Home warranty or HVAC service contract</div>
+                  <div>Appliance protection plan</div>
+                  <div>Electronics or vehicle service agreement</div>
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => createWarrantyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ padding: "12px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                  >
+                    Create First Warranty
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/upload-center")}
+                    style={{ padding: "12px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}
+                  >
+                    Upload Receipt Or Contract
+                  </button>
+                </div>
+              </div>
+            </EmptyState>
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
               {warranties.map((warranty) => {
@@ -230,6 +311,7 @@ export default function WarrantyHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
+          <div ref={createWarrantyRef}>
           <SectionCard title="Create Warranty Contract" subtitle="Start with the core contract record, then deepen it with documents and later review details.">
             <form onSubmit={handleCreateWarranty} style={{ display: "grid", gap: "12px" }}>
               <select value={form.warranty_type_key} onChange={(event) => setForm((current) => ({ ...current, warranty_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
@@ -265,6 +347,7 @@ export default function WarrantyHubPage({ onNavigate }) {
               {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
             </form>
           </SectionCard>
+          </div>
 
           <SectionCard title="Warranty Readiness">
             <AIInsightPanel

@@ -101,6 +101,38 @@ export function buildPolicyInsightSummary({
     );
   }
 
+  if (policyType === "vul") {
+    insights.push(
+      buildInsight(
+        "vul",
+        values?.accumulationValue || values?.cashValue
+          ? `Visible account value is ${values?.accumulationValue || values?.cashValue}, so the core review path is market exposure, allocation visibility, and whether charges or loans are creating avoidable pressure.`
+          : "Variable-life account-value visibility is still limited.",
+        values?.accumulationValue || values?.cashValue ? "low" : "medium"
+      )
+    );
+
+    if (charges?.costOfInsurance) {
+      insights.push(
+        buildInsight(
+          "charges",
+          `Visible cost of insurance is ${charges.costOfInsurance}.`,
+          safeComparison?.coi_confidence === "weak" ? "medium" : "low"
+        )
+      );
+    }
+
+    if (loans?.loanBalance) {
+      insights.push(
+        buildInsight("loans", `Visible loan balance is ${loans.loanBalance}.`, "medium")
+      );
+    }
+
+    if (!lifePolicy?.typeSpecific?.allocationDetailVisible) {
+      missingData.push("Allocation or subaccount detail is limited.");
+    }
+  }
+
   if (policyType === "term") {
     insights.push(
       buildInsight(

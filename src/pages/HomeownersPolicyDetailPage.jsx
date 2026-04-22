@@ -3,6 +3,7 @@ import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import HomeownersLinkedContextCard from "../components/homeowners/HomeownersLinkedContextCard";
 import PageHeader from "../components/layout/PageHeader";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -44,6 +45,7 @@ import {
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHomeownersDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const HOMEOWNERS_DOCUMENT_CLASSES = listHomeownersDocumentClasses();
@@ -121,6 +123,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
   const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [propertyLinks, setPropertyLinks] = useState([]);
@@ -320,7 +323,75 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     () => Object.fromEntries(homeownersReviewQueueItems.map((item) => [item.id, item])),
     [homeownersReviewQueueItems]
   );
+  const topHomeownersReviewItem = homeownersReviewQueueItems[0] || null;
+  const homeownersReviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(
+        topHomeownersReviewItem,
+        reviewScope.householdId || homeownersPolicy?.household_id || null
+      ) || {
+        module: "homeowners",
+        issueType: "policy_review_issue",
+        severity: propertyLinks.length > 0 ? "medium" : "high",
+        householdId: reviewScope.householdId || homeownersPolicy?.household_id || null,
+        assetId: linkedAsset?.id || null,
+        recordId: homeownersPolicy?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    homeownersPolicy?.household_id,
+    homeownersPolicy?.id,
+    linkedAsset?.id,
+    propertyLinks.length,
+    reviewScope.householdId,
+    topHomeownersReviewItem,
+  ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
+  const plainLanguageGuide = useMemo(() => {
+    const documentCount = bundle?.homeownersDocuments?.length || 0;
+    const snapshotCount = bundle?.homeownersSnapshots?.length || 0;
+    const topBlocker = homeownersCommandCenter.blockers?.[0] || null;
+    const everydayVerdict =
+      homeownersCommandCenter.metrics.critical > 0
+        ? "This homeowners policy has important protection gaps"
+        : homeownersCommandCenter.metrics.warning > 0
+          ? "This homeowners policy looks usable but needs review"
+          : "This homeowners policy looks reasonably supported";
+
+    const confidenceDriver =
+      bundleWarnings.length > 0
+        ? "Some supporting homeowners context is unavailable right now, so this read is leaning on the verified records that did load."
+        : propertyLinks.length === 0
+          ? "No linked property is visible yet, so stack confidence is weaker than it should be."
+          : "The policy has property-stack context, which makes the current read more trustworthy.";
+
+    return {
+      title: "Start here before the technical homeowners review",
+      summary: homeownersCommandCenter.headline,
+      transition:
+        "This top layer gives the simple read first. The technical section below breaks out blockers, workflow, property linkage, documents, snapshots, and analytics.",
+      quickFacts: [
+        propertyLinks.length > 0
+          ? `${propertyLinks.length} linked propert${propertyLinks.length === 1 ? "y is" : "ies are"} visible for this policy.`
+          : "No linked property is visible yet for this policy.",
+        documentCount > 0
+          ? `${documentCount} homeowners document${documentCount === 1 ? "" : "s"} and ${snapshotCount} snapshot${snapshotCount === 1 ? "" : "s"} are visible.`
+          : "No homeowners-specific documents are visible yet.",
+        bundleWarnings.length > 0
+          ? "Some supporting homeowners context is temporarily unavailable."
+          : topHomeownersReviewItem?.summary || "No single homeowners issue is standing out above the rest right now.",
+      ],
+      cards: [
+        { label: "In plain English", value: everydayVerdict, detail: homeownersCommandCenter.headline },
+        { label: "What to do first", value: topHomeownersReviewItem?.title || "Open the review workspace", detail: topBlocker?.nextAction || topHomeownersReviewItem?.summary || "Review the top homeowners blocker first." },
+        { label: "Why confidence is limited or strong", value: `Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`, detail: confidenceDriver },
+      ],
+    };
+  }, [bundle?.homeownersDocuments?.length, bundle?.homeownersSnapshots?.length, bundleWarnings.length, homeownersCommandCenter, linkedStackCompleteness.score, propertyLinks.length, topHomeownersReviewItem]);
 
   const summaryItems = useMemo(() => {
     if (!homeownersPolicy) return [];
@@ -589,7 +660,69 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
             />
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <PlainLanguageBridge
+            compact
+            title={plainLanguageGuide.title}
+            summary={plainLanguageGuide.summary}
+            transition={plainLanguageGuide.transition}
+            quickFacts={plainLanguageGuide.quickFacts}
+            cards={plainLanguageGuide.cards}
+            primaryActionLabel="Open Review Workspace"
+            onPrimaryAction={() => onNavigate?.(homeownersReviewWorkspaceRoute)}
+            secondaryActionLabel="Step Into The Deeper Breakdown"
+            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            guideTitle="Read this homeowners page in layers"
+            guideDescription="You do not need the full homeowners analysis to understand the policy. Start with the simple answer, take the first action, and only open the deeper proof when you want the reasoning behind it."
+            guideSteps={[
+              {
+                label: "Step 1",
+                title: "Read the simple answer first",
+                detail: "Use the plain-English summary above to decide whether the policy looks supported, thin, or risky before reading the analyst detail.",
+              },
+              {
+                label: "Step 2",
+                title: "Check the first protection move",
+                detail: topHomeownersReviewItem?.summary || "Focus on the top homeowners blocker first so the stack becomes safer and easier to trust.",
+              },
+              {
+                label: "Step 3",
+                title: "Use the deeper review as proof",
+                detail: "The darker layer exists to show the evidence: blockers, property linkage, documents, snapshots, analytics, and workflow detail.",
+              },
+            ]}
+            translatedTerms={[
+              {
+                term: "Stack Score",
+                meaning: `Stack score is a shortcut for how complete the surrounding property context is. This policy currently reads as ${formatCompletenessScore(linkedStackCompleteness.score)}.`,
+              },
+              {
+                term: "Property Linkage",
+                meaning: propertyLinks.length > 0
+                  ? "Property linkage means this homeowners policy is attached to at least one property record, so the system can read it as part of a real protection stack."
+                  : "Property linkage means whether this policy is attached to the home it is meant to protect.",
+              },
+              {
+                term: "Snapshot",
+                meaning: "A snapshot is the normalized version of a policy record or statement, so the page can read coverage facts in a structured way.",
+              },
+              {
+                term: "Review Workspace",
+                meaning: "Review Workspace is the shared place to track, assign, and clear follow-up work when a homeowners issue needs more than a quick read.",
+              },
+            ]}
+            depthTitle="Use the deeper breakdown as supporting proof"
+            depthDescription="The darker section below is there to explain why this homeowners policy was scored this way, not to make the first read harder."
+            depthPrimaryActionLabel="Start With Homeowners Command"
+            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            depthSecondaryActionLabel="Open Review Workspace"
+            onDepthSecondaryAction={() => onNavigate?.(homeownersReviewWorkspaceRoute)}
+            analysisRef={technicalAnalysisRef}
+            analysisEyebrow="Deeper Review Starts Here"
+            analysisTitle="Technical breakdown: homeowners blockers, property linkage, documents, snapshots, analytics, and workflow"
+            analysisDescription="Everything below this point is the proof layer. It explains the live homeowners blockers, property linkage, documents, snapshots, analytics, and the workflow behind the simpler read above."
+          />
+
+          <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
             <SectionCard
               title="Homeowners Command"
               subtitle="The strongest protection blockers, why they matter, and what to do next on this policy."
@@ -823,15 +956,42 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                 <button type="submit" disabled={linkingProperty || !selectedPropertyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
                   {linkingProperty ? "Linking Property..." : "Link Property"}
                 </button>
-                <AIInsightPanel
-                  title="Property Stack Status"
-                  summary={`Current linkage status: ${linkageStatus}`}
-                  bullets={[
-                    propertyLinks.length > 0
-                      ? "This homeowners policy is already visible in the property stack."
-                      : "This homeowners policy is not yet linked to a property record.",
-                  ]}
-                />
+                <div
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "14px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    display: "grid",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Workspace Handoff</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    The command center and linked context already explain this policy’s place in the property stack. Shared follow-up is cleaner in Review Workspace once the issue needs tracking or assignment.
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topHomeownersReviewItem?.summary || `Current linkage status: ${linkageStatus}`}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(homeownersReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    {topHomeownersReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topHomeownersReviewItem.route)}
+                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                      >
+                        Open Top Homeowners Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
                 {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
                 {linkError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
               </form>

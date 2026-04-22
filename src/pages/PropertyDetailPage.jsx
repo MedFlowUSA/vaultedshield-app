@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import PageHeader from "../components/layout/PageHeader";
 import PropertyAIChat from "../components/property/PropertyAIChat";
+import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -15,6 +17,7 @@ import {
 } from "../lib/domain/propertyValuation";
 import { buildPropertySignals } from "../lib/propertySignals/buildPropertySignals";
 import { buildPropertyActionFeed } from "../lib/propertySignals/buildPropertyActionFeed";
+import buildPropertyPageFascia from "../lib/intelligence/fascia/buildPropertyPageFascia";
 import {
   getPropertyDocumentClass,
   getPropertyType,
@@ -53,6 +56,7 @@ import {
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildPropertyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 
@@ -360,6 +364,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [availableMortgageLoans, setAvailableMortgageLoans] = useState([]);
@@ -392,6 +397,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const [valuationError, setValuationError] = useState("");
   const [valuationSuccess, setValuationSuccess] = useState("");
   const [showPropertyReport, setShowPropertyReport] = useState(false);
+  const [showFasciaExplanation, setShowFasciaExplanation] = useState(false);
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
@@ -670,6 +676,169 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       }),
     [property, propertySignals, valuationChangeSummary]
   );
+  const propertyPageFascia = useMemo(
+    () =>
+      buildPropertyPageFascia({
+        property,
+        propertySignals,
+        propertyActionFeed,
+        linkedMortgages,
+        linkedHomeownersPolicies,
+        latestValuation: latestPropertyValuation,
+        propertyStackAnalytics,
+      }),
+    [
+      linkedHomeownersPolicies,
+      linkedMortgages,
+      latestPropertyValuation,
+      property,
+      propertyActionFeed,
+      propertySignals,
+      propertyStackAnalytics,
+    ]
+  );
+  const propertyPageFasciaDisplay = useMemo(() => {
+    if (!propertyPageFascia) return null;
+
+    return {
+      ...propertyPageFascia,
+      tertiaryAction: propertyPageFascia.tertiaryAction
+        ? {
+            ...propertyPageFascia.tertiaryAction,
+            label: showFasciaExplanation ? "Hide explanation" : "Why am I seeing this?",
+          }
+        : null,
+    };
+  }, [propertyPageFascia, showFasciaExplanation]);
+  const propertyPlainEnglishGuide = useMemo(() => {
+    const everydayVerdict =
+      propertyPageFascia?.status === "Strong"
+        ? "This property stack looks well supported"
+        : propertyPageFascia?.status === "Stable"
+          ? "This property looks mostly okay"
+          : propertyPageFascia?.status === "Partial"
+            ? "There is enough to start reading the property, but the stack is still incomplete"
+            : propertyPageFascia?.status === "At Risk"
+              ? "This property may need attention soon"
+              : "The property picture is still developing";
+
+    const valuationAvailable = Boolean(latestPropertyValuation?.midpoint_estimate);
+    const confidenceDriver =
+      linkedMortgages.length === 0 && linkedHomeownersPolicies.length === 0
+        ? "This property is missing both financing and protection linkage, so the stack read is still thin."
+        : linkedMortgages.length === 0
+          ? "Insurance may be linked, but the financing side is still missing, so the property stack is incomplete."
+          : linkedHomeownersPolicies.length === 0
+            ? "Financing is visible, but homeowners coverage is not linked yet, which weakens protection confidence."
+            : valuationAvailable
+              ? "The property has both stack linkage and a visible valuation read, which makes the current picture more trustworthy."
+              : "The stack is linked, but the page still needs stronger valuation evidence to complete the picture.";
+
+    return {
+      eyebrow: "Plain-English First",
+      title: "Start here before the technical property analysis",
+      summary: propertyPageFascia?.meaning || "This page simplifies the property stack before you move into the detailed analytics.",
+      transition:
+        "The short version tells you whether the property stack looks complete, thin, or risky. The technical sections below break out linkage, valuation, equity, and continuity details.",
+      cards: [
+        {
+          label: "In plain English",
+          value: everydayVerdict,
+          detail: propertyPageFascia?.meaning || propertyCommandCenter.headline,
+        },
+        {
+          label: "What to do first",
+          value: propertyPageFascia?.primaryAction?.label || "Review the top property issue",
+          detail:
+            topPropertyReviewItem?.summary ||
+            propertyPageFascia?.explanation?.recommendedAction?.detail ||
+            propertyCommandCenter.headline,
+        },
+        {
+          label: "Why confidence is limited or strong",
+          value:
+            propertyStackAnalytics?.completeness_score !== null && propertyStackAnalytics?.completeness_score !== undefined
+              ? `${propertyStackAnalytics.completeness_score}% stack completeness`
+              : "Stack completeness still forming",
+          detail: confidenceDriver,
+        },
+      ],
+      quickFacts: [
+        linkedMortgages.length > 0
+          ? `${linkedMortgages.length} linked mortgage${linkedMortgages.length === 1 ? "" : "s"} are visible for this property.`
+          : "No linked mortgage is visible yet for this property.",
+        linkedHomeownersPolicies.length > 0
+          ? `${linkedHomeownersPolicies.length} linked homeowners polic${linkedHomeownersPolicies.length === 1 ? "y is" : "ies are"} visible.`
+          : "No linked homeowners policy is visible yet for this property.",
+        valuationAvailable
+          ? `A virtual valuation is visible at ${formatCurrency(latestPropertyValuation.midpoint_estimate)}.`
+          : "There is no strong valuation read visible yet for this property.",
+      ],
+    };
+  }, [
+    latestPropertyValuation,
+    linkedHomeownersPolicies.length,
+    linkedMortgages.length,
+    propertyCommandCenter,
+    propertyPageFascia,
+    propertyStackAnalytics?.completeness_score,
+    topPropertyReviewItem,
+  ]);
+  const propertyTransitionGuide = useMemo(() => {
+    const stackScore =
+      propertyStackAnalytics?.completeness_score !== null && propertyStackAnalytics?.completeness_score !== undefined
+        ? `${propertyStackAnalytics.completeness_score}%`
+        : "still forming";
+    const valuationConfidence = latestPropertyValuation?.confidence_label || "limited";
+
+    return {
+      steps: [
+        {
+          label: "Step 1",
+          title: "Start with the property story",
+          detail:
+            "Use the plain-English section above to understand whether this property stack feels complete, thin, or at risk before you touch the analyst details.",
+        },
+        {
+          label: "Step 2",
+          title: "Take the first stack move",
+          detail:
+            propertyPageFascia?.primaryAction?.label
+            || "Focus on the first property fix so the stack gets stronger before you study all the signals.",
+        },
+        {
+          label: "Step 3",
+          title: "Use the deeper layer as proof",
+          detail:
+            "The darker sections below explain the evidence behind the call: signals, valuation, equity, and linked mortgage and coverage context.",
+        },
+      ],
+      keys: [
+        {
+          term: "Stack Completeness",
+          meaning: `Stack completeness is a simple way to say how much of the property picture is connected and visible. This page currently reads ${stackScore}.`,
+        },
+        {
+          term: "Valuation Confidence",
+          meaning: `Valuation confidence means how reliable the value estimate looks based on the evidence available. Right now it reads as ${valuationConfidence}.`,
+        },
+        {
+          term: "Linkage",
+          meaning:
+            "Linkage means whether the property is tied to the mortgage and homeowners records that help the system understand it as a full operating stack.",
+        },
+        {
+          term: "Equity Visibility",
+          meaning:
+            "Equity visibility means how clearly the page can compare current value against debt so you can tell how much ownership value is really visible.",
+        },
+      ],
+    };
+  }, [
+    latestPropertyValuation?.confidence_label,
+    propertyPageFascia?.primaryAction?.label,
+    propertyStackAnalytics?.completeness_score,
+  ]);
   const propertyStackPrompts = useMemo(() => {
     const prompts = [];
 
@@ -751,6 +920,33 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     () => Object.fromEntries(propertyReviewQueueItems.map((item) => [item.id, item])),
     [propertyReviewQueueItems]
   );
+  const topPropertyReviewItem = propertyReviewQueueItems[0] || null;
+  const propertyReviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(
+        topPropertyReviewItem,
+        reviewScope.householdId || property?.household_id || null
+      ) || {
+        module: "property",
+        issueType: "stack_incomplete",
+        severity: propertyStackAnalytics?.completeness_score >= 100 ? "low" : "medium",
+        householdId: reviewScope.householdId || property?.household_id || null,
+        assetId: linkedAsset?.id || null,
+        recordId: property?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    linkedAsset?.id,
+    property?.household_id,
+    property?.id,
+    propertyStackAnalytics?.completeness_score,
+    reviewScope.householdId,
+    topPropertyReviewItem,
+  ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
@@ -1128,6 +1324,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     });
   }
 
+  function handlePropertyFasciaAction(action) {
+    if (!action) return;
+    if (action.kind === "toggle_explanation") {
+      setShowFasciaExplanation((current) => !current);
+      return;
+    }
+
+    if (!action.target) return;
+    handlePropertyAction({ target: action.target });
+  }
+
   return (
     <div style={{ width: "100%", minWidth: 0, overflowX: "clip" }}>
       <PageHeader
@@ -1164,6 +1371,277 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               Print Report
             </button>
           </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <IntelligenceFasciaCard fascia={propertyPageFasciaDisplay} onAction={handlePropertyFasciaAction} isMobile={isMobile} />
+            <InsightExplanationPanel
+              isOpen={showFasciaExplanation}
+              explanation={propertyPageFascia?.explanation}
+              onToggle={() => setShowFasciaExplanation(false)}
+              onAction={handlePropertyFasciaAction}
+              isMobile={isMobile}
+            />
+          </div>
+
+          <section
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "20px",
+              padding: isMobile ? "24px 18px" : "30px 32px",
+              borderRadius: "28px",
+              background:
+                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
+              border: "1px solid rgba(251, 146, 60, 0.18)",
+              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+                gap: "18px",
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isMobile ? "2px 2px 0" : "4px 4px 0" }}>
+                <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.82)", border: "1px solid rgba(251, 146, 60, 0.18)", boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)", fontSize: "11px", color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                  {propertyPlainEnglishGuide.eyebrow}
+                </div>
+                <div style={{ fontSize: isMobile ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
+                  {propertyPlainEnglishGuide.title}
+                </div>
+                <div style={{ fontSize: isMobile ? "18px" : "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
+                  {propertyPlainEnglishGuide.summary}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{propertyPlainEnglishGuide.transition}</div>
+              </div>
+
+              <div
+                style={{
+                  padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
+                  borderRadius: "24px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "14px",
+                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "999px", background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)", boxShadow: "0 0 0 5px rgba(249,115,22,0.12)" }} />
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    Quick Read
+                  </div>
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
+                  {propertyPlainEnglishGuide.quickFacts.map((item) => (
+                    <li key={item} style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: "10px", alignItems: "start", padding: "10px 12px", borderRadius: "14px", background: "rgba(255,255,255,0.78)", border: "1px solid rgba(226,232,240,0.9)", lineHeight: "1.65" }}>
+                      <span style={{ width: "8px", height: "8px", marginTop: "8px", borderRadius: "999px", background: "#0f172a" }} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {propertyPageFascia?.primaryAction ? (
+                    <button type="button" onClick={() => handlePropertyFasciaAction(propertyPageFascia.primaryAction)} style={{ ...actionButtonStyle(true), ...(actionButtonLayoutStyle || {}), borderRadius: "999px", padding: "11px 16px", boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}>
+                      {propertyPageFascia.primaryAction.label}
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ ...actionButtonStyle(false), ...(actionButtonLayoutStyle || {}), borderRadius: "999px", padding: "11px 16px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}>
+                    Step Into The Deeper Breakdown
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {propertyPlainEnglishGuide.cards.map((card) => (
+                <div
+                  key={card.label}
+                  style={{
+                    padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "10px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {card.label}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              marginTop: "20px",
+              display: "grid",
+              gap: "18px",
+              padding: isMobile ? "22px 18px" : "24px 26px",
+              borderRadius: "26px",
+              background:
+                "radial-gradient(circle at top right, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0) 30%), linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.16)",
+              boxShadow: "0 20px 42px rgba(15, 23, 42, 0.05)",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.9)", border: "1px solid rgba(148, 163, 184, 0.18)", fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                From Simple To Detailed
+              </div>
+              <div style={{ fontSize: isMobile ? "24px" : "28px", fontWeight: 800, color: "#0f172a", lineHeight: "1.15", letterSpacing: "-0.03em" }}>
+                Read this property page in layers
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "56rem" }}>
+                You can understand this property without reading every signal card. Start with the short version, fix the first stack issue, and only use the deeper sections when you want the evidence behind the call.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {propertyTransitionGuide.steps.map((step) => (
+                <div
+                  key={step.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "8px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ width: "fit-content", padding: "6px 10px", borderRadius: "999px", background: "rgba(14, 165, 233, 0.1)", color: "#0369a1", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{step.title}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(280px, 0.9fr)",
+                gap: "16px",
+                alignItems: "start",
+              }}
+            >
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  Translate The Analyst Terms
+                </div>
+                {propertyTransitionGuide.keys.map((item) => (
+                  <details
+                    key={item.term}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      border: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>{item.term}</summary>
+                    <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.7" }}>{item.meaning}</div>
+                  </details>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "radial-gradient(circle at top right, rgba(56,189,248,0.22) 0%, rgba(56,189,248,0) 36%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  color: "#ffffff",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 18px 36px rgba(15, 23, 42, 0.18)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  When You Want More Depth
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
+                  Use the deeper breakdown as supporting proof
+                </div>
+                <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
+                  The darker section below is where the system shows the analyst evidence behind the simpler property story.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToPropertySection("continuity-command")}
+                    style={{ ...actionButtonStyle(false), background: "#ffffff", color: "#0f172a", border: "none", borderRadius: "999px", padding: "11px 16px", boxShadow: "0 10px 20px rgba(255,255,255,0.16)" }}
+                  >
+                    Start With Property Command
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToPropertySection("property-stack-analytics")}
+                    style={{ ...actionButtonStyle(false), background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "999px", padding: "11px 16px" }}
+                  >
+                    Jump To Stack Analytics
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            ref={technicalAnalysisRef}
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "10px",
+              padding: isMobile ? "20px 18px" : "22px 26px",
+              borderRadius: "28px",
+              background: "radial-gradient(circle at top right, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 34%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+              color: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Deeper Review Starts Here
+            </div>
+            <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
+              Technical breakdown: signals, valuation, stack completeness, equity, and linked-context diagnostics
+            </div>
+            <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
+              Everything below this point is the proof layer. It explains the property signals, action feed, valuation logic, equity position, and the linked mortgage and homeowners context behind the simpler read above.
+            </div>
+          </section>
 
           <div style={{ marginTop: "24px" }}>
             <PropertySignalsSummaryCard propertySignals={propertySignals} />
@@ -1579,12 +2057,66 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px" }}>
-            <SectionCard title="Property Stack Review">
-              <AIInsightPanel
-                title={propertyStackLinkageStatus}
-                summary={`Current linkage status: ${propertyStackLinkageStatus}`}
-                bullets={propertyStackPrompts}
-              />
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  The action feed and command center already carry the on-page next move. Shared property follow-up now belongs in Review Workspace so stack gaps, document work, and linked mortgage or protection issues can be tracked together instead of repeating as a second review card here.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {propertyReviewQueueItems.length} open property workstream{propertyReviewQueueItems.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {propertyStackLinkageStatus}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topPropertyReviewItem
+                      ? topPropertyReviewItem.summary
+                      : `Current linkage status: ${propertyStackLinkageStatus}`}
+                  </div>
+                  {propertyStackPrompts?.length ? (
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      {propertyStackPrompts[0]}
+                    </div>
+                  ) : null}
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(propertyReviewWorkspaceRoute)}
+                      style={actionButtonStyle(true)}
+                    >
+                      Open Review Workspace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToPropertySection("property-stack-analytics")}
+                      style={actionButtonStyle(false)}
+                    >
+                      Jump To Stack Analytics
+                    </button>
+                    {topPropertyReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topPropertyReviewItem.route)}
+                        style={actionButtonStyle(false)}
+                      >
+                        Open Top Property Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
               {linkSuccess ? <div style={{ marginTop: "12px", color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
               {linkError ? <div style={{ marginTop: "12px", color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
             </SectionCard>
@@ -2132,14 +2664,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     summary={`No persisted property analytics rows are stored yet, but the page can still produce a live ${propertySignals.signalLevel.replace(/_/g, " ")} signal from valuation, equity, and linkage inputs.`}
                     bullets={(propertySignals.reasons || []).slice(0, 4)}
                   />
-                  {propertyActionFeed[0] ? (
-                    <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Top live next move</div>
-                      <div style={{ marginTop: "8px", color: "#475569", lineHeight: "1.7" }}>
-                        {propertyActionFeed[0].summary}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               )}
             </SectionCard>
@@ -2169,20 +2693,55 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
             </div>
 
-            <SectionCard title="Notes / Tasks / Alerts">
-              {assetBundle ? (
-                <AIInsightPanel
-                  title="Platform Linkage"
-                  summary="This property record can inherit shared continuity context from the linked platform asset without collapsing property-specific data into generic tables."
-                  bullets={[
-                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
-                    `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
-                    `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
-                  ]}
-                />
-              ) : (
-                <EmptyState title="Shared household context pending" description="Alerts, tasks, notes, and broader continuity context will appear here once this property is linked into the broader household record." />
-              )}
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  Property Command and the stack analytics already explain the active property issues on this page. Shared follow-up belongs in Review Workspace so document, alert, and continuity work can be tracked once instead of repeated in a second linkage card here.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {propertyReviewQueueItems.length} open property workstream{propertyReviewQueueItems.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topPropertyReviewItem?.summary || propertyCommandCenter.headline}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(propertyReviewWorkspaceRoute)}
+                      style={actionButtonStyle(true)}
+                    >
+                      Open Review Workspace
+                    </button>
+                    {topPropertyReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topPropertyReviewItem.route)}
+                        style={actionButtonStyle(false)}
+                      >
+                        Open Top Property Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 

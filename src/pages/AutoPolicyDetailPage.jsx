@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -19,6 +20,7 @@ import {
 } from "../lib/supabase/autoData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildAutoCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -56,6 +58,7 @@ function getStatusTone(status) {
 export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -177,6 +180,31 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
     () => Object.fromEntries(autoReviewQueueItems.map((item) => [item.id, item])),
     [autoReviewQueueItems]
   );
+  const topAutoReviewItem = autoReviewQueueItems[0] || null;
+  const autoReviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(topAutoReviewItem, reviewScope.householdId || autoPolicy?.household_id || null) || {
+        module: "auto",
+        issueType: "policy_review_issue",
+        severity: autoCommandCenter.metrics.critical > 0 ? "high" : autoCommandCenter.metrics.warning > 0 ? "medium" : "low",
+        householdId: reviewScope.householdId || autoPolicy?.household_id || null,
+        assetId: linkedAsset?.id || null,
+        recordId: autoPolicy?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    autoCommandCenter.metrics.critical,
+    autoCommandCenter.metrics.warning,
+    autoPolicy?.household_id,
+    autoPolicy?.id,
+    linkedAsset?.id,
+    reviewScope.householdId,
+    topAutoReviewItem,
+  ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
@@ -188,6 +216,38 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
       { label: "Analytics", value: bundle?.autoAnalytics?.length || 0, helper: "Future auto review outputs" },
     ];
   }, [bundle, autoPolicy, autoPolicyType]);
+  const plainLanguageGuide = useMemo(() => {
+    const documentCount = bundle?.autoDocuments?.length || 0;
+    const snapshotCount = bundle?.autoSnapshots?.length || 0;
+    const topBlocker = autoCommandCenter.blockers?.[0] || null;
+    const everydayVerdict =
+      autoCommandCenter.metrics.critical > 0
+        ? "This auto policy has important coverage or continuity gaps"
+        : autoCommandCenter.metrics.warning > 0
+          ? "This auto policy looks usable but needs review"
+          : "This auto policy looks reasonably supported";
+
+    return {
+      title: "Start here before the technical auto review",
+      summary: autoCommandCenter.headline,
+      transition:
+        "This top layer gives the simple read first. The technical section below breaks out blockers, workflow, linked records, documents, snapshots, and analytics.",
+      quickFacts: [
+        documentCount > 0
+          ? `${documentCount} auto document${documentCount === 1 ? "" : "s"} are visible.`
+          : "No auto-specific documents are visible yet.",
+        snapshotCount > 0
+          ? `${snapshotCount} normalized auto snapshot${snapshotCount === 1 ? "" : "s"} are available.`
+          : "No normalized auto snapshots are available yet.",
+        topAutoReviewItem?.summary || "No single auto issue is standing out above the rest right now.",
+      ],
+      cards: [
+        { label: "In plain English", value: everydayVerdict, detail: autoCommandCenter.headline },
+        { label: "What to do first", value: topAutoReviewItem?.title || "Open the review workspace", detail: topBlocker?.nextAction || topAutoReviewItem?.summary || "Review the top coverage blocker first." },
+        { label: "Why confidence is limited or strong", value: `${documentCount} document${documentCount === 1 ? "" : "s"} visible`, detail: documentCount === 0 ? "Without declarations or supporting documents, this read stays fairly thin." : "Document support gives this auto review a more reliable starting point." },
+      ],
+    };
+  }, [autoCommandCenter, bundle?.autoDocuments?.length, bundle?.autoSnapshots?.length, topAutoReviewItem]);
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
@@ -317,7 +377,69 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <PlainLanguageBridge
+            compact
+            title={plainLanguageGuide.title}
+            summary={plainLanguageGuide.summary}
+            transition={plainLanguageGuide.transition}
+            quickFacts={plainLanguageGuide.quickFacts}
+            cards={plainLanguageGuide.cards}
+            primaryActionLabel="Open Review Workspace"
+            onPrimaryAction={() => onNavigate?.(autoReviewWorkspaceRoute)}
+            secondaryActionLabel="Step Into The Deeper Breakdown"
+            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            guideTitle="Read this auto page in layers"
+            guideDescription="You can understand this auto policy without starting in analyst mode. Read the simple answer first, take the first move, and only open the deeper proof when you want the details behind it."
+            guideSteps={[
+              {
+                label: "Step 1",
+                title: "Start with the policy story",
+                detail: "Use the plain-English summary above to understand whether this auto policy looks supported, thin, or risky before reading diagnostics.",
+              },
+              {
+                label: "Step 2",
+                title: "Take the first coverage move",
+                detail: topAutoReviewItem?.summary || "Focus on the top auto blocker first so the biggest exposure is clearer and easier to fix.",
+              },
+              {
+                label: "Step 3",
+                title: "Use the deeper layer as proof",
+                detail: "The darker sections below explain the evidence: blockers, linked records, documents, snapshots, analytics, and workflow detail.",
+              },
+            ]}
+            translatedTerms={[
+              {
+                term: "Confidence",
+                meaning: bundle?.autoDocuments?.length
+                  ? "Confidence means how much policy evidence the page has to support its current read of the auto coverage."
+                  : "Confidence is limited right now because the page does not have enough auto-policy evidence yet.",
+              },
+              {
+                term: "Snapshot",
+                meaning: "A snapshot is the normalized version of a policy record or declaration page, so the page can read auto coverage facts in a structured way.",
+              },
+              {
+                term: "Linked Records",
+                meaning: "Linked records are the other connected household records that help this policy make sense as part of a bigger protection picture.",
+              },
+              {
+                term: "Review Workspace",
+                meaning: "Review Workspace is the shared place to track and assign follow-up when an auto issue needs more than a quick page read.",
+              },
+            ]}
+            depthTitle="Use the deeper breakdown as supporting proof"
+            depthDescription="The darker section below is where the system shows the analyst evidence behind the simpler auto policy story."
+            depthPrimaryActionLabel="Start With Auto Command"
+            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            depthSecondaryActionLabel="Open Review Workspace"
+            onDepthSecondaryAction={() => onNavigate?.(autoReviewWorkspaceRoute)}
+            analysisRef={technicalAnalysisRef}
+            analysisEyebrow="Deeper Review Starts Here"
+            analysisTitle="Technical breakdown: auto blockers, linked records, documents, snapshots, analytics, and workflow"
+            analysisDescription="Everything below this point is the proof layer. It explains the live auto blockers, linked records, documents, snapshots, analytics, and the workflow behind the simpler read above."
+          />
+
+          <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
             <SectionCard
               title="Auto Command"
               subtitle="The strongest auto protection blockers, why they matter, and what to do next on this policy."
@@ -619,20 +741,55 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               )}
             </SectionCard>
 
-            <SectionCard title="Notes / Tasks / Alerts">
-              {assetBundle ? (
-                <AIInsightPanel
-                  title="Platform Linkage"
-                  summary="This auto record can inherit shared continuity context from the linked platform asset without collapsing auto-specific data into generic tables."
-                  bullets={[
-                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
-                    `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
-                    `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
-                  ]}
-                />
-              ) : (
-                <EmptyState title="Shared household context pending" description="Alerts, tasks, notes, and broader continuity context will appear here once this policy is linked into the broader household record." />
-              )}
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  Auto Command already carries the active blockers on this policy. Shared follow-up belongs in Review Workspace so document, alert, and continuity work can be tracked without repeating the same cross-household summary here.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {autoReviewQueueItems.length} open auto workstream{autoReviewQueueItems.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topAutoReviewItem?.summary || autoCommandCenter.headline}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(autoReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    {topAutoReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topAutoReviewItem.route)}
+                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                      >
+                        Open Top Auto Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 

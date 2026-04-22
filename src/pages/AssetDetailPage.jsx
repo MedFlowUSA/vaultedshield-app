@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
@@ -22,6 +22,7 @@ import {
   REVIEW_WORKFLOW_STATUSES,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildAssetDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
@@ -43,6 +44,7 @@ function formatDate(value) {
 export default function AssetDetailPage({ assetId, onNavigate }) {
   const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState({
     asset: null,
     documents: [],
@@ -285,6 +287,83 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     () => Object.fromEntries(reviewQueueItems.map((item) => [item.id, item])),
     [reviewQueueItems]
   );
+  const topReviewItem = reviewQueueItems[0] || null;
+  const reviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(topReviewItem, reviewScope.householdId || bundle.asset?.household_id || null) || {
+        module: "asset",
+        issueType: "continuity_gap",
+        severity: commandCenter.metrics.critical > 0 ? "high" : commandCenter.metrics.warning > 0 ? "medium" : "low",
+        householdId: reviewScope.householdId || bundle.asset?.household_id || null,
+        assetId: bundle.asset?.id || null,
+        recordId: bundle.asset?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    bundle.asset?.household_id,
+    bundle.asset?.id,
+    commandCenter.metrics.critical,
+    commandCenter.metrics.warning,
+    reviewScope.householdId,
+    topReviewItem,
+  ]);
+  const assetPlainEnglishGuide = useMemo(() => {
+    const everydayVerdict =
+      commandCenter.metrics.critical > 0
+        ? "This asset has important continuity gaps"
+        : commandCenter.metrics.warning > 0
+          ? "This asset is mostly usable but needs cleanup"
+          : "This asset looks reasonably organized";
+
+    const confidenceDriver =
+      bundle.portalLinks.length === 0
+        ? "There are no linked portals yet, so access continuity is still thin."
+        : (bundle.portalContinuity?.missingRecoveryCount || 0) > 0
+          ? `${bundle.portalContinuity?.missingRecoveryCount || 0} linked portal${(bundle.portalContinuity?.missingRecoveryCount || 0) === 1 ? "" : "s"} still lack recovery hints, which weakens resilience.`
+          : bundle.documents.length === 0
+            ? "Portal continuity exists, but the asset still has no linked documents, so the record is lighter than it should be."
+            : "The asset has both documentation and portal continuity support, which makes the current read stronger.";
+
+    return {
+      eyebrow: "Plain-English First",
+      title: "Start here before the continuity details",
+      summary: commandCenter.headline,
+      transition:
+        "This top layer tells you whether the asset looks organized, thin, or risky. The continuity details below explain the blockers, review workflow, documents, alerts, tasks, and portal access setup behind that summary.",
+      cards: [
+        {
+          label: "In plain English",
+          value: everydayVerdict,
+          detail: commandCenter.headline,
+        },
+        {
+          label: "What to do first",
+          value: topReviewItem?.title || "Review the top continuity blocker",
+          detail: topReviewItem?.summary || commandCenter.blockers?.[0]?.nextAction || "Use Continuity Command to clear the next blocker.",
+        },
+        {
+          label: "Why confidence is limited or strong",
+          value: `${bundle.portalLinks.length} portal link${bundle.portalLinks.length === 1 ? "" : "s"} visible`,
+          detail: confidenceDriver,
+        },
+      ],
+      quickFacts: [
+        bundle.documents.length > 0
+          ? `${bundle.documents.length} linked document${bundle.documents.length === 1 ? "" : "s"} are visible for this asset.`
+          : "No linked documents are visible for this asset yet.",
+        bundle.alerts.length > 0
+          ? `${bundle.alerts.length} open alert${bundle.alerts.length === 1 ? "" : "s"} are attached to this asset.`
+          : "No open alerts are currently attached to this asset.",
+        bundle.tasks.length > 0
+          ? `${bundle.tasks.length} task${bundle.tasks.length === 1 ? "" : "s"} are visible for this asset.`
+          : "No open tasks are currently linked to this asset.",
+      ],
+    };
+  }, [bundle.alerts.length, bundle.documents.length, bundle.portalContinuity?.missingRecoveryCount, bundle.portalLinks.length, bundle.tasks.length, commandCenter, topReviewItem]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
   const dualRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
   const splitLayout = isTablet ? "1fr" : "1fr 1fr";
@@ -363,6 +442,182 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           },
         ]}
       />
+
+      <section
+        style={{
+          marginTop: "24px",
+          display: "grid",
+          gap: "20px",
+          padding: isTablet ? "24px 18px" : "30px 32px",
+          borderRadius: "24px",
+          background:
+            "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
+          border: "1px solid rgba(251, 146, 60, 0.18)",
+          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+            gap: "18px",
+            alignItems: "start",
+          }}
+        >
+          <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isTablet ? "2px 2px 0" : "4px 4px 0" }}>
+            <div
+              style={{
+                width: "fit-content",
+                padding: "7px 11px",
+                borderRadius: "999px",
+                background: "rgba(255,255,255,0.82)",
+                border: "1px solid rgba(251, 146, 60, 0.18)",
+                boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)",
+                fontSize: "11px",
+                color: "#c2410c",
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                fontWeight: 800,
+              }}
+            >
+              {assetPlainEnglishGuide.eyebrow}
+            </div>
+            <div style={{ fontSize: isTablet ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
+              {assetPlainEnglishGuide.title}
+            </div>
+            <div style={{ fontSize: "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
+              {assetPlainEnglishGuide.summary}
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{assetPlainEnglishGuide.transition}</div>
+          </div>
+
+          <div
+            style={{
+              padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
+              borderRadius: "24px",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.16)",
+              display: "grid",
+              gap: "14px",
+              boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  borderRadius: "999px",
+                  background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
+                  boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
+                }}
+              />
+              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                Quick Read
+              </div>
+            </div>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
+              {assetPlainEnglishGuide.quickFacts.map((item) => (
+                <li
+                  key={item}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "16px minmax(0, 1fr)",
+                    gap: "10px",
+                    alignItems: "start",
+                    padding: "10px 12px",
+                    borderRadius: "14px",
+                    background: "rgba(255,255,255,0.78)",
+                    border: "1px solid rgba(226,232,240,0.9)",
+                    lineHeight: "1.65",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      marginTop: "8px",
+                      borderRadius: "999px",
+                      background: "#0f172a",
+                    }}
+                  />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}
+              >
+                Open Continuity Details
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate?.(reviewWorkspaceRoute)}
+                style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(148, 163, 184, 0.35)", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700, boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
+              >
+                Open Review Workspace
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {assetPlainEnglishGuide.cards.map((card) => (
+            <div
+              key={card.label}
+              style={{
+                padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
+                borderRadius: "22px",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                border: "1px solid rgba(148, 163, 184, 0.16)",
+                display: "grid",
+                gap: "10px",
+                boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                {card.label}
+              </div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
+              <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section
+        ref={technicalAnalysisRef}
+        style={{
+          marginTop: "24px",
+          display: "grid",
+          gap: "10px",
+          padding: isTablet ? "20px 18px" : "22px 26px",
+          borderRadius: "24px",
+          background: "radial-gradient(circle at top right, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 34%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+          color: "#ffffff",
+          border: "1px solid rgba(15, 23, 42, 0.12)",
+          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
+        }}
+      >
+        <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+          Deeper Review Starts Here
+        </div>
+        <div style={{ fontSize: isTablet ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
+          Continuity blockers, review workflow, documents, alerts, tasks, and portal-access resilience
+        </div>
+        <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
+          Everything below this point is the proof layer. It explains what is blocking this asset, how follow-up work should be tracked, and whether access and recovery details are strong enough to trust in a real handoff.
+        </div>
+      </section>
 
       <SectionCard title="Continuity Command" subtitle="The clearest blockers and next steps for keeping this asset dependable.">
         <div style={{ display: "grid", gap: "14px" }}>
@@ -602,18 +857,52 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           )}
         </SectionCard>
 
-        <SectionCard title="AI Summary / Insight">
-          <AIInsightPanel
-            summary={
-              bundle.snapshots.length > 0
-                ? "This asset has snapshot history available for deeper intelligence expansion."
-                : "Asset-specific intelligence is limited because no module-specific snapshots have been recorded yet."
-            }
-            bullets={[
-              "Documents, alerts, tasks, and access continuity can already be managed here.",
-              "Linked portal records are designed for continuity and emergency access mapping, not credential storage.",
-            ]}
-          />
+        <SectionCard title="Review Workspace Handoff">
+          <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>
+              Continuity Command already explains the current blockers on this asset. Shared follow-up belongs in Review Workspace so portal, document, task, and alert gaps can be tracked without repeating the same summary in a second AI card.
+            </div>
+            <div
+              style={{
+                padding: "18px 20px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                display: "grid",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                  {reviewQueueItems.length} open asset workstream{reviewQueueItems.length === 1 ? "" : "s"}
+                </div>
+                <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                  {bundle.portalLinks.length} portal link{bundle.portalLinks.length === 1 ? "" : "s"}
+                </div>
+              </div>
+              <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                {topReviewItem?.summary || commandCenter.headline}
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.(reviewWorkspaceRoute)}
+                  style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                >
+                  Open Review Workspace
+                </button>
+                {topReviewItem?.route ? (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.(topReviewItem.route)}
+                    style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                  >
+                    Open Top Asset Review
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </SectionCard>
       </div>
 

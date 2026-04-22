@@ -1,5 +1,5 @@
-import { buildIulV2Analytics } from "../insurance/iulV2Analytics";
-import { buildPolicyOptimizationEngine } from "../insurance/policyOptimizationEngine";
+import { buildIulV2Analytics } from "../insurance/iulV2Analytics.js";
+import { buildPolicyOptimizationEngine } from "../insurance/policyOptimizationEngine.js";
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";
@@ -416,6 +416,71 @@ export function explainWholeLifeLoanRisk({ lifePolicy }) {
   return explainLoans({ lifePolicy });
 }
 
+export function explainVulMarketExposure({ lifePolicy, comparisonSummary = {} }) {
+  const accountValue =
+    lifePolicy?.typeSpecific?.accountValue ||
+    lifePolicy?.values?.accumulationValue ||
+    lifePolicy?.values?.cashValue ||
+    "Unavailable";
+
+  return answer(
+    accountValue !== "Unavailable"
+      ? `This reads like a market-linked permanent policy. Visible account value is ${accountValue}, so the first review question is whether allocation detail, charges, and any loans support the current policy behavior cleanly.`
+      : "This appears to be a variable life policy, but market-exposure review is still limited because visible account-value support is incomplete.",
+    accountValue !== "Unavailable" && comparisonSummary?.latest_statement_date ? "moderate" : "low",
+    [
+      supporting_data("Account value", accountValue),
+      supporting_data("Fixed account value", lifePolicy?.typeSpecific?.fixedAccountValue || "Unavailable"),
+      supporting_data("Latest statement", comparisonSummary?.latest_statement_date || "Unavailable"),
+    ],
+    lifePolicy?.typeSpecific?.allocationDetailVisible ? [] : ["Allocation or subaccount detail is still limited."],
+    followups("Is allocation detail visible?", "Are charges or loans creating risk?", "What should I review first?")
+  );
+}
+
+export function explainVulAllocationVisibility({ lifePolicy }) {
+  if (!lifePolicy?.typeSpecific?.allocationDetailVisible) {
+    return buildInsufficientDataAnswer(
+      "Separate-account or allocation detail is not visible enough yet to explain the current variable-life positioning confidently.",
+      ["How exposed is this policy to market performance?", "Are charges or loans creating risk?", "What should I review first?"]
+    );
+  }
+
+  return answer(
+    "Some allocation support is visible, which helps confirm this policy behaves like an account-based variable contract. A fuller subaccount breakdown would still improve confidence.",
+    "moderate",
+    [
+      supporting_data("Fixed account value", lifePolicy?.typeSpecific?.fixedAccountValue || "Unavailable"),
+      supporting_data("Account value", lifePolicy?.typeSpecific?.accountValue || "Unavailable"),
+    ],
+    [],
+    followups("How exposed is this policy to market performance?", "Are charges or loans creating risk?", "What should I review first?")
+  );
+}
+
+export function explainVulLoanRisk({ lifePolicy, normalizedAnalytics = {} }) {
+  const chargeSummary = normalizedAnalytics?.charge_summary || {};
+
+  if (!lifePolicy?.typeSpecific?.loanBalance && chargeSummary?.total_coi === null) {
+    return buildInsufficientDataAnswer(
+      "Loan and charge pressure are still hard to judge because neither visible loan balance nor charge totals are well-supported in the current file.",
+      ["Is allocation detail visible?", "How exposed is this policy to market performance?", "What should I review first?"]
+    );
+  }
+
+  return answer(
+    "For variable life, charges and loans should be reviewed together with current account value because market volatility can make pressure build less quietly than it does in a more stable contract.",
+    "moderate",
+    [
+      supporting_data("Loan balance", lifePolicy?.typeSpecific?.loanBalance || "Unavailable"),
+      supporting_data("Visible COI", formatCurrency(chargeSummary?.total_coi)),
+      supporting_data("Visible charges", formatCurrency(chargeSummary?.total_visible_policy_charges)),
+    ],
+    [],
+    followups("How exposed is this policy to market performance?", "Is allocation detail visible?", "What should I review first?")
+  );
+}
+
 export function explainTermCoverage({ lifePolicy }) {
   return answer(
     lifePolicy?.coverage?.deathBenefit
@@ -523,6 +588,14 @@ export function answerPolicyQuestion(questionText, context = {}) {
     if (question.includes("dividend")) return explainDividendVisibility(context);
     if (question.includes("loan")) return explainWholeLifeLoanRisk(context);
     return explainWholeLifeBehavior(context);
+  }
+
+  if (policyType === "vul") {
+    if (question.includes("allocation") || question.includes("subaccount") || question.includes("separate account")) {
+      return explainVulAllocationVisibility(context);
+    }
+    if (question.includes("loan") || question.includes("charge")) return explainVulLoanRisk(context);
+    return explainVulMarketExposure(context);
   }
 
   if (policyType === "term") {

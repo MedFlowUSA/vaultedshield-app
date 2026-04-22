@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -43,6 +44,8 @@ function getStatusTone(status) {
 
 export default function MortgageHubPage({ onNavigate }) {
   const { householdState } = usePlatformShellData();
+  const mortgageCommandRef = useRef(null);
+  const createLoanRef = useRef(null);
   const [mortgageLoans, setMortgageLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -116,6 +119,44 @@ export default function MortgageHubPage({ onNavigate }) {
       }),
     [householdMortgageSummary, mortgageLoans]
   );
+  const mortgagePlainLanguageGuide = useMemo(() => {
+    const topCommand = mortgageHubCommand.rows[0] || null;
+    const isEmpty = mortgageLoans.length === 0;
+
+    return {
+      title: "Understand the household debt picture first",
+      summary: isEmpty
+        ? "You do not need a full servicing file to get started. One mortgage record is enough to make this page useful."
+        : mortgageHubCommand.headline,
+      transition: isEmpty
+        ? "Start with the main home loan or the debt that worries you most. VaultedShield can layer in statements, escrow detail, and technical payoff analysis after the basic record exists."
+        : "This page is meant to answer the simple questions first: what loans exist, which ones look steady, and what deserves attention before you open the deeper debt analysis.",
+      quickFacts: [
+        `${mortgageLoans.length} mortgage loan${mortgageLoans.length === 1 ? "" : "s"} are currently tracked.`,
+        `${mortgageHubCommand.metrics.active || 0} loan${mortgageHubCommand.metrics.active === 1 ? "" : "s"} are active or current.`,
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: create the first mortgage record or review the command list.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Keeps the mortgage story simple before it gets analytical",
+          detail: "You can use this hub to understand the financing picture without reading every readiness signal up front.",
+        },
+        {
+          label: "Best First Step",
+          value: isEmpty ? "Create the main home loan first" : topCommand?.title || "Review the top mortgage blocker",
+          detail: isEmpty
+            ? "That single record gives the household financing layer something real to organize around."
+            : topCommand?.blocker || "The command section below will show the clearest place to focus next.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Escrow depth, payoff modeling, and edge-case review",
+          detail: "Those technical layers stay available, but they should not stop you from getting the simple household picture in place first.",
+        },
+      ],
+    };
+  }, [mortgageHubCommand, mortgageLoans.length]);
 
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
@@ -170,7 +211,7 @@ export default function MortgageHubPage({ onNavigate }) {
       <PageHeader
         eyebrow="Assets"
         title="Mortgage Hub"
-        description="Live mortgage registry for loan shells, document intake, payoff tracking, and future servicing intelligence."
+        description="Start with the loans you know today. VaultedShield will turn them into a clearer mortgage picture before you ever need the deeper debt analysis."
         actions={
           <button
             onClick={() => refreshMortgageLoans()}
@@ -183,7 +224,21 @@ export default function MortgageHubPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ marginTop: "24px" }}>
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={mortgagePlainLanguageGuide.title}
+        summary={mortgagePlainLanguageGuide.summary}
+        transition={mortgagePlainLanguageGuide.transition}
+        quickFacts={mortgagePlainLanguageGuide.quickFacts}
+        cards={mortgagePlainLanguageGuide.cards}
+        primaryActionLabel={mortgageLoans.length > 0 ? "Add Another Mortgage" : "Create First Mortgage"}
+        onPrimaryAction={() => createLoanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        secondaryActionLabel="Open Mortgage Command"
+        onSecondaryAction={() => mortgageCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        showAnalysisDivider={false}
+      />
+
+      <div ref={mortgageCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Mortgage Command Center"
           subtitle="The strongest debt blockers, what they put at risk, and the next move to keep household financing steady."
@@ -298,7 +353,8 @@ export default function MortgageHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Mortgage Loan" subtitle="Start with the core loan record, then deepen it with documents, property linkage, and review details.">
+          <div ref={createLoanRef}>
+            <SectionCard title="Create Mortgage Loan" subtitle="Start with the core loan record, then deepen it with documents, property linkage, and review details.">
             <form onSubmit={handleCreateMortgageLoan} style={{ display: "grid", gap: "12px" }}>
               <select value={form.mortgage_loan_type_key} onChange={(event) => setForm((current) => ({ ...current, mortgage_loan_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {MORTGAGE_LOAN_TYPES.map((type) => (
@@ -345,7 +401,8 @@ export default function MortgageHubPage({ onNavigate }) {
                 </div>
               ) : null}
             </form>
-          </SectionCard>
+            </SectionCard>
+          </div>
 
           <SectionCard title="Mortgage Readiness">
             <AIInsightPanel

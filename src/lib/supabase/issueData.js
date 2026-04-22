@@ -1,9 +1,11 @@
 import { getSupabaseClient } from "./client.js";
 import {
+  normalizeIssueEventType,
   normalizeIssueInput,
   normalizeIssueKey,
   normalizeIssueModuleKey,
   normalizeIssuePriority,
+  normalizeIssueReopenReason,
   normalizeIssueSeverity,
   normalizeIssueStatus,
   normalizeIssueTypeKey,
@@ -12,6 +14,8 @@ import {
 
 const HOUSEHOLD_ISSUES_TABLE = "household_issues";
 const HOUSEHOLD_ISSUE_SELECT = "*";
+const HOUSEHOLD_ISSUE_EVENTS_TABLE = "household_issue_events";
+const HOUSEHOLD_ISSUE_EVENT_SELECT = "*";
 const SEVERITY_RANK = {
   critical: 0,
   high: 1,
@@ -184,6 +188,83 @@ export function mapHouseholdIssueRow(row = null) {
   };
 }
 
+export function mapHouseholdIssueEventRow(row = null) {
+  if (!row) return null;
+
+  return {
+    id: cleanString(row.id),
+    household_id: cleanString(row.household_id),
+    issue_id: cleanString(row.issue_id),
+    asset_id: cleanString(row.asset_id),
+    module_key: normalizeIssueModuleKey(row.module_key),
+    issue_type: normalizeIssueTypeKey(row.issue_type),
+    issue_key: normalizeIssueKey(row.issue_key),
+    event_type: normalizeIssueEventType(row.event_type),
+    event_reason: normalizeIssueReopenReason(row.event_reason),
+    actor_user_id: cleanString(row.actor_user_id),
+    detection_hash: cleanString(row.detection_hash),
+    evidence_summary:
+      row.evidence_summary === null || row.evidence_summary === undefined
+        ? {}
+        : cloneJsonValue(row.evidence_summary),
+    metadata:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? cloneJsonValue(row.metadata)
+        : {},
+    score_before:
+      row.score_before && typeof row.score_before === "object" && !Array.isArray(row.score_before)
+        ? cloneJsonValue(row.score_before)
+        : {},
+    score_after:
+      row.score_after && typeof row.score_after === "object" && !Array.isArray(row.score_after)
+        ? cloneJsonValue(row.score_after)
+        : {},
+    created_at: normalizeIsoTimestamp(row.created_at),
+  };
+}
+
+function normalizeIssueEventPayload(eventInput = {}, issueRow = {}, options = {}) {
+  const actorUserId = Object.prototype.hasOwnProperty.call(eventInput, "actor_user_id")
+    ? cleanString(eventInput.actor_user_id)
+    : Object.prototype.hasOwnProperty.call(options, "currentUserId")
+      ? cleanString(options.currentUserId)
+      : null;
+  const createdAt = resolveNow(options);
+  const eventType = normalizeIssueEventType(eventInput.event_type);
+  const eventReason = normalizeIssueReopenReason(eventInput.event_reason);
+  const metadata =
+    eventInput.metadata && typeof eventInput.metadata === "object" && !Array.isArray(eventInput.metadata)
+      ? cloneJsonValue(eventInput.metadata)
+      : {};
+
+  return {
+    household_id: cleanString(issueRow.household_id) || cleanString(eventInput.household_id),
+    issue_id: cleanString(issueRow.id) || cleanString(eventInput.issue_id),
+    asset_id: cleanString(issueRow.asset_id) || cleanString(eventInput.asset_id),
+    module_key: normalizeIssueModuleKey(issueRow.module_key || eventInput.module_key),
+    issue_type: normalizeIssueTypeKey(issueRow.issue_type || eventInput.issue_type),
+    issue_key: normalizeIssueKey(issueRow.issue_key || eventInput.issue_key),
+    event_type: eventType,
+    event_reason: eventReason,
+    actor_user_id: actorUserId,
+    detection_hash: cleanString(eventInput.detection_hash) || cleanString(issueRow.detection_hash),
+    evidence_summary:
+      eventInput.evidence_summary === null || eventInput.evidence_summary === undefined
+        ? cloneJsonValue(issueRow.evidence) || {}
+        : cloneJsonValue(eventInput.evidence_summary),
+    metadata,
+    score_before:
+      eventInput.score_before && typeof eventInput.score_before === "object" && !Array.isArray(eventInput.score_before)
+        ? cloneJsonValue(eventInput.score_before)
+        : {},
+    score_after:
+      eventInput.score_after && typeof eventInput.score_after === "object" && !Array.isArray(eventInput.score_after)
+        ? cloneJsonValue(eventInput.score_after)
+        : {},
+    created_at: createdAt,
+  };
+}
+
 async function insertHouseholdIssueRow(payload, options = {}) {
   const supabase = getClientOrThrow(options.supabase);
   const { data, error } = await supabase
@@ -216,6 +297,21 @@ async function updateHouseholdIssueRow(issueId, payload, options = {}) {
   }
 
   return mapHouseholdIssueRow(data);
+}
+
+async function insertHouseholdIssueEventRow(payload, options = {}) {
+  const supabase = getClientOrThrow(options.supabase);
+  const { data, error } = await supabase
+    .from(HOUSEHOLD_ISSUE_EVENTS_TABLE)
+    .insert(payload)
+    .select(HOUSEHOLD_ISSUE_EVENT_SELECT)
+    .single();
+
+  if (error) {
+    throw buildSupabaseError("VaultedShield could not insert the household issue event.", error);
+  }
+
+  return mapHouseholdIssueEventRow(data);
 }
 
 async function getHouseholdIssueById(issueId, options = {}) {
@@ -258,6 +354,128 @@ export async function getCurrentUserId(options = {}) {
   } catch {
     return null;
   }
+}
+
+export async function appendHouseholdIssueEvent(issueId, eventInput = {}, options = {}) {
+  const normalizedIssueId = cleanString(issueId);
+  if (!normalizedIssueId) {
+    throw new Error("issueId is required");
+  }
+
+  const issueRow = options.issueRow ? mapHouseholdIssueRow(options.issueRow) : await getHouseholdIssueById(normalizedIssueId, options);
+  if (!issueRow) {
+    throw new Error(`Household issue ${normalizedIssueId} was not found for event append.`);
+  }
+
+  const actorUserId = await getCurrentUserId(options);
+  const payload = normalizeIssueEventPayload(
+    {
+      ...eventInput,
+      actor_user_id: Object.prototype.hasOwnProperty.call(eventInput, "actor_user_id")
+        ? eventInput.actor_user_id
+        : actorUserId,
+      issue_id: normalizedIssueId,
+    },
+    issueRow,
+    options
+  );
+
+  return insertHouseholdIssueEventRow(payload, options);
+}
+
+export async function listHouseholdIssueEvents(filters = {}, options = {}) {
+  const supabase = getClientOrThrow(options.supabase);
+  const normalizedFilters = {
+    householdId: cleanString(filters.householdId),
+    issueId: cleanString(filters.issueId),
+    assetId: cleanString(filters.assetId),
+    moduleKey:
+      filters.moduleKey === undefined || filters.moduleKey === null
+        ? null
+        : normalizeIssueModuleKey(filters.moduleKey),
+    eventType:
+      filters.eventType === undefined || filters.eventType === null
+        ? null
+        : normalizeIssueEventType(filters.eventType),
+    limit: normalizePositiveLimit(filters.limit),
+  };
+
+  let query = supabase.from(HOUSEHOLD_ISSUE_EVENTS_TABLE).select(HOUSEHOLD_ISSUE_EVENT_SELECT);
+
+  if (normalizedFilters.householdId) {
+    query = query.eq("household_id", normalizedFilters.householdId);
+  }
+  if (normalizedFilters.issueId) {
+    query = query.eq("issue_id", normalizedFilters.issueId);
+  }
+  if (normalizedFilters.assetId) {
+    query = query.eq("asset_id", normalizedFilters.assetId);
+  }
+  if (normalizedFilters.moduleKey) {
+    query = query.eq("module_key", normalizedFilters.moduleKey);
+  }
+  if (normalizedFilters.eventType) {
+    query = query.eq("event_type", normalizedFilters.eventType);
+  }
+
+  query = query.order("created_at", { ascending: false });
+
+  if (normalizedFilters.limit) {
+    query = query.limit(normalizedFilters.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw buildSupabaseError("VaultedShield could not list household issue events.", error);
+  }
+
+  return (Array.isArray(data) ? data : []).map(mapHouseholdIssueEventRow);
+}
+
+export async function listIssueHistoryForAsset(assetId, options = {}) {
+  const normalizedAssetId = cleanString(assetId);
+  if (!normalizedAssetId) {
+    throw new Error("assetId is required");
+  }
+
+  return listHouseholdIssueEvents(
+    {
+      assetId: normalizedAssetId,
+    },
+    options
+  );
+}
+
+export async function listRecentResolvedIssuesForHousehold(householdId, options = {}) {
+  const normalizedHouseholdId = cleanString(householdId);
+  if (!normalizedHouseholdId) {
+    throw new Error("householdId is required");
+  }
+
+  return listHouseholdIssueEvents(
+    {
+      householdId: normalizedHouseholdId,
+      eventType: "resolved",
+      limit: options.limit,
+    },
+    options
+  );
+}
+
+export async function listRecentReopenedIssuesForHousehold(householdId, options = {}) {
+  const normalizedHouseholdId = cleanString(householdId);
+  if (!normalizedHouseholdId) {
+    throw new Error("householdId is required");
+  }
+
+  return listHouseholdIssueEvents(
+    {
+      householdId: normalizedHouseholdId,
+      eventType: "reopened",
+      limit: options.limit,
+    },
+    options
+  );
 }
 
 export async function findExistingHouseholdIssueByIdentity(identityInput, options = {}) {
@@ -304,6 +522,108 @@ function buildUpsertContentPayload(input) {
   };
 }
 
+function normalizeWorkflowResolutionFilters(filters = null, householdId = null) {
+  if (!filters || typeof filters !== "object") return null;
+  const module = cleanString(filters.module);
+  const issueType = cleanString(filters.issueType);
+  if (!module || !issueType) return null;
+
+  return {
+    module: normalizeIssueModuleKey(module),
+    issueType: normalizeIssueTypeKey(issueType),
+    householdId: cleanString(filters.householdId) || cleanString(householdId),
+    assetId: cleanString(filters.assetId),
+    recordId: cleanString(filters.recordId),
+  };
+}
+
+function buildPersistedWorkflowMetadataEntry(entry = {}, householdId = null) {
+  const normalizedFilters = normalizeWorkflowResolutionFilters(
+    entry.resolution_filters || entry.resolutionFilters || null,
+    householdId
+  );
+  if (!normalizedFilters) return null;
+
+  return {
+    status: cleanString(entry.status) || "open",
+    notes: cleanString(entry.notes) || "",
+    assignee_key: cleanString(entry.assignee_key),
+    assignee_label: cleanString(entry.assignee_label) || "Unassigned",
+    assigned_at: normalizeIsoTimestamp(entry.assigned_at),
+    updated_at: normalizeIsoTimestamp(entry.updated_at) || new Date().toISOString(),
+    resolution_filters: {
+      module: normalizedFilters.module,
+      issueType: normalizedFilters.issueType,
+      ...(normalizedFilters.householdId ? { householdId: normalizedFilters.householdId } : {}),
+      ...(normalizedFilters.assetId ? { assetId: normalizedFilters.assetId } : {}),
+      ...(normalizedFilters.recordId ? { recordId: normalizedFilters.recordId } : {}),
+    },
+    resolution_key:
+      cleanString(entry.resolution_key) ||
+      [
+        normalizedFilters.module,
+        normalizedFilters.issueType,
+        normalizedFilters.assetId || "asset",
+        normalizedFilters.recordId || "record",
+      ].join("|"),
+    route: cleanString(entry.route),
+    label: cleanString(entry.label),
+    source: cleanString(entry.source),
+  };
+}
+
+function issueMatchesWorkflowFilters(issue = {}, filters = null) {
+  const normalizedFilters = normalizeWorkflowResolutionFilters(filters);
+  if (!normalizedFilters) return false;
+  if (normalizeIssueModuleKey(issue.module_key) !== normalizedFilters.module) return false;
+  if (normalizeIssueTypeKey(issue.issue_type) !== normalizedFilters.issueType) return false;
+  if (normalizedFilters.assetId && cleanString(issue.asset_id) !== normalizedFilters.assetId) return false;
+  if (normalizedFilters.recordId && cleanString(issue.record_id) !== normalizedFilters.recordId) return false;
+  return true;
+}
+
+export async function saveHouseholdIssueWorkflowStateEntries(householdId, workflowState = {}, options = {}) {
+  const normalizedHouseholdId = cleanString(householdId);
+  if (!normalizedHouseholdId) {
+    throw new Error("householdId is required");
+  }
+
+  const entries = Object.values(workflowState || {})
+    .map((entry) => buildPersistedWorkflowMetadataEntry(entry, normalizedHouseholdId))
+    .filter(Boolean);
+  if (entries.length === 0) {
+    return [];
+  }
+
+  const issues = await listHouseholdIssues(
+    {
+      householdId: normalizedHouseholdId,
+    },
+    options
+  );
+  const updates = [];
+
+  issues.forEach((issue) => {
+    const matchedEntry = entries.find((entry) => issueMatchesWorkflowFilters(issue, entry.resolution_filters));
+    if (!matchedEntry) return;
+
+    updates.push(
+      updateHouseholdIssueRow(
+        issue.id,
+        {
+          metadata: {
+            ...(issue.metadata || {}),
+            workflow_state: matchedEntry,
+          },
+        },
+        options
+      )
+    );
+  });
+
+  return Promise.all(updates);
+}
+
 export async function upsertHouseholdIssue(issueInput, options = {}) {
   const normalizedInput = normalizeIssueInput(issueInput);
   const now = resolveNow(options);
@@ -322,7 +642,20 @@ export async function upsertHouseholdIssue(issueInput, options = {}) {
     };
 
     try {
-      return await insertHouseholdIssueRow(insertPayload, options);
+      const insertedIssue = await insertHouseholdIssueRow(insertPayload, options);
+      await appendHouseholdIssueEvent(
+        insertedIssue.id,
+        {
+          event_type: "detected",
+          detection_hash: normalizedInput.detection_hash,
+        },
+        {
+          ...options,
+          now,
+          issueRow: insertedIssue,
+        }
+      );
+      return insertedIssue;
     } catch (error) {
       if (!isDuplicateIssueIdentityError(error?.cause || error)) {
         throw error;
@@ -346,7 +679,7 @@ export async function upsertHouseholdIssue(issueInput, options = {}) {
   }
 
   if (existingIssue.status === "open") {
-    return updateHouseholdIssueRow(
+    const updatedIssue = await updateHouseholdIssueRow(
       existingIssue.id,
       {
         ...buildUpsertContentPayload(normalizedInput),
@@ -354,11 +687,27 @@ export async function upsertHouseholdIssue(issueInput, options = {}) {
       },
       options
     );
+    await appendHouseholdIssueEvent(
+      updatedIssue.id,
+      {
+        event_type: "updated",
+        detection_hash: normalizedInput.detection_hash,
+        metadata: {
+          previous_detection_hash: existingIssue.detection_hash,
+        },
+      },
+      {
+        ...options,
+        now,
+        issueRow: updatedIssue,
+      }
+    );
+    return updatedIssue;
   }
 
   if (["resolved", "ignored"].includes(existingIssue.status)) {
     const actorId = await getCurrentUserId(options);
-    return updateHouseholdIssueRow(
+    const reopenedIssue = await updateHouseholdIssueRow(
       existingIssue.id,
       {
         status: "open",
@@ -370,6 +719,26 @@ export async function upsertHouseholdIssue(issueInput, options = {}) {
       },
       options
     );
+    await appendHouseholdIssueEvent(
+      reopenedIssue.id,
+      {
+        event_type: "reopened",
+        event_reason: normalizeIssueReopenReason(options.reopenReason || options.reopen_reason) || "stale_review_superseded",
+        detection_hash: normalizedInput.detection_hash,
+        metadata: {
+          previous_status: existingIssue.status,
+          previous_resolved_at: existingIssue.resolved_at,
+          previous_ignored_at: existingIssue.ignored_at,
+        },
+      },
+      {
+        ...options,
+        currentUserId: actorId,
+        now,
+        issueRow: reopenedIssue,
+      }
+    );
+    return reopenedIssue;
   }
 
   throw new Error(
@@ -389,7 +758,7 @@ export async function resolveHouseholdIssue(
 
   const actorId = await getCurrentUserId(options);
   const now = resolveNow(options);
-  return updateHouseholdIssueRow(
+  const resolvedIssue = await updateHouseholdIssueRow(
     normalizedIssueId,
     {
       status: "resolved",
@@ -401,6 +770,23 @@ export async function resolveHouseholdIssue(
     },
     options
   );
+  await appendHouseholdIssueEvent(
+    resolvedIssue.id,
+    {
+      event_type: "resolved",
+      metadata: {
+        resolution_reason: cleanString(resolution_reason),
+        resolution_note: cleanString(resolution_note),
+      },
+    },
+    {
+      ...options,
+      currentUserId: actorId,
+      now,
+      issueRow: resolvedIssue,
+    }
+  );
+  return resolvedIssue;
 }
 
 export async function ignoreHouseholdIssue(
@@ -415,7 +801,7 @@ export async function ignoreHouseholdIssue(
 
   const actorId = await getCurrentUserId(options);
   const now = resolveNow(options);
-  return updateHouseholdIssueRow(
+  const ignoredIssue = await updateHouseholdIssueRow(
     normalizedIssueId,
     {
       status: "ignored",
@@ -426,6 +812,22 @@ export async function ignoreHouseholdIssue(
     },
     options
   );
+  await appendHouseholdIssueEvent(
+    ignoredIssue.id,
+    {
+      event_type: "ignored",
+      metadata: {
+        resolution_note: cleanString(resolution_note),
+      },
+    },
+    {
+      ...options,
+      currentUserId: actorId,
+      now,
+      issueRow: ignoredIssue,
+    }
+  );
+  return ignoredIssue;
 }
 
 export async function reopenHouseholdIssue(issueId, options = {}) {
@@ -436,7 +838,7 @@ export async function reopenHouseholdIssue(issueId, options = {}) {
 
   const actorId = await getCurrentUserId(options);
   const now = resolveNow(options);
-  return updateHouseholdIssueRow(
+  const reopenedIssue = await updateHouseholdIssueRow(
     normalizedIssueId,
     {
       status: "open",
@@ -446,6 +848,23 @@ export async function reopenHouseholdIssue(issueId, options = {}) {
     },
     options
   );
+  await appendHouseholdIssueEvent(
+    reopenedIssue.id,
+    {
+      event_type: "reopened",
+      event_reason: normalizeIssueReopenReason(options.reopenReason || options.reopen_reason) || "manual_reopen",
+      metadata: {
+        reopened_via: "manual_action",
+      },
+    },
+    {
+      ...options,
+      currentUserId: actorId,
+      now,
+      issueRow: reopenedIssue,
+    }
+  );
+  return reopenedIssue;
 }
 
 function compareIssueRecency(left = {}, right = {}) {
@@ -473,7 +892,12 @@ export async function listHouseholdIssues(filters = {}, options = {}) {
       filters.moduleKey === undefined || filters.moduleKey === null
         ? null
         : normalizeIssueModuleKey(filters.moduleKey),
+    issueType:
+      filters.issueType === undefined || filters.issueType === null
+        ? null
+        : normalizeIssueTypeKey(filters.issueType),
     assetId: cleanString(filters.assetId),
+    recordId: cleanString(filters.recordId),
     limit: normalizePositiveLimit(filters.limit),
   };
 
@@ -488,8 +912,16 @@ export async function listHouseholdIssues(filters = {}, options = {}) {
   if (normalizedFilters.moduleKey) {
     query = query.eq("module_key", normalizedFilters.moduleKey);
   }
+  if (normalizedFilters.issueType) {
+    query = query.eq("issue_type", normalizedFilters.issueType);
+  }
   if (normalizedFilters.assetId) {
     query = query.eq("asset_id", normalizedFilters.assetId);
+  }
+  if (normalizedFilters.recordId === null && filters.recordId !== undefined && filters.recordId !== null) {
+    query = query.is("record_id", null);
+  } else if (normalizedFilters.recordId) {
+    query = query.eq("record_id", normalizedFilters.recordId);
   }
 
   query = query
@@ -543,4 +975,6 @@ export async function listOpenIssuesForHousehold(householdId, options = {}) {
 export {
   HOUSEHOLD_ISSUES_TABLE,
   HOUSEHOLD_ISSUE_SELECT,
+  HOUSEHOLD_ISSUE_EVENTS_TABLE,
+  HOUSEHOLD_ISSUE_EVENT_SELECT,
 };

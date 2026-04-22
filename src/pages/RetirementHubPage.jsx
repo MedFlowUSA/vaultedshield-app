@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -68,6 +69,8 @@ const DEFAULT_FORM = {
 export default function RetirementHubPage({ onNavigate }) {
   const { isTablet } = useResponsiveLayout();
   const { householdState, debug } = usePlatformShellData();
+  const createAccountRef = useRef(null);
+  const retirementCommandRef = useRef(null);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -201,6 +204,52 @@ export default function RetirementHubPage({ onNavigate }) {
       }),
     [accounts, readinessSnapshot, retirementHouseholdRead]
   );
+  const retirementPlainLanguageGuide = useMemo(() => {
+    const topCommand = retirementHubCommand.rows[0] || null;
+    const isEmpty = accounts.length === 0;
+
+    return {
+      title: "Make retirement feel understandable before it feels technical",
+      summary: isEmpty
+        ? "Start with the accounts you know today. You do not need a perfect retirement model before this page becomes helpful."
+        : retirementHubCommand.headline,
+      transition: isEmpty
+        ? "One employer plan, IRA, or pension record is enough to start building a real retirement picture. The detailed positions, assumptions, and planning math can come after that."
+        : "This hub should answer the human version first: are we generally on track, what looks thin, and what deserves attention before we open the deeper projections and signals.",
+      quickFacts: [
+        `${accounts.length} retirement account${accounts.length === 1 ? "" : "s"} are currently tracked.`,
+        readinessSnapshot
+          ? `Saved goal status: ${readinessSnapshot.readinessStatus} at ${readinessSnapshot.readinessScore}/100.`
+          : "No saved retirement goal is attached yet.",
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: create the first account or set a retirement goal.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Turns scattered retirement records into one readable picture",
+          detail: "It helps you understand whether the household has enough retirement structure before diving into deeper planning detail.",
+        },
+        {
+          label: "Best First Step",
+          value: isEmpty
+            ? "Create the main plan or IRA first"
+            : !readinessSnapshot
+              ? "Add a retirement goal next"
+              : topCommand?.title || "Review the top retirement blocker",
+          detail: isEmpty
+            ? "A single real account is enough to make the rest of the retirement workflow feel grounded."
+            : !readinessSnapshot
+              ? "A saved goal makes the account list more meaningful because it gives the household a target."
+              : topCommand?.blocker || "The command section below will show the clearest retirement move to make next.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Position parsing, benefit detail, and advanced planning math",
+          detail: "Those deeper layers remain available, but they should not get in the way of building a simple and inviting first read.",
+        },
+      ],
+    };
+  }, [accounts.length, readinessSnapshot, retirementHubCommand]);
 
   async function refreshAccounts() {
     if (!householdState.context.householdId) return;
@@ -244,7 +293,7 @@ export default function RetirementHubPage({ onNavigate }) {
       <PageHeader
         eyebrow="Retirement"
         title="Retirement Hub"
-        description="Live retirement registry for employer plans, IRAs, pensions, and future continuity intelligence."
+        description="Start with the retirement accounts you know today. VaultedShield will give you the plain-language picture first, then the deeper planning analysis underneath."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
@@ -292,7 +341,22 @@ export default function RetirementHubPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ marginTop: "24px" }}>
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={retirementPlainLanguageGuide.title}
+        summary={retirementPlainLanguageGuide.summary}
+        transition={retirementPlainLanguageGuide.transition}
+        quickFacts={retirementPlainLanguageGuide.quickFacts}
+        cards={retirementPlainLanguageGuide.cards}
+        primaryActionLabel={accounts.length > 0 ? "Add Another Account" : "Create First Account"}
+        onPrimaryAction={() => createAccountRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        secondaryActionLabel="Open Retirement Command"
+        onSecondaryAction={() => retirementCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        compact={isTablet}
+        showAnalysisDivider={false}
+      />
+
+      <div ref={retirementCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Retirement Command Center"
           subtitle="The strongest household retirement blockers, why they matter, and what to do next."
@@ -365,7 +429,49 @@ export default function RetirementHubPage({ onNavigate }) {
             <EmptyState
               title="No retirement accounts yet"
               description="Create the first retirement account to start building a usable retirement view with statements, positions, and future planning context."
-            />
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#475569", fontSize: "14px", lineHeight: "1.7" }}>
+                  Strong first records for a working household:
+                </div>
+                <div style={{ display: "grid", gap: "8px", color: "#64748b", fontSize: "14px" }}>
+                  <div>Current 401(k) or 403(b)</div>
+                  <div>Rollover or Roth IRA</div>
+                  <div>Pension estimate or legacy employer plan</div>
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => createAccountRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "none",
+                      background: "#0f172a",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Create First Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("/household-goals")}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Set Retirement Goal
+                  </button>
+                </div>
+              </div>
+            </EmptyState>
           ) : (
             <div style={{ display: "grid", gap: "14px" }}>
               {accounts.map((account) => {
@@ -552,6 +658,7 @@ export default function RetirementHubPage({ onNavigate }) {
             )}
           </SectionCard>
 
+          <div ref={createAccountRef}>
           <SectionCard title="Create Retirement Account" subtitle="Start with the core account record, then add documents, positions, and deeper review detail over time.">
             <form onSubmit={handleCreateAccount} style={{ display: "grid", gap: "12px" }}>
               <select
@@ -637,6 +744,7 @@ export default function RetirementHubPage({ onNavigate }) {
               {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
             </form>
           </SectionCard>
+          </div>
 
           <SectionCard title="Retirement Readiness">
             <AIInsightPanel

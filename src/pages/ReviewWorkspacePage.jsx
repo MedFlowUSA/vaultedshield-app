@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import {
   buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
@@ -12,9 +13,12 @@ import {
   saveHouseholdReviewWorkflowState,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
+import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
+import { buildHouseholdScorecard } from "../lib/domain/platformIntelligence/householdOperatingSystem";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   applyReviewWorkspaceFilters,
+  deriveReviewWorkspaceCandidateFromQueueItem,
   formatReviewWorkspaceFilterSummary,
   parseReviewWorkspaceHashState,
 } from "../lib/reviewWorkspace/workspaceFilters";
@@ -100,6 +104,11 @@ function toTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function scrollToWorkspaceSection(sectionId) {
+  if (typeof document === "undefined") return;
+  document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function sortItems(items = [], sortKey = "priority") {
   const nextItems = [...items];
 
@@ -144,6 +153,47 @@ function sortItems(items = [], sortKey = "priority") {
     }
     return toTimestamp(right.data_updated_at) - toTimestamp(left.data_updated_at);
   });
+}
+
+function buildIssueClusters(items = [], householdId = null) {
+  const urgencyRank = { critical: 4, high: 4, warning: 3, medium: 3, info: 2, low: 1, open: 1 };
+  const clusters = new Map();
+
+  items.forEach((item) => {
+    const filters = deriveReviewWorkspaceCandidateFromQueueItem(item, householdId);
+    if (!filters) return;
+    const key = `${filters.module}:${filters.issueType}`;
+    const current = clusters.get(key) || {
+      key,
+      filters,
+      count: 0,
+      urgency: item.urgency || "info",
+      examples: [],
+      items: [],
+    };
+
+    current.count += 1;
+    if ((urgencyRank[item.urgency] ?? 0) > (urgencyRank[current.urgency] ?? 0)) {
+      current.urgency = item.urgency || current.urgency;
+    }
+    if (current.examples.length < 2 && item.label) {
+      current.examples.push(item.label);
+    }
+    current.items.push(item);
+
+    clusters.set(key, current);
+  });
+
+  return [...clusters.values()]
+    .map((cluster) => ({
+      ...cluster,
+      summaryLabels: formatReviewWorkspaceFilterSummary(cluster.filters),
+    }))
+    .sort((left, right) => {
+      const countDelta = right.count - left.count;
+      if (countDelta !== 0) return countDelta;
+      return (urgencyRank[right.urgency] ?? 0) - (urgencyRank[left.urgency] ?? 0);
+    });
 }
 
 export default function ReviewWorkspacePage({ onNavigate }) {
@@ -197,7 +247,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     setSavedViews(allViews[viewKey] || []);
   }, [reviewScope]);
 
-  const { queueItems } = useMemo(
+  const { householdMap, queueItems } = useMemo(
     () =>
       buildHouseholdReviewQueueItems({
         bundle: intelligenceBundle || {},
@@ -212,11 +262,44 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     () => buildHouseholdReviewDigest(queueItems || [], reviewDigestSnapshot),
     [queueItems, reviewDigestSnapshot]
   );
+  const baseScorecard = useMemo(() => buildHouseholdScorecard(householdMap), [householdMap]);
+  const workflowAwareContext = useMemo(
+    () =>
+      buildWorkflowAwareHouseholdContext({
+        householdMap,
+        queueItems,
+        reviewDigest,
+        bundle: intelligenceBundle,
+      }),
+    [householdMap, intelligenceBundle, queueItems, reviewDigest]
+  );
+  const activeQueueItems = workflowAwareContext.activeQueueItems || queueItems.filter(
+    (item) => item.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item.changed_since_review
+  );
+  const resolvedQueueItems = workflowAwareContext.resolvedQueueItems || queueItems.filter(
+    (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key && !item.changed_since_review
+  );
+  const workflowSummary = workflowAwareContext.reviewDigest || reviewDigest;
+  const workflowScorecard = workflowAwareContext.scorecard || baseScorecard;
+  const workflowResolutionMemory = workflowAwareContext.resolutionMemory || {
+    activeIssueCount: activeQueueItems.length,
+    resolvedIssueCount: resolvedQueueItems.length,
+    recentlyResolved: [],
+  };
+  const scoreLift = Math.max(
+    0,
+    Number(workflowScorecard?.overallScore || 0) - Number(baseScorecard?.overallScore || 0)
+  );
 
   const assigneeChoices = useMemo(() => assignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const visibleItems = useMemo(() => {
-    let nextItems = [...queueItems];
+    let nextItems =
+      statusFilter === "active"
+        ? [...activeQueueItems]
+        : statusFilter === "reviewed"
+          ? [...resolvedQueueItems]
+          : [...queueItems];
 
     if (assistantFilterState.filters) {
       nextItems = applyReviewWorkspaceFilters(
@@ -226,15 +309,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
       );
     }
 
-    if (statusFilter === "active") {
-      nextItems = nextItems.filter(
-        (item) => item.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item.changed_since_review
-      );
-    } else if (statusFilter === "reviewed") {
-      nextItems = nextItems.filter(
-        (item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key && !item.changed_since_review
-      );
-    } else if (statusFilter !== "all") {
+    if (statusFilter !== "all" && statusFilter !== "active" && statusFilter !== "reviewed") {
       nextItems = nextItems.filter((item) => item.workflow_status === statusFilter);
     }
 
@@ -251,17 +326,17 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     }
 
     return sortItems(nextItems, sortKey);
-  }, [assistantFilterState.filters, assigneeFilter, queueItems, reviewScope.householdId, sourceFilter, sortKey, statusFilter]);
+  }, [activeQueueItems, assistantFilterState.filters, assigneeFilter, queueItems, resolvedQueueItems, reviewScope.householdId, sourceFilter, sortKey, statusFilter]);
 
   const metrics = useMemo(
     () => [
       {
-        label: "Active",
-        value: queueItems.filter((item) => item.workflow_status !== REVIEW_WORKFLOW_STATUSES.reviewed.key || item.changed_since_review).length,
+        label: "Active Work",
+        value: activeQueueItems.length,
         helper: "Items still in motion",
       },
       {
-        label: "Pending Docs",
+        label: "Waiting On Docs",
         value: queueItems.filter((item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key).length,
         helper: "Waiting on evidence",
       },
@@ -271,8 +346,8 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         helper: "Needs outreach or resolution",
       },
       {
-        label: "Reviewed",
-        value: queueItems.filter((item) => item.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key && !item.changed_since_review).length,
+        label: "Completed Reviews",
+        value: resolvedQueueItems.length,
         helper: "Closed cleanly",
       },
       {
@@ -281,12 +356,12 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         helper: "Changed since review",
       },
       {
-        label: "Assigned",
+        label: "Assigned Owners",
         value: reviewDigest.assigned_count,
         helper: "Routed to an owner",
       },
     ],
-    [queueItems, reviewDigest]
+    [activeQueueItems.length, queueItems, resolvedQueueItems.length, reviewDigest]
   );
 
   function handleReviewWorkflowUpdate(itemId, status) {
@@ -434,6 +509,82 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     () => formatReviewWorkspaceFilterSummary(assistantFilterState.filters),
     [assistantFilterState.filters]
   );
+  const visibleIssueClusters = useMemo(
+    () => buildIssueClusters(visibleItems, reviewScope.householdId || null),
+    [reviewScope.householdId, visibleItems]
+  );
+  const topVisibleCluster = visibleIssueClusters[0] || null;
+  const workspaceVerdict = useMemo(() => {
+    if (activeQueueItems.length === 0 && resolvedQueueItems.length > 0) {
+      return {
+        label: "Stable",
+        summary: "Most of the current household review work has already been handled, and completed reviews are still being remembered.",
+      };
+    }
+    if (activeQueueItems.length <= 2) {
+      return {
+        label: "Watch",
+        summary: "A small set of household items still needs attention, but the workspace is controlled and progress is visible.",
+      };
+    }
+    return {
+      label: "Needs Review",
+      summary: "There is still meaningful follow-up work in motion, so the fastest win is to clear the top workstream before exploring everything else.",
+    };
+  }, [activeQueueItems.length, resolvedQueueItems.length]);
+  const reviewWorkspaceWelcomeGuide = useMemo(() => {
+    const recentWinCount = workflowResolutionMemory.recentlyResolved.length;
+    const topFocusLabel = topVisibleCluster
+      ? `${topVisibleCluster.summaryLabels[0] || "Household"}: ${topVisibleCluster.summaryLabels[1] || "Review Needed"}`
+      : activeQueueItems[0]?.label || "Active review queue";
+
+    return {
+      title: "Handle what matters first, not the whole queue at once",
+      summary: workspaceVerdict.summary,
+      transition:
+        activeQueueItems.length === 0
+          ? "This page now acts more like progress memory than a queue. Start with what has already been completed, then only reopen work when fresh evidence changes the read."
+          : "Start with the top workstream, clear what is actively blocking readiness, and use the completed-review memory to show what the household has already improved.",
+      quickFacts: [
+        `${activeQueueItems.length} active review item${activeQueueItems.length === 1 ? "" : "s"} are still affecting readiness.`,
+        `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"} are being held out unless new evidence reopens them.`,
+        scoreLift > 0 ? `Completed work is currently lifting household readiness by +${scoreLift}.` : "Completed work is being remembered even when it is not creating a visible score lift yet.",
+        recentWinCount > 0
+          ? `${recentWinCount} recent improvement${recentWinCount === 1 ? "" : "s"} are already being remembered here.`
+          : "Recent improvements will appear here as items move out of active review.",
+      ],
+      cards: [
+        {
+          label: "Current Status",
+          value: workspaceVerdict.label,
+          detail: workflowSummary.summary,
+        },
+        {
+          label: "What Changed",
+          value: recentWinCount > 0 ? `${recentWinCount} recent win${recentWinCount === 1 ? "" : "s"}` : "No recent wins recorded yet",
+          detail:
+            recentWinCount > 0
+              ? workflowResolutionMemory.recentlyResolved.slice(0, 2).join(" | ")
+              : "As work is reviewed, this page will show what improved instead of only what is still open.",
+        },
+        {
+          label: "What To Review First",
+          value: topFocusLabel,
+          detail: topVisibleCluster
+            ? `${topVisibleCluster.count} related item${topVisibleCluster.count === 1 ? "" : "s"} are grouped in this workstream.`
+            : "Open the active review work section to route, review, or clear the next best item.",
+        },
+      ],
+    };
+  }, [
+    activeQueueItems,
+    resolvedQueueItems.length,
+    scoreLift,
+    topVisibleCluster,
+    workflowResolutionMemory.recentlyResolved,
+    workflowSummary.summary,
+    workspaceVerdict,
+  ]);
 
   function handleClearAssistantFilters() {
     setAssistantFilterState({
@@ -448,11 +599,11 @@ export default function ReviewWorkspacePage({ onNavigate }) {
       <PageHeader
         eyebrow="Household Operations"
         title="Review Workspace"
-        description="A dedicated cross-module queue for working household blockers, updating status, assigning owners, and moving evidence-backed review forward."
+        description="Work through the household items that most affect readiness, keep completed work remembered, and move the household forward."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" onClick={handleRefreshSnapshot} style={actionStyle(false)}>
-              Refresh Snapshot
+              Refresh Progress
             </button>
             <button type="button" onClick={() => onNavigate?.("/dashboard")} style={actionStyle(true)}>
               Back To Dashboard
@@ -461,13 +612,72 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         }
       />
 
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={reviewWorkspaceWelcomeGuide.title}
+        summary={reviewWorkspaceWelcomeGuide.summary}
+        transition={reviewWorkspaceWelcomeGuide.transition}
+        quickFacts={reviewWorkspaceWelcomeGuide.quickFacts}
+        cards={reviewWorkspaceWelcomeGuide.cards}
+        primaryActionLabel={activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
+        onPrimaryAction={() =>
+          scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory")
+        }
+        secondaryActionLabel="How Progress Is Remembered"
+        onSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
+        guideTitle="Read this page in three passes"
+        guideDescription="Start with the short status, then move into progress memory, and only use the full queue when you need assignment, routing, or status control."
+        guideSteps={[
+          {
+            label: "Step 1",
+            title: "Check the current status",
+            detail: "See how much review work is still active and whether the household is mostly caught up or still needs attention.",
+          },
+          {
+            label: "Step 2",
+            title: "Notice what already improved",
+            detail: "Completed reviews stay out of the active queue and still contribute to the household read until new evidence changes the story.",
+          },
+          {
+            label: "Step 3",
+            title: "Open the full queue only when needed",
+            detail: "Use the detailed queue for owners, status updates, saved views, and route-level review work.",
+          },
+        ]}
+        translatedTerms={[
+          {
+            term: "Active Review Work",
+            meaning: "Items still affecting readiness right now and worth looking at first.",
+          },
+          {
+            term: "Completed Reviews",
+            meaning: "Items already handled cleanly and kept out of active priority unless something changes.",
+          },
+          {
+            term: "Readiness Lift",
+            meaning: "The positive effect completed work is having on the overall household read.",
+          },
+          {
+            term: "Pending Docs",
+            meaning: "Items that likely need more evidence before the review can be closed with confidence.",
+          },
+        ]}
+        depthTitle="Use the full queue when you want assignment, routing, and status control"
+        depthDescription="The detailed workspace below is the operating layer. It is there to move work, not to be the first thing people have to decode."
+        depthPrimaryActionLabel="Jump To Active Work"
+        onDepthPrimaryAction={() => scrollToWorkspaceSection("review-work-queue")}
+        depthSecondaryActionLabel="Jump To Completed Progress"
+        onDepthSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
+        showAnalysisDivider={false}
+      />
+
       {assistantFilterState.filters ? (
         <SectionCard
-          title="Scoped Queue"
+          title="Filtered Review View"
           subtitle={
             assistantFilterState.openedFromAssistant
               ? "Opened from household assistant"
-              : "Queue filters were restored from the current route."
+              : "Saved filters were restored from the current route."
           }
         >
           <div style={{ display: "grid", gap: "14px" }}>
@@ -496,14 +706,14 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                 Clear Filters
               </button>
               <button type="button" onClick={() => onNavigate?.("/review-workspace")} style={actionStyle(true)}>
-                Back To Full Queue
+                Back To All Review Work
               </button>
             </div>
           </div>
         </SectionCard>
       ) : null}
 
-      <SectionCard title="Queue Summary" subtitle={reviewDigest.summary}>
+      <SectionCard title="Quick Status" subtitle={workflowSummary.summary}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
           {metrics.map((item) => (
             <div
@@ -527,7 +737,65 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Work Queue" subtitle="Filter, sort, save views, assign owners, and apply status changes in one place.">
+      <div id="review-progress-memory">
+        <SectionCard title="Completed Reviews Still Improving Readiness" subtitle="Reviewed work stays out of active priority until fresh evidence reopens it.">
+        <div style={{ display: "grid", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+            {[
+              { label: "Household Readiness", value: workflowScorecard?.overallScore ?? "-", helper: workflowScorecard?.overallStatus || "Starter" },
+              { label: "Readiness Lift", value: scoreLift > 0 ? `+${scoreLift}` : "0", helper: "Lift from resolved issues" },
+              { label: "Completed Reviews", value: resolvedQueueItems.length, helper: "Reviewed items out of active priority" },
+              { label: "Still Active", value: activeQueueItems.length, helper: "Issues still driving the queue" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  border: "1px solid #e2e8f0",
+                  background: "#ffffff",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700 }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{item.value}</div>
+                <div style={{ color: "#475569", fontSize: "13px", lineHeight: "1.5" }}>{item.helper}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ color: "#475569", lineHeight: "1.7" }}>
+            {workflowSummary.summary}
+          </div>
+          {workflowResolutionMemory.recentlyResolved.length > 0 ? (
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {workflowResolutionMemory.recentlyResolved.map((item) => (
+                <span
+                  key={item}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#166534",
+                    background: "#dcfce7",
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        </SectionCard>
+      </div>
+
+      <div id="review-work-queue">
+        <SectionCard title="Active Review Work" subtitle="Filter, sort, save views, assign owners, and apply status changes in one place.">
         <div style={{ display: "grid", gap: "16px" }}>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {[
@@ -649,10 +917,78 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             </select>
           </div>
 
+          {visibleIssueClusters.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gap: "14px",
+                padding: "16px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ display: "grid", gap: "6px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Grouped Workstreams</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  Start here before scanning the full queue. Similar review items are grouped into visible workstreams so repeated documentation, continuity, and linkage gaps are easier to batch.
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {visibleIssueClusters.slice(0, 8).map((cluster, clusterIndex) => (
+                  <div
+                    key={cluster.key}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 800, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        Workstream {clusterIndex + 1}
+                      </div>
+                      <span
+                        style={{
+                          padding: "5px 9px",
+                          borderRadius: "999px",
+                          background: "#dbeafe",
+                          color: "#1d4ed8",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {cluster.count} {cluster.count === 1 ? "item" : "items"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>
+                      {(cluster.summaryLabels[0] || "Household")}: {cluster.summaryLabels[1] || "Review Needed"}
+                    </div>
+                    <div style={{ color: "#475569", lineHeight: "1.6", fontSize: "14px" }}>
+                      Highest urgency: {String(cluster.urgency || "info").replace(/_/g, " ")}
+                    </div>
+                    {cluster.examples.length > 0 ? (
+                      <div style={{ color: "#64748b", fontSize: "13px", lineHeight: "1.6" }}>
+                        {cluster.examples.join(" | ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {visibleItems.length === 0 ? (
             <EmptyState
-              title="No review items match these filters"
-              description="Try changing the status, source, or owner filter to bring more household blockers into view."
+              title={statusFilter === "active" && resolvedQueueItems.length > 0 ? "No active review work right now" : "No review items match these filters"}
+              description={
+                statusFilter === "active" && resolvedQueueItems.length > 0
+                  ? "Completed reviews are being held out of active priority until new evidence reopens them. Switch to Reviewed to see what the household has already improved."
+                  : "Try changing the status, source, or owner filter to bring more household blockers into view."
+              }
             />
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>
@@ -674,7 +1010,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                       <div style={{ display: "grid", gap: "6px" }}>
                         <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700 }}>
-                          Queue Item {index + 1} · {item.source || "Household"}
+                          {`Review Item ${index + 1} - ${item.source || "Household"}`}
                         </div>
                         <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
                       </div>
@@ -755,7 +1091,8 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             </div>
           )}
         </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </div>
   );
 }

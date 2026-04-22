@@ -1,5 +1,5 @@
-import { classifyLifePolicyType } from "./policyTypeClassifier";
-import { LIFE_POLICY_TYPE_CONFIGS } from "./policyTypeConfigs";
+import { classifyLifePolicyType } from "./policyTypeClassifier.js";
+import { LIFE_POLICY_TYPE_CONFIGS } from "./policyTypeConfigs.js";
 
 function display(field) {
   return field?.display_value || field?.value || field || null;
@@ -32,6 +32,19 @@ function extractTypeSpecific(policyType, normalizedPolicy = {}, normalizedAnalyt
         coi: display(charges?.cost_of_insurance),
         adminFee: display(charges?.admin_fee),
         loanBalance: display(loans?.loan_balance),
+      };
+    case "vul":
+      return {
+        accountValue: display(values?.accumulation_value || values?.cash_value),
+        cashSurrenderValue: display(values?.cash_surrender_value),
+        fixedAccountValue: display(values?.fixed_account_value),
+        loanBalance: display(loans?.loan_balance),
+        coi: display(charges?.cost_of_insurance),
+        allocationDetailVisible: Boolean(
+          display(values?.fixed_account_value) ||
+          display(values?.indexed_account_value) ||
+          normalizedPolicy?.strategy?.current_index_strategy
+        ),
       };
     case "whole_life":
       return {

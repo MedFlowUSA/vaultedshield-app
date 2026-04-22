@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -41,6 +42,8 @@ function getStatusTone(status) {
 
 export default function HomeownersHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const homeownersCommandRef = useRef(null);
+  const createPolicyRef = useRef(null);
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -104,6 +107,45 @@ export default function HomeownersHubPage({ onNavigate }) {
       }),
     [homeownersRead, policies]
   );
+  const homeownersPlainLanguageGuide = useMemo(() => {
+    const topCommand = homeownersHubCommand.rows[0] || null;
+    const isEmpty = policies.length === 0;
+
+    return {
+      title: "Make property protection feel readable first",
+      summary: isEmpty
+        ? "You do not need a full declarations package to start. One homeowners policy record is enough to make this page useful."
+        : homeownersHubCommand.headline,
+      transition: isEmpty
+        ? "This hub should answer the simple questions first: what property is protected, what looks exposed, and what to add next before the deeper coverage analysis matters."
+        : "This hub is here to explain the household property-protection picture in plain language before you open the deeper policy review details.",
+      quickFacts: [
+        `${policies.length} homeowners polic${policies.length === 1 ? "y is" : "ies are"} currently tracked.`,
+        `${homeownersHubCommand.metrics.active || 0} polic${homeownersHubCommand.metrics.active === 1 ? "y is" : "ies are"} active.`,
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: create the first homeowners policy.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Shows whether the home protection picture is solid or patchy",
+          detail: "It is meant to make the household property story easier to understand before you dive into technical coverage detail.",
+        },
+        {
+          label: "Best First Step",
+          value: isEmpty ? "Create the main homeowners policy" : topCommand?.title || "Review the top protection blocker",
+          detail:
+            isEmpty
+              ? "That single record gives the rest of the homeowners workflow something real to organize around."
+              : topCommand?.blocker || "The command section below will show the clearest coverage move to make next.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Deep document parsing and edge-case coverage review",
+          detail: "Those technical layers stay available, but they should not make the first screen feel intimidating.",
+        },
+      ],
+    };
+  }, [homeownersHubCommand, policies.length]);
 
   async function handleCreatePolicy(event) {
     event.preventDefault();
@@ -152,7 +194,21 @@ export default function HomeownersHubPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ marginTop: "24px" }}>
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={homeownersPlainLanguageGuide.title}
+        summary={homeownersPlainLanguageGuide.summary}
+        transition={homeownersPlainLanguageGuide.transition}
+        quickFacts={homeownersPlainLanguageGuide.quickFacts}
+        cards={homeownersPlainLanguageGuide.cards}
+        primaryActionLabel={policies.length > 0 ? "Add Another Policy" : "Create First Policy"}
+        onPrimaryAction={() => createPolicyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        secondaryActionLabel="Open Homeowners Command"
+        onSecondaryAction={() => homeownersCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        showAnalysisDivider={false}
+      />
+
+      <div ref={homeownersCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Homeowners Command Center"
           subtitle="The strongest property-protection blockers, why they matter, and what to do next."
@@ -286,7 +342,8 @@ export default function HomeownersHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Homeowners Policy" subtitle="Start with the core policy record, then connect documents, property context, and deeper review details.">
+          <div ref={createPolicyRef}>
+            <SectionCard title="Create Homeowners Policy" subtitle="Start with the core policy record, then connect documents, property context, and deeper review details.">
             <form onSubmit={handleCreatePolicy} style={{ display: "grid", gap: "12px" }}>
               <select value={form.homeowners_policy_type_key} onChange={(event) => setForm((current) => ({ ...current, homeowners_policy_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {HOMEOWNERS_POLICY_TYPES.map((type) => (
@@ -321,7 +378,8 @@ export default function HomeownersHubPage({ onNavigate }) {
               {createError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{createError}</div> : null}
               {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
             </form>
-          </SectionCard>
+            </SectionCard>
+          </div>
 
           <SectionCard title="Homeowners Readiness">
             <AIInsightPanel

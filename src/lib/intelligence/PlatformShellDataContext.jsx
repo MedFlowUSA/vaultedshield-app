@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { buildHouseholdIntelligence } from "../domain/platformIntelligence";
 import { resolvePlatformDataScope } from "./platformShellScope";
 import { getHouseholdIntelligenceBundle, getHouseholdPlatformCounts } from "../supabase/platformData";
+import { listHouseholdIssues } from "../supabase/issueData.js";
 import { compareVaultedPolicies, listVaultedPolicies } from "../supabase/vaultedPolicies";
 import { usePlatformHousehold } from "../supabase/usePlatformHousehold";
 import {
@@ -10,6 +11,7 @@ import {
   buildDetectedIssuesFingerprint,
 } from "./issues/buildDetectedIssues.js";
 import { syncDetectedIssues } from "./issues/syncDetectedIssues.js";
+import { primeHouseholdReviewWorkflowState } from "../domain/platformIntelligence/reviewWorkflowState.js";
 
 const PlatformShellDataContext = createContext(null);
 
@@ -53,6 +55,7 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
   const scopeKey = `${authUserId || "guest"}:${householdId || "none"}:${ownershipMode}:${guestFallbackActive ? "guest" : "owned"}`;
   const [countsState, setCountsState] = useState({ data: null, error: "", loading: false });
   const [bundleState, setBundleState] = useState({ data: null, error: "", loading: false });
+  const [issueState, setIssueState] = useState({ data: [], error: "", loading: false });
   const [insuranceState, setInsuranceState] = useState(buildEmptyInsuranceState);
   const householdLoadRef = useRef({ requestKey: "", inFlight: false });
   const insuranceLoadRef = useRef({ requestKey: "", inFlight: false });
@@ -64,10 +67,12 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
     issueSyncRef.current = { householdId: "", fingerprint: "", inFlight: false };
     setCountsState({ data: null, error: "", loading: false });
     setBundleState({ data: null, error: "", loading: false });
+    setIssueState({ data: [], error: "", loading: false });
     setInsuranceState({
       ...buildEmptyInsuranceState(),
       scopeSource: scope.scopeSource,
     });
+    primeHouseholdReviewWorkflowState({ householdId, userId: authUserId || null }, []);
   }, [authUserId, canLoadShellData, scope.scopeSource, scopeKey]);
 
   const refreshHouseholdData = useCallback(async () => {
@@ -75,6 +80,8 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       householdLoadRef.current = { requestKey: "", inFlight: false };
       setCountsState({ data: null, error: "", loading: false });
       setBundleState({ data: null, error: "", loading: false });
+      setIssueState({ data: [], error: "", loading: false });
+      primeHouseholdReviewWorkflowState({ householdId, userId: authUserId || null }, []);
       return;
     }
 
@@ -82,11 +89,13 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
     householdLoadRef.current = { requestKey, inFlight: true };
     setCountsState((current) => ({ ...current, loading: true, error: "" }));
     setBundleState((current) => ({ ...current, loading: true, error: "" }));
+    setIssueState((current) => ({ ...current, loading: true, error: "" }));
 
     try {
-      const [countsResult, bundleResult] = await Promise.all([
+      const [countsResult, bundleResult, issueResult] = await Promise.all([
         getHouseholdPlatformCounts(householdId),
         getHouseholdIntelligenceBundle(householdId),
+        listHouseholdIssues({ householdId }),
       ]);
 
       if (householdLoadRef.current.requestKey !== requestKey) {
@@ -103,6 +112,12 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
         error: bundleResult.error?.message || "",
         loading: false,
       });
+      setIssueState({
+        data: issueResult || [],
+        error: "",
+        loading: false,
+      });
+      primeHouseholdReviewWorkflowState({ householdId, userId: authUserId || null }, issueResult || []);
     } catch (error) {
       if (householdLoadRef.current.requestKey !== requestKey) {
         return;
@@ -110,12 +125,14 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       const message = error?.message || "Household data could not be loaded.";
       setCountsState({ data: null, error: message, loading: false });
       setBundleState({ data: null, error: message, loading: false });
+      setIssueState({ data: [], error: message, loading: false });
+      primeHouseholdReviewWorkflowState({ householdId, userId: authUserId || null }, []);
     } finally {
       if (householdLoadRef.current.requestKey === requestKey) {
         householdLoadRef.current = { requestKey, inFlight: false };
       }
     }
-  }, [canLoadShellData, householdId, scopeKey]);
+  }, [authUserId, canLoadShellData, householdId, scopeKey]);
 
   const refreshInsurancePortfolio = useCallback(
     async ({ force = false } = {}) => {
@@ -314,6 +331,7 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
     () => ({
       householdState,
       householdId,
+      householdIssues: issueState.data || [],
       counts: countsState.data,
       intelligenceBundle: bundleState.data,
       intelligence,
@@ -337,11 +355,13 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       loadingStates: {
         household: householdState.loading,
         householdData: countsState.loading || bundleState.loading,
+        householdIssues: issueState.loading,
         insurancePortfolio: insuranceState.loading,
       },
       errors: {
         household: householdState.error || "",
         householdData: countsState.error || bundleState.error || "",
+        householdIssues: issueState.error || "",
         insurancePortfolio: insuranceState.error || "",
       },
       refreshHouseholdData,
@@ -352,6 +372,7 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       householdId,
       countsState,
       bundleState,
+      issueState,
       intelligence,
       insuranceState,
       insuranceRows,

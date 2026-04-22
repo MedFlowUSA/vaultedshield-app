@@ -51,15 +51,21 @@ import {
 } from "../src/lib/reviewWorkspace/workspaceFilters.js";
 import {
   annotateReviewWorkflowItems,
+  buildPersistedReviewWorkflowState,
   buildReviewWorkflowStateEntry,
+  getHouseholdReviewWorkflowState,
+  primeHouseholdReviewWorkflowState,
 } from "../src/lib/domain/platformIntelligence/reviewWorkflowState.js";
 import { buildWorkflowAwareHouseholdContext } from "../src/lib/domain/platformIntelligence/workflowMemory.js";
 import { normalizeIssueInput } from "../src/lib/domain/issues/issueTypes.js";
 import {
   findExistingHouseholdIssueByIdentity,
   ignoreHouseholdIssue,
+  listHouseholdIssueEvents,
   listOpenIssuesForAsset,
   listOpenIssuesForHousehold,
+  listRecentReopenedIssuesForHousehold,
+  listRecentResolvedIssuesForHousehold,
   resolveHouseholdIssue,
   upsertHouseholdIssue,
 } from "../src/lib/supabase/issueData.js";
@@ -96,7 +102,10 @@ import { resolveCarrierParsingProfile } from "../src/lib/domain/parsing/carrierP
 import { detectPageType } from "../src/lib/domain/parsing/pageTypeDetection.js";
 import { reconstructTableFromPage } from "../src/lib/domain/parsing/tableReconstruction.js";
 import { buildIulReaderModel } from "../src/features/iul-reader/readerModel.js";
+import { buildPolicyAssistantAnswer } from "../src/lib/ai/policyAssistantEngine.js";
+import { buildPolicyInsightSummary } from "../src/lib/ai/policyInsightEngine.js";
 import { buildIulV2Analytics } from "../src/lib/insurance/iulV2Analytics.js";
+import { normalizeLifePolicy } from "../src/lib/insurance/normalizeLifePolicy.js";
 import { resolveResponsiveLayout } from "../src/lib/ui/responsiveLayout.js";
 import { normalizeHashPath } from "../src/lib/navigation/useHashRoute.js";
 import {
@@ -199,8 +208,10 @@ class MemoryStorage {
 function createIssueSupabaseDouble({ rows = [], currentUserId = "user-1" } = {}) {
   const state = {
     rows: rows.map((row) => ({ ...row })),
+    issueEvents: [],
     currentUserId,
     nextId: rows.length + 1,
+    nextEventId: 1,
   };
 
   function cloneRow(row) {
@@ -292,44 +303,48 @@ function createIssueSupabaseDouble({ rows = [], currentUserId = "user-1" } = {})
     }
 
     async execute() {
-      if (this.table !== "household_issues") {
+      if (!["household_issues", "household_issue_events"].includes(this.table)) {
         return {
           data: null,
           error: new Error(`Unsupported fake table ${this.table}`),
         };
       }
 
+      const targetRows = this.table === "household_issue_events" ? state.issueEvents : state.rows;
+      const nextIdKey = this.table === "household_issue_events" ? "nextEventId" : "nextId";
+      const idPrefix = this.table === "household_issue_events" ? "issue-event" : "issue";
+
       if (this.action === "insert") {
         const insertedRows = this.payload.map((entry) => {
-          const timestamp = entry.updated_at || entry.last_detected_at || new Date().toISOString();
+          const timestamp = entry.updated_at || entry.last_detected_at || entry.created_at || new Date().toISOString();
           const row = {
-            id: entry.id || `issue-${state.nextId++}`,
+            id: entry.id || `${idPrefix}-${state[nextIdKey]++}`,
             created_at: entry.created_at || timestamp,
             updated_at: timestamp,
             ...entry,
           };
-          state.rows.push(row);
+          targetRows.push(row);
           return cloneRow(row);
         });
         return { data: insertedRows, error: null };
       }
 
       if (this.action === "update") {
-        const matchingRows = applyRowFilters(state.rows, this.filters);
+        const matchingRows = applyRowFilters(targetRows, this.filters);
         const updatedRows = matchingRows.map((row) => {
           const nextRow = {
             ...row,
             ...this.payload,
             updated_at: this.payload.updated_at || new Date().toISOString(),
           };
-          const rowIndex = state.rows.findIndex((entry) => entry.id === row.id);
-          state.rows[rowIndex] = nextRow;
+          const rowIndex = targetRows.findIndex((entry) => entry.id === row.id);
+          targetRows[rowIndex] = nextRow;
           return cloneRow(nextRow);
         });
         return { data: updatedRows, error: null };
       }
 
-      let selectedRows = applyRowFilters(state.rows, this.filters).map(cloneRow);
+      let selectedRows = applyRowFilters(targetRows, this.filters).map(cloneRow);
       selectedRows = applyRowOrder(selectedRows, this.orders);
       if (Number.isInteger(this.limitCount)) {
         selectedRows = selectedRows.slice(0, this.limitCount);
@@ -4441,6 +4456,106 @@ runTest("review workflow memory persists by normalized issue filter when queue i
   assert.equal(Boolean(annotated[0].workflow_resolution_key), true);
 });
 
+runTest("persisted workflow state is rebuilt from household issue metadata", () => {
+  const issueRows = [
+    {
+      id: "issue-1",
+      updated_at: "2026-04-14T09:00:00.000Z",
+      metadata: {
+        workflow_state: {
+          status: "reviewed",
+          updated_at: "2026-04-14T09:00:00.000Z",
+          resolution_filters: {
+            module: "property",
+            issueType: "missing_protection",
+            householdId: "household-1",
+            assetId: "asset-1",
+            recordId: "property-1",
+          },
+          resolution_key: "property|missing_protection|asset-1|property-1",
+        },
+      },
+    },
+  ];
+
+  const persistedState = buildPersistedReviewWorkflowState(issueRows);
+
+  assert.equal(persistedState["issue-1"].status, "reviewed");
+  assert.equal(
+    persistedState["issue-1"].resolution_key,
+    "property|missing_protection|asset-1|property-1"
+  );
+});
+
+runTest("persisted workflow state primes the sync getter and wins when newer than local storage", () => {
+  globalThis.window = {
+    localStorage: {
+      store: {},
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(this.store, key) ? this.store[key] : null;
+      },
+      setItem(key, value) {
+        this.store[key] = String(value);
+      },
+      removeItem(key) {
+        delete this.store[key];
+      },
+    },
+  };
+
+  const scope = { householdId: "household-1", userId: "user-1" };
+  window.localStorage.setItem(
+    "vaultedshield_household_review_workflow_v2",
+    JSON.stringify({
+      "user-1:household-1": {
+        "queue-item-1": {
+          status: "follow_up",
+          updated_at: "2026-04-14T08:00:00.000Z",
+          resolution_key: "property|missing_protection|asset-1|property-1",
+          resolution_filters: {
+            module: "property",
+            issueType: "missing_protection",
+            householdId: "household-1",
+            assetId: "asset-1",
+            recordId: "property-1",
+          },
+        },
+      },
+    })
+  );
+
+  primeHouseholdReviewWorkflowState(scope, [
+    {
+      id: "issue-1",
+      updated_at: "2026-04-14T09:00:00.000Z",
+      metadata: {
+        workflow_state: {
+          status: "reviewed",
+          updated_at: "2026-04-14T09:00:00.000Z",
+          resolution_filters: {
+            module: "property",
+            issueType: "missing_protection",
+            householdId: "household-1",
+            assetId: "asset-1",
+            recordId: "property-1",
+          },
+          resolution_key: "property|missing_protection|asset-1|property-1",
+        },
+      },
+    },
+  ]);
+
+  const mergedState = getHouseholdReviewWorkflowState(scope);
+  const mergedEntry = Object.values(mergedState).find(
+    (entry) => entry.resolution_key === "property|missing_protection|asset-1|property-1"
+  );
+
+  assert.equal(mergedEntry.status, "reviewed");
+  assert.equal(mergedEntry.persisted_issue_id, "issue-1");
+
+  delete globalThis.window;
+});
+
 runTest("workflow-aware household context suppresses resolved issues and updates readiness", () => {
   const fixture = buildHouseholdAssistantFixture();
   const reviewedState = {
@@ -5057,6 +5172,151 @@ await runAsyncTest("household issue lifecycle reopens the same row after ignore 
   assert.equal(supabase.__state.rows.length, 1);
 });
 
+await runAsyncTest("household issue lifecycle appends durable issue events", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const detected = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Protection linkage was not identified.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+      detection_hash: "detect-v1",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  await resolveHouseholdIssue(
+    detected.id,
+    {
+      resolution_reason: "link_verified",
+      resolution_note: "Coverage was confirmed during review.",
+    },
+    {
+      supabase,
+      currentUserId: "user-2",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "property",
+      issue_type: "coverage_gap",
+      issue_key: "property_missing_homeowners",
+      asset_id: "A1",
+      title: "Primary property is missing homeowners coverage",
+      summary: "Fresh evidence shows protection linkage is still incomplete.",
+      severity: "high",
+      priority: "high",
+      source_system: "property_engine",
+      detection_hash: "detect-v2",
+    },
+    {
+      supabase,
+      currentUserId: "user-3",
+      now: "2026-04-13T11:00:00.000Z",
+    }
+  );
+
+  const events = await listHouseholdIssueEvents(
+    {
+      issueId: detected.id,
+    },
+    { supabase }
+  );
+
+  assert.equal(events.length, 3);
+  assert.deepEqual(
+    events.map((event) => event.event_type),
+    ["reopened", "resolved", "detected"]
+  );
+  assert.equal(events[0].event_reason, "stale_review_superseded");
+  assert.equal(events[0].actor_user_id, "user-3");
+  assert.equal(events[1].metadata.resolution_reason, "link_verified");
+});
+
+await runAsyncTest("household issue event helpers filter recent resolved and reopened rows", async () => {
+  const supabase = createIssueSupabaseDouble();
+  const issue = await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "portal",
+      issue_type: "continuity_gap",
+      issue_key: "primary_portal_missing_recovery",
+      asset_id: "A1",
+      title: "Primary portal continuity is incomplete",
+      summary: "Recovery contact data is still missing.",
+      severity: "medium",
+      priority: "low",
+      source_system: "portal_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-1",
+      now: "2026-04-13T09:00:00.000Z",
+    }
+  );
+
+  await resolveHouseholdIssue(
+    issue.id,
+    {
+      resolution_reason: "temporarily_cleared",
+      resolution_note: "Marked resolved during review.",
+    },
+    {
+      supabase,
+      currentUserId: "user-2",
+      now: "2026-04-13T10:00:00.000Z",
+    }
+  );
+
+  await upsertHouseholdIssue(
+    {
+      household_id: "H1",
+      module_key: "portal",
+      issue_type: "continuity_gap",
+      issue_key: "primary_portal_missing_recovery",
+      asset_id: "A1",
+      title: "Primary portal continuity is incomplete",
+      summary: "Recovery contact data is still missing after the latest read.",
+      severity: "medium",
+      priority: "low",
+      source_system: "portal_engine",
+    },
+    {
+      supabase,
+      currentUserId: "user-3",
+      now: "2026-04-13T11:00:00.000Z",
+    }
+  );
+
+  const resolvedEvents = await listRecentResolvedIssuesForHousehold("H1", {
+    supabase,
+    limit: 5,
+  });
+  const reopenedEvents = await listRecentReopenedIssuesForHousehold("H1", {
+    supabase,
+    limit: 5,
+  });
+
+  assert.equal(resolvedEvents.length, 1);
+  assert.equal(resolvedEvents[0].event_type, "resolved");
+  assert.equal(reopenedEvents.length, 1);
+  assert.equal(reopenedEvents[0].event_type, "reopened");
+  assert.equal(reopenedEvents[0].event_reason, "stale_review_superseded");
+});
+
 await runAsyncTest("household issue lifecycle creates a new row for a distinct issue key", async () => {
   const supabase = createIssueSupabaseDouble();
   await upsertHouseholdIssue(
@@ -5183,6 +5443,84 @@ await runAsyncTest("household issue lookup and open issue listing stay determini
   assert.equal(openForAsset[0].severity, "critical");
   assert.equal(openForHousehold.length, 2);
   assert.equal(openForHousehold[0].severity, "critical");
+});
+
+runTest("normalizeLifePolicy classifies variable universal life and exposes VUL fields", () => {
+  const lifePolicy = normalizeLifePolicy({
+    normalizedPolicy: {
+      policy_identity: {
+        product_name: field("Strategic Advantage VUL"),
+        policy_type: field("Variable Universal Life"),
+      },
+      values: {
+        accumulation_value: field(125000, "high", "$125,000.00"),
+        cash_surrender_value: field(119400, "high", "$119,400.00"),
+        fixed_account_value: field(18000, "high", "$18,000.00"),
+      },
+      charges: {
+        cost_of_insurance: field(1900, "high", "$1,900.00"),
+      },
+      loans: {
+        loan_balance: field(12000, "high", "$12,000.00"),
+      },
+    },
+    normalizedAnalytics: {
+      completeness_assessment: { status: "moderate" },
+    },
+  });
+
+  assert.equal(lifePolicy.meta.policyType, "vul");
+  assert.equal(lifePolicy.meta.policyTypeLabel, "Variable Universal Life");
+  assert.equal(lifePolicy.typeSpecific.accountValue, "$125,000.00");
+  assert.equal(lifePolicy.typeSpecific.fixedAccountValue, "$18,000.00");
+  assert.equal(lifePolicy.typeSpecific.allocationDetailVisible, true);
+  assert.ok(lifePolicy.meta.supportedInterpretationAreas.includes("market_exposure"));
+});
+
+runTest("policy assistant returns VUL-specific allocation guidance", () => {
+  const lifePolicy = normalizeLifePolicy({
+    normalizedPolicy: {
+      policy_identity: {
+        product_name: field("Strategic Advantage VUL"),
+        policy_type: field("Variable Universal Life"),
+      },
+      values: {
+        accumulation_value: field(125000, "high", "$125,000.00"),
+        fixed_account_value: field(18000, "high", "$18,000.00"),
+      },
+      loans: {
+        loan_balance: field(12000, "high", "$12,000.00"),
+      },
+    },
+    normalizedAnalytics: {
+      completeness_assessment: { status: "moderate" },
+      charge_summary: { total_coi: 1900, total_visible_policy_charges: 2400 },
+    },
+  });
+  const insightSummary = buildPolicyInsightSummary({
+    lifePolicy,
+    normalizedAnalytics: {
+      charge_summary: { total_coi: 1900, total_visible_policy_charges: 2400 },
+      comparison_summary: { latest_statement_date: "2026-03-31", missing_fields: [] },
+    },
+    statementRows: [{ statement_date: "2026-03-31" }, { statement_date: "2025-03-31" }],
+    comparisonSummary: { latest_statement_date: "2026-03-31", missing_fields: [] },
+  });
+
+  const response = buildPolicyAssistantAnswer({
+    intent: "vul_allocation_visibility",
+    lifePolicy,
+    normalizedAnalytics: {
+      charge_summary: { total_coi: 1900, total_visible_policy_charges: 2400 },
+    },
+    comparisonSummary: { latest_statement_date: "2026-03-31", missing_fields: [] },
+    insightSummary,
+  });
+
+  assert.equal(response.intent, "vul_allocation_visibility");
+  assert.equal(response.confidence, "moderate");
+  assert.match(response.answer, /allocation support is visible/i);
+  assert.ok(response.suggestedFollowUps.includes("How exposed is this policy to market performance?"));
 });
 
 console.log("All IUL regression checks passed.");

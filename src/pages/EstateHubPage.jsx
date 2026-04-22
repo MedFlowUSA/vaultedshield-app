@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -17,6 +18,8 @@ function getTone(status) {
 
 export default function EstateHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const estateCommandRef = useRef(null);
+  const successorContactsRef = useRef(null);
   const [bundle, setBundle] = useState({ contacts: [], assets: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -72,6 +75,45 @@ export default function EstateHubPage({ onNavigate }) {
       }),
     [bundle.assets, bundle.contacts, readiness]
   );
+  const estatePlainLanguageGuide = useMemo(() => {
+    const topCommand = estateCommand.rows[0] || null;
+
+    return {
+      title: "Make the handoff plan understandable before it feels legal",
+      summary:
+        successorContacts.length === 0
+          ? "You do not need a full estate binder to start here. A few trusted successor contacts already make this page more useful."
+          : readiness.headline,
+      transition:
+        successorContacts.length === 0
+          ? "This hub is meant to answer the human questions first: who steps in, who should be reachable, and whether the household handoff would feel confusing in an emergency."
+          : "This hub should make estate readiness feel readable before you ever need to think in legal-document terms.",
+      quickFacts: [
+        `${successorContacts.length} successor contact${successorContacts.length === 1 ? "" : "s"} are currently visible.`,
+        `${readiness.metrics.legalAssets || 0} estate or legal asset shell${readiness.metrics.legalAssets === 1 ? "" : "s"} are on record.`,
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: add successor contacts or review emergency mode.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Shows whether a household handoff would feel clear or confusing",
+          detail: "It is about successor readiness, not just whether legal files exist somewhere.",
+        },
+        {
+          label: "Best First Step",
+          value: topCommand?.title || "Add successor contacts",
+          detail:
+            topCommand?.blocker ||
+            "The biggest wins usually come from making trustees, executors, attorneys, and family handoff contacts visible.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Perfect legal indexing and document depth",
+          detail: "The first goal is making the people and responsibilities clear. The deeper legal structure can be layered in after that.",
+        },
+      ],
+    };
+  }, [estateCommand, readiness, successorContacts.length]);
 
   return (
     <div>
@@ -108,6 +150,25 @@ export default function EstateHubPage({ onNavigate }) {
         ]}
       />
 
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={estatePlainLanguageGuide.title}
+        summary={estatePlainLanguageGuide.summary}
+        transition={estatePlainLanguageGuide.transition}
+        quickFacts={estatePlainLanguageGuide.quickFacts}
+        cards={estatePlainLanguageGuide.cards}
+        primaryActionLabel="Review Contacts"
+        onPrimaryAction={() => onNavigate?.("/contacts")}
+        secondaryActionLabel={successorContacts.length > 0 ? "See Successor Contacts" : "Open Estate Command"}
+        onSecondaryAction={() =>
+          (successorContacts.length > 0 ? successorContactsRef.current : estateCommandRef.current)?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          })
+        }
+        showAnalysisDivider={false}
+      />
+
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Successor Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
@@ -132,7 +193,7 @@ export default function EstateHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
+      <div ref={estateCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Estate Command Center"
           subtitle="The strongest current successor, legal, and handoff blockers across the household estate layer."
@@ -226,7 +287,7 @@ export default function EstateHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
+      <div ref={successorContactsRef} style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
         <SectionCard title="Visible Successor Contacts" subtitle="Contacts already in the household record who can anchor estate and handoff workflows.">
           {loading ? (
             <div style={{ color: "#64748b" }}>Loading estate readiness...</div>

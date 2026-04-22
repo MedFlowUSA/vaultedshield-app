@@ -1,10 +1,14 @@
-import { LIFE_POLICY_TYPE_CONFIGS } from "./policyTypeConfigs";
+import { LIFE_POLICY_TYPE_CONFIGS } from "./policyTypeConfigs.js";
 
 function addEvidence(bucket, text, weight = 1) {
   bucket.push({ text, weight });
 }
 
 function stringify(value) {
+  if (value && typeof value === "object") {
+    if (value.display_value) return String(value.display_value).toLowerCase();
+    if (value.value) return String(value.value).toLowerCase();
+  }
   return String(value || "").toLowerCase();
 }
 
@@ -16,6 +20,7 @@ export function classifyLifePolicyType({
   const scores = {
     iul: [],
     ul: [],
+    vul: [],
     whole_life: [],
     term: [],
     final_expense: [],
@@ -32,6 +37,7 @@ export function classifyLifePolicyType({
     comparisonSummary?.product_name,
     comparisonSummary?.policy_type,
   ]
+    .map((item) => stringify(item))
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -55,11 +61,29 @@ export function classifyLifePolicyType({
   }
 
   if (
+    /variable universal life|variable life|separate account|subaccount/.test(sourceText)
+  ) {
+    addEvidence(scores.vul, "Variable-life or separate-account labels are present.", 3);
+  }
+
+  if (
     values?.accumulation_value?.display_value &&
     charges?.cost_of_insurance?.display_value &&
-    !scores.iul.length
+    !scores.iul.length &&
+    !scores.vul.length
   ) {
     addEvidence(scores.ul, "Universal-life style account value and COI fields are present.", 2);
+  }
+
+  if (
+    scores.vul.length > 0 &&
+    (
+      values?.accumulation_value?.display_value ||
+      values?.cash_value?.display_value ||
+      values?.fixed_account_value?.display_value
+    )
+  ) {
+    addEvidence(scores.vul, "Variable-life style account value fields are present.", 2);
   }
 
   if (

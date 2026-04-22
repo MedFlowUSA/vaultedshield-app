@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -19,6 +20,8 @@ function getTone(status) {
 
 export default function BankingHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const bankingCommandRef = useRef(null);
+  const bankingRecordsRef = useRef(null);
   const [bundle, setBundle] = useState(EMPTY_BANKING_BUNDLE);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -88,6 +91,45 @@ export default function BankingHubPage({ onNavigate }) {
       }),
     [bundle.assets, bundle.contacts, bundle.portalBundle, readiness]
   );
+  const bankingPlainLanguageGuide = useMemo(() => {
+    const topCommand = bankingCommand.rows[0] || null;
+
+    return {
+      title: "Make cash access feel simple before it feels operational",
+      summary:
+        bankingAssets.length === 0
+          ? "You do not need a full banking map to get started. A few cash and access records are enough to make this page useful."
+          : readiness.headline,
+      transition:
+        bankingAssets.length === 0
+          ? "This hub is here to answer the everyday version first: where money lives, who can help access it, and whether an emergency would feel messy."
+          : "This hub should help you understand the household cash picture in plain language before you open the deeper continuity and recovery details.",
+      quickFacts: [
+        `${bankingAssets.length} banking asset${bankingAssets.length === 1 ? "" : "s"} are currently visible.`,
+        `${readiness.metrics.emergencyPortals || 0} emergency portal${readiness.metrics.emergencyPortals === 1 ? "" : "s"} are connected.`,
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: add banking records or review portals and contacts.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Shows whether the household could reach its money when it matters",
+          detail: "It is about access, recovery, and support visibility, not just account counting.",
+        },
+        {
+          label: "Best First Step",
+          value: topCommand?.title || "Review portals and contacts",
+          detail:
+            topCommand?.blocker ||
+            "If banking continuity feels thin, the fastest wins usually come from adding recovery details and institution contacts.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Perfect categorization of every liquidity record",
+          detail: "The goal is to make the household feel reachable and understandable first. The technical cleanup can follow.",
+        },
+      ],
+    };
+  }, [bankingAssets.length, bankingCommand, readiness]);
 
   return (
     <div>
@@ -125,6 +167,25 @@ export default function BankingHubPage({ onNavigate }) {
         ]}
       />
 
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={bankingPlainLanguageGuide.title}
+        summary={bankingPlainLanguageGuide.summary}
+        transition={bankingPlainLanguageGuide.transition}
+        quickFacts={bankingPlainLanguageGuide.quickFacts}
+        cards={bankingPlainLanguageGuide.cards}
+        primaryActionLabel="Review Portals"
+        onPrimaryAction={() => onNavigate?.("/portals")}
+        secondaryActionLabel={bankingAssets.length > 0 ? "See Banking Records" : "Open Banking Command"}
+        onSecondaryAction={() =>
+          (bankingAssets.length > 0 ? bankingRecordsRef.current : bankingCommandRef.current)?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          })
+        }
+        showAnalysisDivider={false}
+      />
+
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Liquidity Continuity Read">
           <div style={{ display: "grid", gap: "12px" }}>
@@ -149,7 +210,7 @@ export default function BankingHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
+      <div ref={bankingCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Banking Command Center"
           subtitle="The strongest current liquidity, access, and institution-support blockers across the household banking layer."
@@ -243,7 +304,7 @@ export default function BankingHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
+      <div ref={bankingRecordsRef} style={{ marginTop: "24px", display: "grid", gap: "16px" }}>
         <SectionCard title="Visible Banking Records" subtitle="Current household assets that already look relevant to cash or liquidity continuity.">
           {loading ? (
             <div style={{ color: "#64748b" }}>Loading banking readiness...</div>

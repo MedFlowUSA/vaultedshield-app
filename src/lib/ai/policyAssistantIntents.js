@@ -51,6 +51,11 @@ const TYPE_INTENTS = {
     },
     { id: "strategy_mix", label: "What is the current strategy mix?", aliases: ["What is the current allocation mix?"] },
   ],
+  vul: [
+    { id: "vul_market_exposure", label: "How exposed is this policy to market performance?", aliases: ["How market-driven is this policy?", "Is this policy exposed to market swings?"] },
+    { id: "vul_allocation_visibility", label: "Is allocation detail visible?", aliases: ["Are subaccounts visible?", "Is separate-account detail visible?"] },
+    { id: "vul_loan_risk", label: "Are charges or loans creating risk?", aliases: ["Are loans creating risk?", "Are charges creating risk?"] },
+  ],
   whole_life: [
     { id: "whole_life_behavior", label: "Is this acting like a stable whole life policy?", aliases: ["Is cash value progressing steadily?"] },
     { id: "dividend_visibility", label: "Are dividends visible?", aliases: [] },

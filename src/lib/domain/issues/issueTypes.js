@@ -7,6 +7,22 @@ export const HOUSEHOLD_ISSUE_SEVERITIES = [
   "info",
 ];
 export const HOUSEHOLD_ISSUE_PRIORITIES = ["high", "medium", "low"];
+export const HOUSEHOLD_ISSUE_EVENT_TYPES = [
+  "detected",
+  "updated",
+  "resolved",
+  "ignored",
+  "reopened",
+  "reopened_conflict",
+  "rescored",
+];
+export const HOUSEHOLD_ISSUE_REOPEN_REASONS = [
+  "new_document_conflict",
+  "missing_field_regression",
+  "cross_record_mismatch",
+  "stale_review_superseded",
+  "manual_reopen",
+];
 export const HOUSEHOLD_ISSUE_SOURCE_SYSTEMS = [
   "household_engine",
   "property_engine",
@@ -20,6 +36,8 @@ export const HOUSEHOLD_ISSUE_SOURCE_SYSTEMS = [
 const STATUS_SET = new Set(HOUSEHOLD_ISSUE_STATUSES);
 const SEVERITY_SET = new Set(HOUSEHOLD_ISSUE_SEVERITIES);
 const PRIORITY_SET = new Set(HOUSEHOLD_ISSUE_PRIORITIES);
+const EVENT_TYPE_SET = new Set(HOUSEHOLD_ISSUE_EVENT_TYPES);
+const REOPEN_REASON_SET = new Set(HOUSEHOLD_ISSUE_REOPEN_REASONS);
 const SOURCE_SYSTEM_SET = new Set(HOUSEHOLD_ISSUE_SOURCE_SYSTEMS);
 
 function cleanString(value) {
@@ -96,6 +114,30 @@ export function normalizeIssuePriority(value) {
   if (!PRIORITY_SET.has(normalized)) {
     throw new Error(
       `Unsupported issue priority "${value}". Expected one of: ${HOUSEHOLD_ISSUE_PRIORITIES.join(", ")}`
+    );
+  }
+  return normalized;
+}
+
+export function normalizeIssueEventType(value) {
+  const normalized = cleanString(value)?.toLowerCase();
+  if (!normalized) {
+    throw new Error("event_type is required");
+  }
+  if (!EVENT_TYPE_SET.has(normalized)) {
+    throw new Error(
+      `Unsupported issue event_type "${value}". Expected one of: ${HOUSEHOLD_ISSUE_EVENT_TYPES.join(", ")}`
+    );
+  }
+  return normalized;
+}
+
+export function normalizeIssueReopenReason(value) {
+  const normalized = cleanString(value)?.toLowerCase() || null;
+  if (!normalized) return null;
+  if (!REOPEN_REASON_SET.has(normalized)) {
+    throw new Error(
+      `Unsupported issue reopen reason "${value}". Expected one of: ${HOUSEHOLD_ISSUE_REOPEN_REASONS.join(", ")}`
     );
   }
   return normalized;

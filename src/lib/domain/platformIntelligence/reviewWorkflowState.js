@@ -1,9 +1,12 @@
 import { deriveReviewWorkspaceCandidateFromQueueItem } from "../../reviewWorkspace/workspaceFilters.js";
+import { saveHouseholdIssueWorkflowStateEntries } from "../../supabase/issueData.js";
+import { getSupabaseClient } from "../../supabase/client.js";
 
 const REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v2";
 const REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v2";
 const LEGACY_REVIEW_WORKFLOW_STORAGE_KEY = "vaultedshield_household_review_workflow_v1";
 const LEGACY_REVIEW_WORKFLOW_DIGEST_STORAGE_KEY = "vaultedshield_household_review_digest_v1";
+const persistedWorkflowStateByScope = new Map();
 
 export const REVIEW_WORKFLOW_STATUSES = {
   open: {
@@ -85,6 +88,17 @@ function toTimestamp(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function chooseMoreRecentWorkflowEntry(left = null, right = null) {
+  if (!left) return right || null;
+  if (!right) return left;
+  const leftTimestamp = toTimestamp(left.updated_at);
+  const rightTimestamp = toTimestamp(right.updated_at);
+  if (leftTimestamp === null && rightTimestamp === null) return right;
+  if (leftTimestamp === null) return right;
+  if (rightTimestamp === null) return left;
+  return rightTimestamp >= leftTimestamp ? right : left;
+}
+
 function toStableWorkflowMemoryKey(filters = null) {
   if (!filters?.module || !filters?.issueType) return null;
   return [
@@ -109,6 +123,66 @@ function resolveWorkflowMemoryState(item = {}, workflowState = {}) {
   );
 
   return matchedEntry || {};
+}
+
+function mergeWorkflowStates(...states) {
+  const merged = {};
+  const byResolutionKey = new Map();
+
+  states
+    .filter(Boolean)
+    .forEach((state) => {
+      Object.entries(state || {}).forEach(([entryKey, entryValue]) => {
+        if (!entryValue || typeof entryValue !== "object") return;
+        const resolutionKey = entryValue.resolution_key || null;
+        if (resolutionKey) {
+          const current = byResolutionKey.get(resolutionKey);
+          const selected = chooseMoreRecentWorkflowEntry(current, entryValue);
+          byResolutionKey.set(resolutionKey, selected);
+          return;
+        }
+        merged[entryKey] = chooseMoreRecentWorkflowEntry(merged[entryKey], entryValue);
+      });
+    });
+
+  byResolutionKey.forEach((entryValue, resolutionKey) => {
+    const entryKey = entryValue?.persisted_issue_id || entryValue?.issue_id || resolutionKey;
+    merged[entryKey] = entryValue;
+  });
+
+  return merged;
+}
+
+function buildPersistedWorkflowStateEntry(issue = {}) {
+  const metadata = issue?.metadata;
+  const persistedWorkflowState =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata.workflow_state
+      : null;
+  if (!persistedWorkflowState || typeof persistedWorkflowState !== "object" || Array.isArray(persistedWorkflowState)) {
+    return null;
+  }
+
+  return {
+    ...persistedWorkflowState,
+    updated_at: persistedWorkflowState.updated_at || issue.updated_at || null,
+    resolution_key:
+      persistedWorkflowState.resolution_key ||
+      toStableWorkflowMemoryKey(persistedWorkflowState.resolution_filters || null),
+    persisted_issue_id: issue.id || null,
+    issue_id: issue.id || null,
+  };
+}
+
+export function buildPersistedReviewWorkflowState(issueRows = []) {
+  return (issueRows || []).reduce((accumulator, issue) => {
+    const entry = buildPersistedWorkflowStateEntry(issue);
+    if (!entry) return accumulator;
+    const key = entry.persisted_issue_id || entry.issue_id || entry.resolution_key;
+    if (!key) return accumulator;
+    accumulator[key] = entry;
+    return accumulator;
+  }, {});
 }
 
 export function buildReviewWorkflowStateEntry({
@@ -183,11 +257,21 @@ export function clearLegacyHouseholdReviewStorage() {
   }
 }
 
+export function primeHouseholdReviewWorkflowState(scopeInput, issueRows = []) {
+  const scope = resolveReviewScope(scopeInput);
+  if (!scope.key) return {};
+  const persistedState = buildPersistedReviewWorkflowState(issueRows);
+  persistedWorkflowStateByScope.set(scope.key, persistedState);
+  return persistedState;
+}
+
 export function getHouseholdReviewWorkflowState(scopeInput) {
   const scope = resolveReviewScope(scopeInput);
   if (!scope.key) return {};
   const allState = safeReadStorage();
-  return allState[scope.key] || {};
+  const localState = allState[scope.key] || {};
+  const persistedState = persistedWorkflowStateByScope.get(scope.key) || {};
+  return mergeWorkflowStates(localState, persistedState);
 }
 
 export function saveHouseholdReviewWorkflowState(scopeInput, nextState) {
@@ -198,6 +282,17 @@ export function saveHouseholdReviewWorkflowState(scopeInput, nextState) {
     ...allState,
     [scope.key]: nextState || {},
   });
+  if (scope.householdId && typeof window !== "undefined") {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      saveHouseholdIssueWorkflowStateEntries(scope.householdId, nextState || {}, { supabase }).catch((error) => {
+        console.error("[VaultedShield] review workflow persistence failed.", {
+          householdId: scope.householdId,
+          error,
+        });
+      });
+    }
+  }
 }
 
 export function getHouseholdReviewDigestSnapshot(scopeInput) {

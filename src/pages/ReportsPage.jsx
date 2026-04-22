@@ -2,12 +2,10 @@ import { useMemo, useState } from "react";
 import {
   buildHouseholdIntelligence,
   buildHouseholdReviewReport,
-  buildHouseholdRiskContinuityMap,
 } from "../lib/domain/platformIntelligence";
 import {
   getHouseholdReviewDigestSnapshot,
   getHouseholdReviewWorkflowState,
-  annotateReviewWorkflowItems,
   buildHouseholdReviewDigest,
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import {
@@ -19,6 +17,7 @@ import {
 import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
@@ -43,6 +42,8 @@ import {
   buildHouseholdPriorityEngine,
   buildHouseholdScorecard,
 } from "../lib/domain/platformIntelligence/householdOperatingSystem";
+import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
+import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
 
 function buttonStyle(primary = false) {
@@ -112,6 +113,11 @@ function renderReportFactsGrid(items = [], columns = 3) {
       ))}
     </div>
   );
+}
+
+function scrollToReportsSection(sectionId) {
+  if (typeof document === "undefined") return;
+  document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderReportSection(section) {
@@ -296,10 +302,6 @@ export default function ReportsPage({ onNavigate }) {
   );
 
   const intelligence = useMemo(() => (bundle ? buildHouseholdIntelligence(bundle) : null), [bundle]);
-  const householdMap = useMemo(
-    () => buildHouseholdRiskContinuityMap(bundle || {}, intelligence, rows),
-    [bundle, intelligence, rows]
-  );
   const reviewWorkflowState = useMemo(
     () => getHouseholdReviewWorkflowState(reviewScope),
     [reviewScope]
@@ -308,9 +310,15 @@ export default function ReportsPage({ onNavigate }) {
     () => getHouseholdReviewDigestSnapshot(reviewScope),
     [reviewScope]
   );
-  const queueItems = useMemo(
-    () => annotateReviewWorkflowItems(householdMap.review_priorities || [], reviewWorkflowState),
-    [householdMap.review_priorities, reviewWorkflowState]
+  const { householdMap, queueItems } = useMemo(
+    () =>
+      buildHouseholdReviewQueueItems({
+        bundle: bundle || {},
+        intelligence,
+        savedPolicyRows: rows || [],
+        reviewWorkflowState,
+      }),
+    [bundle, intelligence, reviewWorkflowState, rows]
   );
   const reviewDigest = useMemo(
     () => buildHouseholdReviewDigest(queueItems, reviewDigestSnapshot),
@@ -334,12 +342,48 @@ export default function ReportsPage({ onNavigate }) {
     () => buildEmergencyAccessCommand(bundle || {}),
     [bundle]
   );
+  const baseHouseholdScorecard = useMemo(() => buildHouseholdScorecard(householdMap), [householdMap]);
+  const workflowAwareHouseholdContext = useMemo(
+    () =>
+      buildWorkflowAwareHouseholdContext({
+        householdMap,
+        queueItems,
+        reviewDigest,
+        commandCenter,
+        housingCommand: housingCommandCenter,
+        emergencyAccessCommand,
+        bundle,
+      }),
+    [
+      bundle,
+      commandCenter,
+      emergencyAccessCommand,
+      householdMap,
+      housingCommandCenter,
+      queueItems,
+      reviewDigest,
+    ]
+  );
   const householdScorecard = useMemo(
-    () => buildHouseholdScorecard(householdMap),
-    [householdMap]
+    () => workflowAwareHouseholdContext.scorecard || baseHouseholdScorecard,
+    [baseHouseholdScorecard, workflowAwareHouseholdContext.scorecard]
+  );
+  const assistantHouseholdMap = workflowAwareHouseholdContext.householdMap || householdMap;
+  const assistantReviewDigest = workflowAwareHouseholdContext.reviewDigest || reviewDigest;
+  const activeQueueItems = workflowAwareHouseholdContext.activeQueueItems || queueItems;
+  const resolvedQueueItems = workflowAwareHouseholdContext.resolvedQueueItems || [];
+  const workflowResolutionMemory = workflowAwareHouseholdContext.resolutionMemory || {
+    activeIssueCount: activeQueueItems.length,
+    resolvedIssueCount: resolvedQueueItems.length,
+    recentlyResolved: [],
+  };
+  const scoreLift = Math.max(
+    0,
+    Number(householdScorecard?.overallScore || 0) - Number(baseHouseholdScorecard?.overallScore || 0)
   );
   const householdPriorityEngine = useMemo(
     () =>
+      workflowAwareHouseholdContext.priorityEngine ||
       buildHouseholdPriorityEngine({
         householdMap,
         commandCenter,
@@ -347,18 +391,25 @@ export default function ReportsPage({ onNavigate }) {
         emergencyAccessCommand,
         bundle,
       }),
-    [bundle, commandCenter, emergencyAccessCommand, householdMap, housingCommandCenter]
+    [
+      bundle,
+      commandCenter,
+      emergencyAccessCommand,
+      householdMap,
+      housingCommandCenter,
+      workflowAwareHouseholdContext.priorityEngine,
+    ]
   );
   const householdReport = useMemo(
     () =>
       buildHouseholdReviewReport({
         bundle: bundle || {},
         intelligence,
-        householdMap,
-        queueItems,
-        reviewDigest,
+        householdMap: assistantHouseholdMap,
+        queueItems: activeQueueItems,
+        reviewDigest: assistantReviewDigest,
       }),
-    [bundle, intelligence, householdMap, queueItems, reviewDigest]
+    [activeQueueItems, assistantHouseholdMap, assistantReviewDigest, bundle, intelligence]
   );
 
   const rankedPolicies = useMemo(() => {
@@ -446,6 +497,82 @@ export default function ReportsPage({ onNavigate }) {
     [householdMap, moduleReadinessRows, operatingGraphSummary, rankedPolicies, reviewDigest]
   );
   const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
+  const reportsVerdict = useMemo(() => {
+    if (activeQueueItems.length === 0 && (householdScorecard?.overallScore || 0) >= 80) {
+      return {
+        label: "Strong",
+        summary: "The household report picture reads clearly, with little active review pressure and enough structure to support a calm executive summary.",
+      };
+    }
+    if (activeQueueItems.length <= 2) {
+      return {
+        label: "Stable",
+        summary: "The reporting layer is usable and organized, with only a small amount of review work still affecting the story.",
+      };
+    }
+    if (activeQueueItems.length <= 5) {
+      return {
+        label: "Watch",
+        summary: "The report story is visible, but a few active issues still deserve attention before you treat it as fully settled.",
+      };
+    }
+    return {
+      label: "Needs Review",
+      summary: "The reporting layer already shows real value, but the best presentation is still to start with the summary and be honest about the active work remaining.",
+    };
+  }, [activeQueueItems.length, householdScorecard?.overallScore]);
+  const reportsWelcomeGuide = useMemo(() => {
+    const topPriority = householdPriorityEngine.priorities[0] || null;
+    const readyModules = moduleReadinessCounts.ready + moduleReadinessCounts.building;
+
+    return {
+      title: "See what is ready, what improved, and what still needs attention",
+      summary: reportsVerdict.summary,
+      transition: topPriority
+        ? `Start with the short status and progress story, then open ${topPriority.title.toLowerCase()} or a deeper report packet only when you want the supporting detail.`
+        : "Start with the short status and progress story, then open a deeper report packet only when you want the supporting detail.",
+      quickFacts: [
+        `Household status: ${householdScorecard?.overallStatus || "Starter"} at ${displayValue(householdScorecard?.overallScore)}.`,
+        `${activeQueueItems.length} active review item${activeQueueItems.length === 1 ? "" : "s"} and ${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"} are shaping the report story.`,
+        scoreLift > 0 ? `Completed work is currently lifting the household read by +${scoreLift}.` : "Completed work is still being remembered even where the score lift is modest.",
+        `${readyModules} core module${readyModules === 1 ? "" : "s"} are already report-ready or actively building toward it.`,
+      ],
+      cards: [
+        {
+          label: "Current Status",
+          value: reportsVerdict.label,
+          detail: executiveSummaryLines[0] || "The top of this page is designed to work as an executive read before any deeper packet is opened.",
+        },
+        {
+          label: "What Changed",
+          value: resolvedQueueItems.length > 0 ? `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}` : "No completed reviews yet",
+          detail:
+            workflowResolutionMemory.recentlyResolved.length > 0
+              ? workflowResolutionMemory.recentlyResolved.slice(0, 2).join(" | ")
+              : "As review work is completed, this page highlights progress instead of showing only open issues.",
+        },
+        {
+          label: "What To Open First",
+          value: topPriority?.title || "Household Review Brief",
+          detail:
+            topPriority?.blocker ||
+            "Open the household brief first for the cleanest read, then move into insurance or executive export layers only when needed.",
+        },
+      ],
+    };
+  }, [
+    activeQueueItems.length,
+    executiveSummaryLines,
+    householdPriorityEngine.priorities,
+    householdScorecard?.overallScore,
+    householdScorecard?.overallStatus,
+    moduleReadinessCounts.building,
+    moduleReadinessCounts.ready,
+    reportsVerdict,
+    resolvedQueueItems.length,
+    scoreLift,
+    workflowResolutionMemory.recentlyResolved,
+  ]);
   const onboardingChecklist = useMemo(
     () => buildHouseholdOnboardingChecklist(blankHousehold, bundle || {}, rows),
     [blankHousehold, bundle, rows]
@@ -477,7 +604,7 @@ export default function ReportsPage({ onNavigate }) {
     },
     {
       key: "module_readiness",
-      title: "Module Readiness Snapshot",
+      title: "Platform Snapshot",
       status: "Live",
       description: "High-level operating read across assets, vault, portals, banking, and estate.",
       metrics: [
@@ -521,7 +648,7 @@ export default function ReportsPage({ onNavigate }) {
         >
           <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
             <div style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
-              Reports and Exports
+              Reports
             </div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
               Reports unlock once the household has enough real records to support a trustworthy read. Until then, this page stays focused on the setup steps that create report-ready evidence.
@@ -644,9 +771,9 @@ export default function ReportsPage({ onNavigate }) {
           >
             <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What appears first</div>
             <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-              <li style={{ lineHeight: "1.7" }}>Executive summary framing and household score</li>
+              <li style={{ lineHeight: "1.7" }}>Current readiness, active work, and progress already made</li>
               <li style={{ lineHeight: "1.7" }}>Insurance portfolio review and top-policy routing</li>
-              <li style={{ lineHeight: "1.7" }}>A cleaner priority queue for follow-up items</li>
+              <li style={{ lineHeight: "1.7" }}>A cleaner priority view for follow-up items</li>
             </ul>
           </div>
         </section>
@@ -657,24 +784,24 @@ export default function ReportsPage({ onNavigate }) {
   const reportCards = [
     {
       key: "executive",
-      title: "Executive Summary Packet",
+      title: "Executive Summary",
       status: bundle ? "Live" : "Loading",
       description: "Top-line household read, review pressure, module watchpoints, and insurance visibility in one export-oriented surface.",
       metrics: [
-        { label: "Bottom Line", value: householdMap?.overall_score ?? "-" },
-        { label: "Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
+        { label: "Bottom Line", value: assistantHouseholdMap?.overall_score ?? "-" },
+        { label: "Active Work", value: activeQueueItems.length },
         { label: "Modules Needing Review", value: moduleReadinessCounts.needsReview },
       ],
     },
     {
       key: "household",
-      title: "Household Review Brief",
+      title: "Household Summary",
       status: "Live",
       description: "Cross-asset continuity, workflow, and change digest for the current household.",
       metrics: [
-        { label: "Readiness", value: displayValue(householdMap.overall_score) },
-        { label: "Active Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
-        { label: "Reopened", value: reviewDigest.reopened_count },
+        { label: "Readiness", value: displayValue(assistantHouseholdMap?.overall_score) },
+        { label: "Active Work", value: activeQueueItems.length },
+        { label: "Completed Reviews", value: resolvedQueueItems.length },
       ],
     },
     {
@@ -705,35 +832,65 @@ export default function ReportsPage({ onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <section
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "16px",
-          padding: "28px 30px",
-          borderRadius: "24px",
-          background: "#ffffff",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
+      <PlainLanguageBridge
+        eyebrow="Executive View"
+        title={reportsWelcomeGuide.title}
+        summary={reportsWelcomeGuide.summary}
+        transition={reportsWelcomeGuide.transition}
+        quickFacts={reportsWelcomeGuide.quickFacts}
+        cards={reportsWelcomeGuide.cards}
+        primaryActionLabel="Open Household Brief"
+        onPrimaryAction={() => {
+          setSelectedReport("household");
+          scrollToReportsSection("reports-active-view");
         }}
-      >
-        <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a" }}>
-            Reports and Exports
-          </div>
-          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "860px" }}>
-            VaultedShield now has enough real intelligence depth to support live household and insurance reporting. This hub centralizes the strongest current artifacts instead of leaving reports scattered across individual screens.
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(true)}>
-            Print Active Report
-          </button>
-          <button type="button" onClick={() => onNavigate?.("/dashboard")} style={buttonStyle(false)}>
-            Open Dashboard
-          </button>
-        </div>
-      </section>
+        secondaryActionLabel="See Report Choices"
+        onSecondaryAction={() => scrollToReportsSection("report-cards")}
+        guideTitle="Use this page in three passes"
+        guideDescription="Start with the executive story, then check progress and active work, and only open the deeper packet when you want proof, export, or module-level detail."
+        guideSteps={[
+          {
+            label: "Step 1",
+            title: "Read the short status first",
+            detail: "The top of the page is meant to answer what is okay, what changed, and what deserves attention without making you read the full packet.",
+          },
+          {
+            label: "Step 2",
+            title: "Check progress before open issues",
+            detail: "Completed reviews and readiness lift help show the household is moving forward, not just accumulating work.",
+          },
+          {
+            label: "Step 3",
+            title: "Open the packet that fits the audience",
+            detail: "Use household, executive, or insurance report views depending on whether the audience is a family, advisor, or decision-maker.",
+          },
+        ]}
+        translatedTerms={[
+          {
+            term: "Household Score",
+            meaning: "A simple operating read of how complete and review-ready the household currently looks.",
+          },
+          {
+            term: "Active Reviews",
+            meaning: "Items still affecting the report story right now and worth looking at next.",
+          },
+          {
+            term: "Completed Reviews",
+            meaning: "Work already handled and kept out of the active queue unless new evidence changes the story.",
+          },
+          {
+            term: "Module Readiness",
+            meaning: "How usable each major part of the platform already is for real reporting.",
+          },
+        ]}
+        depthTitle="Open the deeper packet only when you want the proof, export, or module breakdown"
+        depthDescription="The report layers below are where the platform earns respect, but the first read should stay calm and executive."
+        depthPrimaryActionLabel="Jump To Active Report"
+        onDepthPrimaryAction={() => scrollToReportsSection("reports-active-view")}
+        depthSecondaryActionLabel="Print Current Report"
+        onDepthSecondaryAction={handlePrintActiveReport}
+        showAnalysisDivider={false}
+      />
 
       <section
         style={{
@@ -746,7 +903,7 @@ export default function ReportsPage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Housing Continuity Cluster</div>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Home And Financing Snapshot</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
             Property, mortgage, and homeowners now stay in one report lane so the housing stack can be reviewed as a connected operating system instead of three separate modules.
           </div>
@@ -823,7 +980,7 @@ export default function ReportsPage({ onNavigate }) {
                 lineHeight: "1.7",
               }}
             >
-              No major housing blockers are standing out in the current household evidence.
+              No major home or financing blockers are standing out right now, so this part of the household looks relatively settled.
             </div>
           )}
         </div>
@@ -840,7 +997,7 @@ export default function ReportsPage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Household Score and Priorities</div>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Current Readiness And Priorities</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
             Reports now carry the same operating scorecard and ranked priorities as the dashboard, so exported review stays tied to what matters most right now.
           </div>
@@ -859,7 +1016,7 @@ export default function ReportsPage({ onNavigate }) {
         {renderReportFactsGrid(
           householdScorecard.dimensions.map((dimension) => ({
             label: dimension.label,
-            value: `${dimension.score ?? "-"} · ${dimension.status}`,
+            value: `${dimension.score ?? "-"} - ${dimension.status}`,
           })),
           5
         )}
@@ -1017,13 +1174,14 @@ export default function ReportsPage({ onNavigate }) {
                 lineHeight: "1.7",
               }}
             >
-              No major emergency cash or access blockers are standing out in the current household evidence.
+              No major emergency cash or access blockers are standing out right now, so this part of the household looks relatively settled.
             </div>
           )}
         </div>
       </section>
 
       <section
+        id="report-cards"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -1077,6 +1235,7 @@ export default function ReportsPage({ onNavigate }) {
       </section>
 
       <section
+        id="reports-active-view"
         data-demo-id="reports-active-view"
         style={{
           display: "grid",
@@ -1088,9 +1247,9 @@ export default function ReportsPage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Continuity Command Center</div>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What Needs Attention First</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
-            The same operating blockers that drive the dashboard now stay visible inside reports, so exports and decision reviews stay tied to current household reality.
+            The same operating blockers that drive the dashboard stay visible here too, so reports remain tied to current household reality instead of drifting into a static export.
           </div>
         </div>
 
@@ -1195,7 +1354,7 @@ export default function ReportsPage({ onNavigate }) {
             onClick={() => setSelectedReport("household")}
             style={reportButtonStyle(activeReport === "household")}
           >
-            Household Brief
+            Household Summary
           </button>
           <button
             type="button"
@@ -1224,7 +1383,7 @@ export default function ReportsPage({ onNavigate }) {
           }}
         >
           <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Stack Snapshot</div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Summary</div>
             <div style={{ color: "#475569", lineHeight: "1.8" }}>
               The household operating graph stays visible across reports, so linked liabilities, protections, documents, and portal continuity do not disappear behind the review queue.
             </div>
@@ -1257,11 +1416,11 @@ export default function ReportsPage({ onNavigate }) {
               }}
             >
               <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Executive Summary Packet
+                Executive Summary
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Cross-Module Household Read</div>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Household Summary</div>
               <div style={{ color: "#475569", lineHeight: "1.8" }}>
-            A tighter operating summary for household planning, continuity review, and export-friendly executive readout.
+            A clean household summary for planning, readiness review, and executive-friendly sharing.
               </div>
               <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(true)}>
                 Print Executive Summary
@@ -1295,9 +1454,9 @@ export default function ReportsPage({ onNavigate }) {
             >
               {renderReportFactsGrid(
                 [
-                  { label: "Household Readiness", value: displayValue(householdMap?.overall_score) },
-                  { label: "Active Queue", value: queueItems.filter((item) => item.workflow_status !== "reviewed" || item.changed_since_review).length },
-                  { label: "Reopened Items", value: reviewDigest.reopened_count || 0 },
+                  { label: "Household Readiness", value: displayValue(assistantHouseholdMap?.overall_score) },
+                  { label: "Active Work", value: activeQueueItems.length },
+                  { label: "Reopened Items", value: assistantReviewDigest.reopened_count || 0 },
                   { label: "Modules Needing Review", value: moduleReadinessCounts.needsReview },
                   { label: "Modules Building", value: moduleReadinessCounts.building },
                   { label: "Visible Policies", value: rankedPolicies.length },
@@ -1317,7 +1476,7 @@ export default function ReportsPage({ onNavigate }) {
               }}
             >
               <div style={{ display: "grid", gap: "8px" }}>
-                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Operating Graph</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Connections</div>
                 <div style={{ color: "#475569", lineHeight: "1.8" }}>
                   The household property stack now carries the same asset-liability-protection read into reporting, so connected records and missing dependencies stay visible in the export layer.
                 </div>
@@ -1347,7 +1506,7 @@ export default function ReportsPage({ onNavigate }) {
                   gap: "14px",
                 }}
               >
-                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Top Watchpoints</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Areas To Watch</div>
                 <div style={{ display: "grid", gap: "10px" }}>
                   {moduleReadinessRows
                     .filter((row) => row.status !== "Ready")
@@ -1375,7 +1534,7 @@ export default function ReportsPage({ onNavigate }) {
                   gap: "14px",
                 }}
               >
-                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Export Packet Includes</div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>What This Summary Includes</div>
                 <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
                   <li>Household continuity bottom line and review digest.</li>
                   <li>Cross-module readiness watchpoints for assets, vault, portals, banking, and estate.</li>
@@ -1401,7 +1560,7 @@ export default function ReportsPage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "8px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Module Readiness Snapshot</div>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Platform Snapshot</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
             Reports now carry the same high-level readiness model used by the module hubs, so operating context for assets, vault, portals, banking, and estate is visible here too instead of living in separate corners of the app.
           </div>
@@ -1433,7 +1592,7 @@ export default function ReportsPage({ onNavigate }) {
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{row.insight}</div>
               <div style={{ display: "grid", gap: "6px", color: "#64748b", fontSize: "13px" }}>
                 <div>
-                  <span style={{ color: "#334155", fontWeight: 600 }}>Watchpoint:</span> {row.watchpoint}
+                  <span style={{ color: "#334155", fontWeight: 600 }}>What to watch:</span> {row.watchpoint}
                 </div>
                 {row.summary?.notes?.slice(1, 2).map((note) => <div key={`${row.module}-${note}`}>{note}</div>)}
               </div>
@@ -1454,7 +1613,7 @@ export default function ReportsPage({ onNavigate }) {
         }}
       >
         <div style={{ display: "grid", gap: "12px" }}>
-          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Strategic Report Readout</div>
+          <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>What This Reporting Layer Shows</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
             The audit showed that reporting depth already existed in several parts of the app, but the central reports route was still shell-only. This update turns Reports into a real output hub that reflects the strongest live intelligence already available.
           </div>
@@ -1475,24 +1634,42 @@ export default function ReportsPage({ onNavigate }) {
             gap: "12px",
           }}
         >
-          <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Current Report Readiness</div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Progress Memory</div>
           <div style={{ display: "grid", gap: "10px", color: "#0f172a" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span>Household Review</span>
-              <strong>{bundle ? "Live" : "Loading"}</strong>
+              <span>Active Work</span>
+              <strong>{activeQueueItems.length}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span>Insurance Portfolio</span>
-              <strong>{rankedPolicies.length > 0 ? "Live" : "Waiting"}</strong>
+              <span>Completed Reviews</span>
+              <strong>{resolvedQueueItems.length}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span>Single Policy Review</span>
-              <strong>{rankedPolicies.length > 0 ? "Live" : "Waiting"}</strong>
+              <span>Readiness Lift</span>
+              <strong>{scoreLift > 0 ? `+${scoreLift}` : "0"}</strong>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <span>Cross-module Export Packet</span>
-              <strong>Next Layer</strong>
-            </div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>{assistantReviewDigest.summary}</div>
+            {workflowResolutionMemory.recentlyResolved.length > 0 ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {workflowResolutionMemory.recentlyResolved.map((item) => (
+                  <span
+                    key={item}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      color: "#166534",
+                      background: "#dcfce7",
+                    }}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

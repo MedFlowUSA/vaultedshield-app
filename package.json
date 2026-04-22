@@ -8,6 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node tests/iul-regression.test.js",
+    "test:fascia-contract": "node tests/fascia-contract.test.js",
+    "test:insurance-fascia": "node tests/insurance-page-fascia.test.js",
+    "test:mortgage-fascia": "node tests/mortgage-page-fascia.test.js",
+    "test:property-fascia": "node tests/property-page-fascia.test.js",
+    "test:retirement-fascia": "node tests/retirement-page-fascia.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

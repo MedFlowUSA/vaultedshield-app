@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -38,6 +39,8 @@ function getStatusTone(status) {
 
 export default function PropertyHubPage({ onNavigate }) {
   const { householdState } = usePlatformShellData();
+  const propertyCommandRef = useRef(null);
+  const createPropertyRef = useRef(null);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -98,6 +101,45 @@ export default function PropertyHubPage({ onNavigate }) {
     ];
   }, [properties]);
   const propertyHubCommand = useMemo(() => buildPropertyHubCommand(properties), [properties]);
+  const propertyPlainLanguageGuide = useMemo(() => {
+    const topCommand = propertyHubCommand.rows[0] || null;
+    const isEmpty = properties.length === 0;
+
+    return {
+      title: "Understand the real-estate picture first",
+      summary: isEmpty
+        ? "You do not need every deed, tax record, and valuation loaded to start. One property record is enough to make this page useful."
+        : propertyHubCommand.headline,
+      transition: isEmpty
+        ? "This hub should answer the simple version first: what property exists, what it supports, and what to add next before the deeper linked analysis matters."
+        : "This hub is here to make the household property picture readable before you open the deeper continuity, mortgage, and coverage connections.",
+      quickFacts: [
+        `${properties.length} propert${properties.length === 1 ? "y is" : "ies are"} currently tracked.`,
+        `${propertyHubCommand.metrics.assetLinked || 0} record${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"} are linked into the shared asset layer.`,
+        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: create the first property record.",
+      ],
+      cards: [
+        {
+          label: "What This Page Does",
+          value: "Turns real estate records into a usable household picture",
+          detail: "It helps the household understand what properties exist and where deeper follow-up belongs.",
+        },
+        {
+          label: "Best First Step",
+          value: isEmpty ? "Create the primary property first" : topCommand?.title || "Review the top property blocker",
+          detail:
+            isEmpty
+              ? "That single record gives mortgage, homeowners, valuation, and continuity work a shared home base."
+              : topCommand?.blocker || "The command section below will show the clearest property move to make next.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Valuation depth and full document linkage",
+          detail: "Those technical layers are still here, but they should not make the first screen feel heavy.",
+        },
+      ],
+    };
+  }, [properties.length, propertyHubCommand]);
 
   async function handleCreateProperty(event) {
     event.preventDefault();
@@ -165,7 +207,21 @@ export default function PropertyHubPage({ onNavigate }) {
 
       <SummaryPanel items={summaryItems} />
 
-      <div style={{ marginTop: "24px" }}>
+      <PlainLanguageBridge
+        eyebrow="Start Here"
+        title={propertyPlainLanguageGuide.title}
+        summary={propertyPlainLanguageGuide.summary}
+        transition={propertyPlainLanguageGuide.transition}
+        quickFacts={propertyPlainLanguageGuide.quickFacts}
+        cards={propertyPlainLanguageGuide.cards}
+        primaryActionLabel={properties.length > 0 ? "Add Another Property" : "Create First Property"}
+        onPrimaryAction={() => createPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        secondaryActionLabel="Open Property Command"
+        onSecondaryAction={() => propertyCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        showAnalysisDivider={false}
+      />
+
+      <div ref={propertyCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Property Command Center"
           subtitle="The strongest module-level blockers and what to review next across household property records."
@@ -275,7 +331,8 @@ export default function PropertyHubPage({ onNavigate }) {
         </SectionCard>
 
         <div style={{ display: "grid", gap: "18px" }}>
-          <SectionCard title="Create Property" subtitle="Start with the core property record, then add documents, valuation work, and linked financing or coverage over time.">
+          <div ref={createPropertyRef}>
+            <SectionCard title="Create Property" subtitle="Start with the core property record, then add documents, valuation work, and linked financing or coverage over time.">
             <form onSubmit={handleCreateProperty} style={{ display: "grid", gap: "12px" }}>
               <select value={form.property_type_key} onChange={(event) => setForm((current) => ({ ...current, property_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
                 {PROPERTY_TYPES.map((type) => (
@@ -312,7 +369,8 @@ export default function PropertyHubPage({ onNavigate }) {
                 </div>
               ) : null}
             </form>
-          </SectionCard>
+            </SectionCard>
+          </div>
 
           <SectionCard title="Property Readiness">
             <AIInsightPanel

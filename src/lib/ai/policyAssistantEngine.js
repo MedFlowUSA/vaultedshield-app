@@ -15,16 +15,19 @@ import {
   explainTermConversionVisibility,
   explainTermCoverage,
   explainTermExpiration,
+  explainVulAllocationVisibility,
+  explainVulLoanRisk,
+  explainVulMarketExposure,
   explainWaitingPeriodVisibility,
   explainWhatToReviewFirst,
   explainWholeLifeBehavior,
   explainWholeLifeLoanRisk,
-} from "./policyQuestionHandlers";
+} from "./policyQuestionHandlers.js";
 import {
   findPolicyAssistantIntent,
   getPolicyAssistantIntentLabel,
   getPolicyAssistantIntents,
-} from "./policyAssistantIntents";
+} from "./policyAssistantIntents.js";
 
 const INTENT_HANDLERS = {
   policy_health: explainPolicyHealth,
@@ -38,6 +41,9 @@ const INTENT_HANDLERS = {
   loan_risk: explainIulRisk,
   funding_sufficiency: explainFundingSufficiency,
   strategy_mix: explainStrategyAllocation,
+  vul_market_exposure: explainVulMarketExposure,
+  vul_allocation_visibility: explainVulAllocationVisibility,
+  vul_loan_risk: explainVulLoanRisk,
   whole_life_behavior: explainWholeLifeBehavior,
   dividend_visibility: explainDividendVisibility,
   whole_life_loan_risk: explainWholeLifeLoanRisk,

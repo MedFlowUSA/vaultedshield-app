@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PageHeader from "../components/layout/PageHeader";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -19,6 +20,7 @@ import {
 } from "../lib/supabase/healthData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildHealthCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -56,6 +58,7 @@ function getStatusTone(status) {
 export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -177,6 +180,31 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
     () => Object.fromEntries(healthReviewQueueItems.map((item) => [item.id, item])),
     [healthReviewQueueItems]
   );
+  const topHealthReviewItem = healthReviewQueueItems[0] || null;
+  const healthReviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(topHealthReviewItem, reviewScope.householdId || healthPlan?.household_id || null) || {
+        module: "health",
+        issueType: "policy_review_issue",
+        severity: healthCommandCenter.metrics.critical > 0 ? "high" : healthCommandCenter.metrics.warning > 0 ? "medium" : "low",
+        householdId: reviewScope.householdId || healthPlan?.household_id || null,
+        assetId: linkedAsset?.id || null,
+        recordId: healthPlan?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    healthCommandCenter.metrics.critical,
+    healthCommandCenter.metrics.warning,
+    healthPlan?.household_id,
+    healthPlan?.id,
+    linkedAsset?.id,
+    reviewScope.householdId,
+    topHealthReviewItem,
+  ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
@@ -188,6 +216,38 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
       { label: "Analytics", value: bundle?.healthAnalytics?.length || 0, helper: "Future health review outputs" },
     ];
   }, [bundle, healthPlan, healthPlanType]);
+  const plainLanguageGuide = useMemo(() => {
+    const documentCount = bundle?.healthDocuments?.length || 0;
+    const snapshotCount = bundle?.healthSnapshots?.length || 0;
+    const topBlocker = healthCommandCenter.blockers?.[0] || null;
+    const everydayVerdict =
+      healthCommandCenter.metrics.critical > 0
+        ? "This health plan has important coverage or continuity gaps"
+        : healthCommandCenter.metrics.warning > 0
+          ? "This health plan looks usable but needs review"
+          : "This health plan looks reasonably supported";
+
+    return {
+      title: "Start here before the technical health-plan review",
+      summary: healthCommandCenter.headline,
+      transition:
+        "This top layer gives the simple read first. The technical section below breaks out blockers, workflow, linked records, documents, snapshots, and analytics.",
+      quickFacts: [
+        documentCount > 0
+          ? `${documentCount} health-plan document${documentCount === 1 ? "" : "s"} are visible.`
+          : "No health-plan documents are visible yet.",
+        snapshotCount > 0
+          ? `${snapshotCount} normalized health snapshot${snapshotCount === 1 ? "" : "s"} are available.`
+          : "No normalized health snapshots are available yet.",
+        topHealthReviewItem?.summary || "No single health-plan issue is standing out above the rest right now.",
+      ],
+      cards: [
+        { label: "In plain English", value: everydayVerdict, detail: healthCommandCenter.headline },
+        { label: "What to do first", value: topHealthReviewItem?.title || "Open the review workspace", detail: topBlocker?.nextAction || topHealthReviewItem?.summary || "Review the top health-plan blocker first." },
+        { label: "Why confidence is limited or strong", value: `${documentCount} document${documentCount === 1 ? "" : "s"} visible`, detail: documentCount === 0 ? "Without benefit summaries or supporting records, this read stays fairly thin." : "Document support gives this health-plan review a more reliable starting point." },
+      ],
+    };
+  }, [bundle?.healthDocuments?.length, bundle?.healthSnapshots?.length, healthCommandCenter, topHealthReviewItem]);
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
@@ -317,7 +377,69 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
             <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
           </div>
 
-          <div style={{ marginTop: "24px" }}>
+          <PlainLanguageBridge
+            compact
+            title={plainLanguageGuide.title}
+            summary={plainLanguageGuide.summary}
+            transition={plainLanguageGuide.transition}
+            quickFacts={plainLanguageGuide.quickFacts}
+            cards={plainLanguageGuide.cards}
+            primaryActionLabel="Open Review Workspace"
+            onPrimaryAction={() => onNavigate?.(healthReviewWorkspaceRoute)}
+            secondaryActionLabel="Step Into The Deeper Breakdown"
+            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            guideTitle="Read this health-plan page in layers"
+            guideDescription="You do not need the full plan diagnostics to understand what matters. Start with the simple answer, take the first action, and only open the deeper proof when you want the details."
+            guideSteps={[
+              {
+                label: "Step 1",
+                title: "Read the plain answer first",
+                detail: "Use the plain-English summary above to understand whether this health plan looks supported, thin, or risky before reading analyst detail.",
+              },
+              {
+                label: "Step 2",
+                title: "Check the first coverage move",
+                detail: topHealthReviewItem?.summary || "Focus on the top health-plan blocker first so the biggest access or continuity issue is easier to fix.",
+              },
+              {
+                label: "Step 3",
+                title: "Use the deeper review as proof",
+                detail: "The darker layer exists to show the evidence: blockers, documents, snapshots, analytics, and workflow detail.",
+              },
+            ]}
+            translatedTerms={[
+              {
+                term: "Confidence",
+                meaning: bundle?.healthDocuments?.length
+                  ? "Confidence means how much supporting plan evidence the page has to justify its current read."
+                  : "Confidence is limited right now because there are not enough health-plan records attached yet.",
+              },
+              {
+                term: "Snapshot",
+                meaning: "A snapshot is the normalized version of a plan record, so the page can read coverage and continuity facts in a structured way.",
+              },
+              {
+                term: "Plan Records",
+                meaning: "Plan records are the documents, snapshots, and analytics that make it easier to verify what the health plan is actually doing.",
+              },
+              {
+                term: "Review Workspace",
+                meaning: "Review Workspace is the shared place to track and assign follow-up when a health-plan issue needs more than a quick page read.",
+              },
+            ]}
+            depthTitle="Use the deeper breakdown as supporting proof"
+            depthDescription="The darker section below is there to explain why this health plan was scored this way, not to make the first read more intimidating."
+            depthPrimaryActionLabel="Start With Health Command"
+            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            depthSecondaryActionLabel="Open Review Workspace"
+            onDepthSecondaryAction={() => onNavigate?.(healthReviewWorkspaceRoute)}
+            analysisRef={technicalAnalysisRef}
+            analysisEyebrow="Deeper Review Starts Here"
+            analysisTitle="Technical breakdown: health-plan blockers, documents, snapshots, analytics, and workflow"
+            analysisDescription="Everything below this point is the proof layer. It explains the live health-plan blockers, documents, snapshots, analytics, and the workflow behind the simpler read above."
+          />
+
+          <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
             <SectionCard
               title="Health Command"
               subtitle="The strongest health coverage blockers, why they matter, and what to do next on this plan."
@@ -620,20 +742,55 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
               )}
             </SectionCard>
 
-            <SectionCard title="Notes / Tasks / Alerts">
-              {assetBundle ? (
-                <AIInsightPanel
-                  title="Platform Linkage"
-                  summary="This health record can inherit shared continuity context from the linked platform asset without collapsing health-specific data into generic tables."
-                  bullets={[
-                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
-                    `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
-                    `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
-                  ]}
-                />
-              ) : (
-                <EmptyState title="Shared household context pending" description="Alerts, tasks, notes, and broader continuity context will appear here once this plan is linked into the broader household record." />
-              )}
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  Health Command already explains the strongest blockers on this plan. Shared follow-up belongs in Review Workspace so documents, alerts, and continuity work live with the rest of the household queue instead of repeating here.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {healthReviewQueueItems.length} open health workstream{healthReviewQueueItems.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topHealthReviewItem?.summary || healthCommandCenter.headline}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(healthReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    {topHealthReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topHealthReviewItem.route)}
+                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                      >
+                        Open Top Health Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 

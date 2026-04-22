@@ -1443,6 +1443,8 @@ function inferPolicyType(text) {
   if (lower.includes("individual fixed index interest flexible premium adjustable life insurance")) {
     return "Index Universal Life";
   }
+  if (lower.includes("variable universal life")) return "Variable Universal Life";
+  if (lower.includes("variable life")) return "Variable Life";
   if (lower.includes("universal life")) return "Universal Life";
   return "";
 }

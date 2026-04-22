@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import PageHeader from "../components/layout/PageHeader";
+import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -14,6 +16,7 @@ import {
   listRetirementProviders,
 } from "../lib/domain/retirement";
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
+import buildRetirementPageFascia from "../lib/intelligence/fascia/buildRetirementPageFascia";
 import { buildRetirementSignals } from "../lib/retirementSignals/buildRetirementSignals";
 import { buildRetirementActionFeed } from "../lib/retirementSignals/buildRetirementActionFeed";
 import { buildRetirementCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
@@ -26,6 +29,7 @@ import {
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { buildRetirementDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
+import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import {
@@ -121,6 +125,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +137,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   const [parsingDocumentId, setParsingDocumentId] = useState("");
   const [parseError, setParseError] = useState("");
   const [parseDebug, setParseDebug] = useState(null);
+  const [showFasciaExplanation, setShowFasciaExplanation] = useState(false);
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
@@ -322,6 +328,165 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
       }),
     [bundle?.retirementPositions, retirementRead, retirementSignals]
   );
+  const retirementPageFascia = useMemo(
+    () =>
+      buildRetirementPageFascia({
+        retirementAccount,
+        retirementRead,
+        retirementSignals,
+        retirementActionFeed,
+        latestSnapshot,
+        latestAnalytics,
+        positions: bundle?.retirementPositions || [],
+      }),
+    [
+      bundle?.retirementPositions,
+      latestAnalytics,
+      latestSnapshot,
+      retirementAccount,
+      retirementActionFeed,
+      retirementRead,
+      retirementSignals,
+    ]
+  );
+  const retirementPageFasciaDisplay = useMemo(() => {
+    if (!retirementPageFascia) return null;
+
+    return {
+      ...retirementPageFascia,
+      tertiaryAction: retirementPageFascia.tertiaryAction
+        ? {
+            ...retirementPageFascia.tertiaryAction,
+            label: showFasciaExplanation ? "Hide explanation" : "Why am I seeing this?",
+          }
+        : null,
+    };
+  }, [retirementPageFascia, showFasciaExplanation]);
+
+  const retirementPlainEnglishGuide = useMemo(() => {
+    const documentCount = bundle?.retirementDocuments?.length || 0;
+    const positionCount = bundle?.retirementPositions?.length || 0;
+    const everydayVerdict =
+      retirementPageFascia?.status === "Strong"
+        ? "This retirement account looks well supported"
+        : retirementPageFascia?.status === "Stable"
+          ? "This retirement account looks mostly okay"
+          : retirementPageFascia?.status === "Partial"
+            ? "There is enough to start reading the account, but not enough to fully trust it"
+            : retirementPageFascia?.status === "At Risk"
+              ? "This retirement account may need attention soon"
+              : "The retirement picture is still developing";
+
+    const confidenceDriver =
+      documentCount === 0
+        ? "There are no retirement statements or plan documents attached yet, so this read is still thin."
+        : !latestSnapshot
+          ? "Documents are visible, but there is no normalized snapshot yet, which limits how much structure the page can trust."
+          : positionCount === 0
+            ? "The account has some document support, but there are no parsed positions yet, so allocation detail is still limited."
+            : "The account has document, snapshot, and position support, which makes the current retirement read more trustworthy.";
+
+    return {
+      eyebrow: "Plain-English First",
+      title: "Start here before the technical retirement analysis",
+      summary: retirementPageFascia?.meaning || "This page simplifies what the retirement account is saying before you move into the deeper analytics.",
+      transition:
+        "The short version tells you whether the account looks stable, thin, concentrated, or risky. The technical sections below explain signals, positions, documents, and the command-center blockers behind that call.",
+      cards: [
+        {
+          label: "In plain English",
+          value: everydayVerdict,
+          detail: retirementPageFascia?.meaning || retirementCommandCenter.headline,
+        },
+        {
+          label: "What to do first",
+          value: retirementPageFascia?.primaryAction?.label || "Review the top retirement issue",
+          detail:
+            topRetirementReviewItem?.summary ||
+            retirementPageFascia?.explanation?.recommendedAction?.detail ||
+            retirementCommandCenter.headline,
+        },
+        {
+          label: "Why confidence is limited or strong",
+          value: `${documentCount} retirement document${documentCount === 1 ? "" : "s"} visible`,
+          detail: confidenceDriver,
+        },
+      ],
+      quickFacts: [
+        latestSnapshot
+          ? `A normalized account snapshot dated ${formatDate(latestSnapshot.statement_date || latestSnapshot.snapshot_date)} is visible.`
+          : "No normalized retirement snapshot is visible yet.",
+        positionCount > 0
+          ? `${positionCount} parsed position${positionCount === 1 ? "" : "s"} are visible in this account.`
+          : "No parsed positions are visible yet for this account.",
+        topRetirementReviewItem
+          ? `The current top retirement issue is ${topRetirementReviewItem.summary.toLowerCase()}.`
+          : "No single retirement issue is standing out above the rest right now.",
+      ],
+    };
+  }, [
+    bundle?.retirementDocuments?.length,
+    bundle?.retirementPositions?.length,
+    latestSnapshot,
+    retirementCommandCenter,
+    retirementPageFascia,
+    topRetirementReviewItem,
+  ]);
+  const retirementTransitionGuide = useMemo(() => {
+    const positionCount = bundle?.retirementPositions?.length || 0;
+    const confidencePercent = Math.round((retirementRead.confidence || 0) * 100);
+
+    return {
+      steps: [
+        {
+          label: "Step 1",
+          title: "Read the account story first",
+          detail:
+            "Start with the plain-English summary so you know whether this account looks stable, thin, concentrated, or risky before reading the technical layer.",
+        },
+        {
+          label: "Step 2",
+          title: "Take the first retirement move",
+          detail:
+            retirementPageFascia?.primaryAction?.label
+            || "Focus on the first improvement that would strengthen this retirement read.",
+        },
+        {
+          label: "Step 3",
+          title: "Open the deeper proof when needed",
+          detail:
+            "The sections below explain signals, parsed positions, documents, and review logic when you want to see the evidence behind the summary.",
+        },
+      ],
+      keys: [
+        {
+          term: "Confidence",
+          meaning: `Confidence means how much support the page has for its current read of the account. Right now it sits around ${confidencePercent}%.`,
+        },
+        {
+          term: "Snapshot",
+          meaning:
+            "A snapshot is the normalized version of a statement or account record, so the page can read balances and account facts in a structured way.",
+        },
+        {
+          term: "Parsed Positions",
+          meaning:
+            positionCount > 0
+              ? `${positionCount} parsed position${positionCount === 1 ? "" : "s"} are visible, which means the system could identify some of the holdings inside the account.`
+              : "Parsed positions are the holdings inside the account. None are visible yet, so allocation detail is still limited.",
+        },
+        {
+          term: "Signal Level",
+          meaning:
+            "Signal level is a shorthand for how strong the account evidence looks after the page weighs documents, snapshots, allocations, and review flags together.",
+        },
+      ],
+    };
+  }, [
+    bundle?.retirementPositions?.length,
+    retirementPageFascia?.primaryAction?.label,
+    retirementRead.confidence,
+  ]);
 
   const retirementCommandCenter = useMemo(
     () =>
@@ -362,6 +527,33 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     () => Object.fromEntries(retirementReviewQueueItems.map((item) => [item.id, item])),
     [retirementReviewQueueItems]
   );
+  const topRetirementReviewItem = retirementReviewQueueItems[0] || null;
+  const retirementReviewWorkspaceRoute = useMemo(() => {
+    const filters =
+      deriveReviewWorkspaceCandidateFromQueueItem(
+        topRetirementReviewItem,
+        reviewScope.householdId || retirementAccount?.household_id || null
+      ) || {
+        module: "retirement",
+        issueType: "sparse_documentation",
+        severity: bundle?.retirementDocuments?.length > 0 ? "medium" : "high",
+        householdId: reviewScope.householdId || retirementAccount?.household_id || null,
+        assetId: linkedAsset?.id || null,
+        recordId: retirementAccount?.id || null,
+      };
+
+    return buildReviewWorkspaceRoute({
+      filters,
+      openedFromAssistant: true,
+    });
+  }, [
+    bundle?.retirementDocuments?.length,
+    linkedAsset?.id,
+    retirementAccount?.household_id,
+    retirementAccount?.id,
+    reviewScope.householdId,
+    topRetirementReviewItem,
+  ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   function handleReviewWorkflowUpdate(itemId, status) {
@@ -531,6 +723,17 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     });
   }
 
+  function handleRetirementFasciaAction(action) {
+    if (!action) return;
+    if (action.kind === "toggle_explanation") {
+      setShowFasciaExplanation((current) => !current);
+      return;
+    }
+
+    if (!action.target) return;
+    handleRetirementAction({ target: action.target });
+  }
+
   return (
     <div>
       <PageHeader
@@ -572,6 +775,284 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               <StatusBadge key={flag.label} label={flag.label} tone={flag.tone} />
             ))}
           </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <IntelligenceFasciaCard fascia={retirementPageFasciaDisplay} onAction={handleRetirementFasciaAction} />
+            <InsightExplanationPanel
+              isOpen={showFasciaExplanation}
+              explanation={retirementPageFascia?.explanation}
+              onToggle={() => setShowFasciaExplanation(false)}
+              onAction={handleRetirementFasciaAction}
+            />
+          </div>
+
+          <section
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "20px",
+              padding: "30px 32px",
+              borderRadius: "28px",
+              background:
+                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
+              border: "1px solid rgba(251, 146, 60, 0.18)",
+              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+                gap: "18px",
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: "4px 4px 0" }}>
+                <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.82)", border: "1px solid rgba(251, 146, 60, 0.18)", boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)", fontSize: "11px", color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                  {retirementPlainEnglishGuide.eyebrow}
+                </div>
+                <div style={{ fontSize: "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
+                  {retirementPlainEnglishGuide.title}
+                </div>
+                <div style={{ fontSize: "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
+                  {retirementPlainEnglishGuide.summary}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{retirementPlainEnglishGuide.transition}</div>
+              </div>
+
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "24px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "14px",
+                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "999px", background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)", boxShadow: "0 0 0 5px rgba(249,115,22,0.12)" }} />
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    Quick Read
+                  </div>
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
+                  {retirementPlainEnglishGuide.quickFacts.map((item) => (
+                    <li key={item} style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: "10px", alignItems: "start", padding: "10px 12px", borderRadius: "14px", background: "rgba(255,255,255,0.78)", border: "1px solid rgba(226,232,240,0.9)", lineHeight: "1.65" }}>
+                      <span style={{ width: "8px", height: "8px", marginTop: "8px", borderRadius: "999px", background: "#0f172a" }} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {retirementPageFascia?.primaryAction ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRetirementFasciaAction(retirementPageFascia.primaryAction)}
+                      style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#0f172a", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}
+                    >
+                      {retirementPageFascia.primaryAction.label}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(15, 23, 42, 0.12)", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
+                  >
+                    Step Into The Deeper Breakdown
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
+                gap: "14px",
+              }}
+            >
+              {retirementPlainEnglishGuide.cards.map((card) => (
+                <div
+                  key={card.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "10px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {card.label}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              marginTop: "20px",
+              display: "grid",
+              gap: "18px",
+              padding: "24px 26px",
+              borderRadius: "26px",
+              background:
+                "radial-gradient(circle at top right, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0) 30%), linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.16)",
+              boxShadow: "0 20px 42px rgba(15, 23, 42, 0.05)",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.9)", border: "1px solid rgba(148, 163, 184, 0.18)", fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                From Simple To Detailed
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", lineHeight: "1.15", letterSpacing: "-0.03em" }}>
+                Read this retirement page in layers
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "56rem" }}>
+                You do not need the full retirement diagnostics to understand the account. Read the summary, take the first move, and only drop into the deeper proof when you want the details behind the call.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+                gap: "14px",
+              }}
+            >
+              {retirementTransitionGuide.steps.map((step) => (
+                <div
+                  key={step.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "8px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ width: "fit-content", padding: "6px 10px", borderRadius: "999px", background: "rgba(14, 165, 233, 0.1)", color: "#0369a1", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{step.title}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+                gap: "16px",
+                alignItems: "start",
+              }}
+            >
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  Translate The Analyst Terms
+                </div>
+                {retirementTransitionGuide.keys.map((item) => (
+                  <details
+                    key={item.term}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      border: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>{item.term}</summary>
+                    <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.7" }}>{item.meaning}</div>
+                  </details>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "radial-gradient(circle at top right, rgba(56,189,248,0.22) 0%, rgba(56,189,248,0) 36%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  color: "#ffffff",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 18px 36px rgba(15, 23, 42, 0.18)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  When You Want More Depth
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
+                  Use the deeper breakdown as supporting proof
+                </div>
+                <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
+                  The darker section below is where the account shows its analyst evidence: signals, parsed positions, documents, and review context.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection("signals")}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 20px rgba(255,255,255,0.16)" }}
+                  >
+                    Start With Signals
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection("positions")}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
+                  >
+                    Jump To Positions
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            ref={technicalAnalysisRef}
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "10px",
+              padding: "22px 26px",
+              borderRadius: "28px",
+              background: "radial-gradient(circle at top right, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 34%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+              color: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Deeper Review Starts Here
+            </div>
+            <div style={{ fontSize: "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
+              Technical breakdown: signals, parsed positions, account diagnostics, and retirement review depth
+            </div>
+            <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
+              Everything below this point is the proof layer. It explains the retirement signals, action feed, parsed positions, document support, and the command-center logic behind the simpler read above.
+            </div>
+          </section>
 
           <div style={{ marginTop: "24px" }}>
             <RetirementSignalsSummaryCard retirementSignals={retirementSignals} />
@@ -845,17 +1326,60 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               </div>
             </SectionCard>
 
-            <SectionCard title="Retirement Review Snapshot">
-              <AIInsightPanel
-                title="Current Retirement Read"
-                summary={retirementRead.headline}
-                bullets={[
-                  `Balance visibility: ${retirementRead.metrics?.currentBalanceVisible ? "visible" : "limited"}`,
-                  `Contribution visibility: ${retirementRead.metrics?.contributionsVisible ? "visible" : "limited"}`,
-                  `Extraction quality: ${retirementRead.extractionQuality}`,
-                  `Parsed positions: ${retirementRead.metrics?.positionsCount ?? 0}`,
-                ]}
-              />
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  The retirement read above already explains the current account signal. Shared follow-up belongs in Review Workspace once this turns into trackable household work instead of another restatement of the same read.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {bundle.retirementDocuments.length} document{bundle.retirementDocuments.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {retirementRead.extractionQuality} extraction quality
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {retirementRead.metrics?.positionsCount ?? 0} parsed position{retirementRead.metrics?.positionsCount === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topRetirementReviewItem?.summary || retirementRead.headline}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection("documents")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Jump To Documents
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection("positions")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Jump To Positions
+                    </button>
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 
@@ -1139,9 +1663,47 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                     summary={`No persisted retirement analytics rows are stored yet, but this account currently reads ${retirementSignals.signalLevel.replace(/_/g, " ")} from the live statement, holdings, and review evidence.`}
                     bullets={(retirementSignals.reasons || []).slice(0, 4)}
                   />
-                  {retirementActionFeed[0] ? (
-                    <div style={{ padding: "14px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
-                      <strong>Top live next move:</strong> {retirementActionFeed[0].summary}
+                  {topRetirementReviewItem ? (
+                    <div
+                      style={{
+                        padding: "16px 18px",
+                        borderRadius: "14px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        display: "grid",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Workspace Handoff</div>
+                      <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                        The retirement action feed already carries the live next move on this page. Shared follow-up stays cleaner in Review Workspace once you need to track, assign, or clear the issue across the household.
+                      </div>
+                      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>{topRetirementReviewItem.summary}</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
+                          style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                        >
+                          Open Review Workspace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToSection("documents")}
+                          style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                        >
+                          Jump To Documents
+                        </button>
+                        {topRetirementReviewItem.route ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate?.(topRetirementReviewItem.route)}
+                            style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                          >
+                            Open Top Retirement Review
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1230,23 +1792,55 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               )}
             </SectionCard>
 
-            <SectionCard title="Notes / Tasks / Alerts">
-              {assetBundle ? (
-                <AIInsightPanel
-                  title="Platform Linkage"
-                  summary="This retirement record can inherit shared continuity context from the linked platform asset without collapsing retirement-specific data into generic tables."
-                  bullets={[
-                    `Household documents linked: ${assetBundle.documents?.length || 0}`,
-                    `Asset alerts linked: ${assetBundle.alerts?.length || 0}`,
-                    `Asset tasks linked: ${assetBundle.tasks?.length || 0}`,
-                  ]}
-                />
-              ) : (
-                <EmptyState
-                  title="Shared household context pending"
-                  description="Alerts, tasks, notes, and broader continuity context will appear here once this account is linked into the broader household record."
-                />
-              )}
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  Retirement Command and the account read already explain the active retirement issues on this page. Shared follow-up belongs in Review Workspace so document, alert, and continuity work is tracked in one place instead of restated in a second linkage card.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {retirementReviewQueueItems.length} open retirement workstream{retirementReviewQueueItems.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                    {topRetirementReviewItem?.summary || retirementCommandCenter.headline}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    {topRetirementReviewItem?.route ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.(topRetirementReviewItem.route)}
+                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
+                      >
+                        Open Top Retirement Review
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 

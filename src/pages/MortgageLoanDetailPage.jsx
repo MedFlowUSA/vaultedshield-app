@@ -1,9 +1,11 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import PageHeader from "../components/layout/PageHeader";
 import MortgageAIChat from "../components/mortgage/MortgageAIChat";
 import MortgageLinkedContextCard from "../components/mortgage/MortgageLinkedContextCard";
+import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import SummaryPanel from "../components/shared/SummaryPanel";
@@ -34,10 +36,13 @@ import {
 } from "../lib/supabase/mortgageData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilters";
 import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
 import { buildMortgageCommandCenter } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import buildMortgagePageFascia from "../lib/intelligence/fascia/buildMortgagePageFascia";
+import { executeSmartAction } from "../lib/navigation/smartActions";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MORTGAGE_DOCUMENT_CLASSES = listMortgageDocumentClasses();
@@ -117,9 +122,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [propertyLinks, setPropertyLinks] = useState([]);
+  const [showFasciaExplanation, setShowFasciaExplanation] = useState(false);
   const [linkedPropertyAssetLinks, setLinkedPropertyAssetLinks] = useState([]);
   const [availableProperties, setAvailableProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -287,6 +294,194 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       propertyLinks,
     ]
   );
+  const mortgageReviewWorkspaceRoute = useMemo(
+    () =>
+      buildReviewWorkspaceRoute({
+        filters: {
+          module: "mortgage",
+          issueType: mortgageReview.metrics?.documentSupport === "strong" ? "review_needed" : "sparse_documentation",
+          severity: propertyLinks.length > 0 ? "medium" : "high",
+          householdId: mortgageLoan?.household_id || householdState.context.householdId || null,
+          assetId: linkedAsset?.id || null,
+          recordId: mortgageLoan?.id || null,
+        },
+        openedFromAssistant: true,
+      }),
+    [
+      householdState.context.householdId,
+      linkedAsset?.id,
+      mortgageLoan?.household_id,
+      mortgageLoan?.id,
+      mortgageReview.metrics?.documentSupport,
+      propertyLinks.length,
+    ]
+  );
+  const mortgagePageFascia = useMemo(
+    () =>
+      buildMortgagePageFascia({
+        mortgageLoan,
+        mortgageReview,
+        mortgageCommandCenter,
+        mortgageDocuments: bundle?.mortgageDocuments || [],
+        mortgageSnapshots: bundle?.mortgageSnapshots || [],
+        mortgageAnalytics: bundle?.mortgageAnalytics || [],
+        propertyLinks,
+        bundleWarnings,
+      }),
+    [
+      bundle?.mortgageAnalytics,
+      bundle?.mortgageDocuments,
+      bundle?.mortgageSnapshots,
+      bundleWarnings,
+      mortgageCommandCenter,
+      mortgageLoan,
+      mortgageReview,
+      propertyLinks,
+    ]
+  );
+  const mortgagePageFasciaDisplay = useMemo(() => {
+    if (!mortgagePageFascia) return null;
+
+    return {
+      ...mortgagePageFascia,
+      tertiaryAction: mortgagePageFascia.tertiaryAction
+        ? {
+            ...mortgagePageFascia.tertiaryAction,
+            label: showFasciaExplanation ? "Hide explanation" : "Why am I seeing this?",
+          }
+        : null,
+    };
+  }, [mortgagePageFascia, showFasciaExplanation]);
+
+  const mortgagePlainEnglishGuide = useMemo(() => {
+    const documentCount = bundle?.mortgageDocuments?.length || 0;
+    const snapshotCount = bundle?.mortgageSnapshots?.length || 0;
+    const topBlocker = mortgageCommandCenter.blockers?.[0] || null;
+    const everydayVerdict =
+      mortgagePageFascia?.status === "Strong"
+        ? "This mortgage looks well supported"
+        : mortgagePageFascia?.status === "Stable"
+          ? "This mortgage looks mostly okay"
+          : mortgagePageFascia?.status === "Partial"
+            ? "There is enough to start reading the loan, but not enough to fully trust it"
+            : mortgagePageFascia?.status === "At Risk"
+              ? "This mortgage may need attention soon"
+              : "The mortgage picture is still developing";
+
+    const confidenceDriver =
+      bundleWarnings.length > 0
+        ? "Some supporting mortgage context is unavailable right now, so the page is leaning on the verified records that did load."
+        : documentCount === 0
+          ? "There are no mortgage-specific documents attached yet, which keeps this read fairly thin."
+          : propertyLinks.length === 0
+            ? "The loan exists, but it is not yet anchored to a property stack, so continuity context is weaker."
+            : "The loan has document and property context, which makes the current mortgage read more trustworthy.";
+
+    return {
+      eyebrow: "Plain-English First",
+      title: "Start here before the technical mortgage review",
+      summary: mortgagePageFascia?.meaning || "This page simplifies what the mortgage record is saying before you move into the technical review.",
+      transition:
+        "The short version tells you whether this loan looks stable, thin, or risky. The technical sections below explain why, show the blockers, and break out documents, linked property context, and detailed mortgage facts.",
+      cards: [
+        {
+          label: "In plain English",
+          value: everydayVerdict,
+          detail: mortgagePageFascia?.meaning || mortgageCommandCenter.headline,
+        },
+        {
+          label: "What to do first",
+          value: mortgagePageFascia?.primaryAction?.label || "Review the top mortgage blocker",
+          detail:
+            topBlocker?.blocker ||
+            mortgagePageFascia?.explanation?.recommendedAction?.detail ||
+            mortgageCommandCenter.headline,
+        },
+        {
+          label: "Why confidence is limited or strong",
+          value: `${documentCount} mortgage document${documentCount === 1 ? "" : "s"} visible`,
+          detail: confidenceDriver,
+        },
+      ],
+      quickFacts: [
+        propertyLinks.length > 0
+          ? `${propertyLinks.length} linked propert${propertyLinks.length === 1 ? "y is" : "ies are"} visible for this loan.`
+          : "No linked property is visible yet for this mortgage.",
+        documentCount > 0
+          ? `${documentCount} mortgage document${documentCount === 1 ? "" : "s"} and ${snapshotCount} normalized snapshot${snapshotCount === 1 ? "" : "s"} are available.`
+          : "The page still needs mortgage documents before the read can become much stronger.",
+        topBlocker
+          ? `The current top mortgage issue is ${topBlocker.title.toLowerCase()}.`
+          : "No single mortgage blocker is standing out above the rest right now.",
+      ],
+    };
+  }, [
+    bundle?.mortgageDocuments?.length,
+    bundle?.mortgageSnapshots?.length,
+    bundleWarnings.length,
+    mortgageCommandCenter,
+    mortgagePageFascia,
+    propertyLinks.length,
+  ]);
+  const mortgageTransitionGuide = useMemo(() => {
+    const documentCount = bundle?.mortgageDocuments?.length || 0;
+    const stackScoreLabel = formatCompletenessScore(linkedStackCompleteness.score);
+
+    return {
+      steps: [
+        {
+          label: "Step 1",
+          title: "Read the simple answer first",
+          detail:
+            "Use the plain-English summary above to decide whether this loan looks solid, thin, or worth attention before you read any mortgage diagnostics.",
+        },
+        {
+          label: "Step 2",
+          title: "Check the first move",
+          detail:
+            mortgagePageFascia?.primaryAction?.label
+            || "Focus on the top blocker next so you know what would strengthen this mortgage picture fastest.",
+        },
+        {
+          label: "Step 3",
+          title: "Open the proof only when you want it",
+          detail:
+            "The deeper breakdown below exists to show the evidence: document support, property linkage, command-center blockers, and detailed loan records.",
+        },
+      ],
+      keys: [
+        {
+          term: "Confidence",
+          meaning:
+            documentCount > 0
+              ? "Confidence means how much evidence this page has to support its read of the loan."
+              : "Confidence is low right now because the page does not have enough mortgage evidence yet.",
+        },
+        {
+          term: "Property Linkage",
+          meaning:
+            propertyLinks.length > 0
+              ? "Property linkage means this loan is connected to at least one property record, so the system can read it as part of a real stack."
+              : "Property linkage means whether this mortgage is attached to the home it belongs to.",
+        },
+        {
+          term: "Document Support",
+          meaning:
+            `${documentCount} mortgage document${documentCount === 1 ? "" : "s"} are visible right now, and that count helps determine how trustworthy the read feels.`,
+        },
+        {
+          term: "Stack Score",
+          meaning:
+            `Stack score is a shortcut for how complete the surrounding property context is. This mortgage currently reads as ${stackScoreLabel}.`,
+        },
+      ],
+    };
+  }, [
+    bundle?.mortgageDocuments?.length,
+    linkedStackCompleteness.score,
+    mortgagePageFascia?.primaryAction?.label,
+    propertyLinks.length,
+  ]);
 
   const summaryItems = useMemo(() => {
     if (!mortgageLoan) return [];
@@ -338,6 +533,26 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  }
+
+  function handleMortgageAction(action) {
+    if (!action?.target) return;
+
+    executeSmartAction(action.target, {
+      navigate: onNavigate,
+      scrollToSection: scrollToMortgageSection,
+    });
+  }
+
+  function handleMortgageFasciaAction(action) {
+    if (!action) return;
+    if (action.kind === "toggle_explanation") {
+      setShowFasciaExplanation((current) => !current);
+      return;
+    }
+
+    if (!action.target) return;
+    handleMortgageAction({ target: action.target });
   }
 
   function enqueueFiles(fileList) {
@@ -536,6 +751,328 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             />
           </div>
 
+          <div style={{ marginTop: "24px" }}>
+            <IntelligenceFasciaCard fascia={mortgagePageFasciaDisplay} onAction={handleMortgageFasciaAction} isMobile={isTablet} />
+            <InsightExplanationPanel
+              isOpen={showFasciaExplanation}
+              explanation={mortgagePageFascia?.explanation}
+              onToggle={() => setShowFasciaExplanation(false)}
+              onAction={handleMortgageFasciaAction}
+              isMobile={isTablet}
+            />
+          </div>
+
+          <section
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "20px",
+              padding: isTablet ? "24px 18px" : "30px 32px",
+              borderRadius: "28px",
+              background:
+                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
+              border: "1px solid rgba(251, 146, 60, 0.18)",
+              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+                gap: "18px",
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isTablet ? "2px 2px 0" : "4px 4px 0" }}>
+                <div
+                  style={{
+                    width: "fit-content",
+                    padding: "7px 11px",
+                    borderRadius: "999px",
+                    background: "rgba(255,255,255,0.82)",
+                    border: "1px solid rgba(251, 146, 60, 0.18)",
+                    boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)",
+                    fontSize: "11px",
+                    color: "#c2410c",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                    fontWeight: 800,
+                  }}
+                >
+                  {mortgagePlainEnglishGuide.eyebrow}
+                </div>
+                <div style={{ fontSize: isTablet ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
+                  {mortgagePlainEnglishGuide.title}
+                </div>
+                <div style={{ fontSize: "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
+                  {mortgagePlainEnglishGuide.summary}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{mortgagePlainEnglishGuide.transition}</div>
+              </div>
+
+              <div
+                style={{
+                  padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
+                  borderRadius: "24px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "14px",
+                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      width: "10px",
+                      height: "10px",
+                      borderRadius: "999px",
+                      background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
+                      boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
+                    }}
+                  />
+                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    Quick Read
+                  </div>
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
+                  {mortgagePlainEnglishGuide.quickFacts.map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "16px minmax(0, 1fr)",
+                        gap: "10px",
+                        alignItems: "start",
+                        padding: "10px 12px",
+                        borderRadius: "14px",
+                        background: "rgba(255,255,255,0.78)",
+                        border: "1px solid rgba(226,232,240,0.9)",
+                        lineHeight: "1.65",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          marginTop: "8px",
+                          borderRadius: "999px",
+                          background: "#0f172a",
+                        }}
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {mortgagePageFascia?.primaryAction ? (
+                    <button
+                      type="button"
+                      onClick={() => handleMortgageFasciaAction(mortgagePageFascia.primaryAction)}
+                      style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#0f172a", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}
+                    >
+                      {mortgagePageFascia.primaryAction.label}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(15, 23, 42, 0.12)", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
+                  >
+                    Step Into The Deeper Breakdown
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {mortgagePlainEnglishGuide.cards.map((card) => (
+                <div
+                  key={card.label}
+                  style={{
+                    padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "10px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {card.label}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              marginTop: "20px",
+              display: "grid",
+              gap: "18px",
+              padding: isTablet ? "22px 18px" : "24px 26px",
+              borderRadius: "26px",
+              background:
+                "radial-gradient(circle at top right, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0) 30%), linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.16)",
+              boxShadow: "0 20px 42px rgba(15, 23, 42, 0.05)",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.9)", border: "1px solid rgba(148, 163, 184, 0.18)", fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                From Simple To Detailed
+              </div>
+              <div style={{ fontSize: isTablet ? "24px" : "28px", fontWeight: 800, color: "#0f172a", lineHeight: "1.15", letterSpacing: "-0.03em" }}>
+                Read this mortgage page in layers
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "56rem" }}>
+                You do not need to read the whole mortgage analysis to understand what matters. Start with the plain answer, take the first action, and only open the deeper proof when you want the reasoning behind it.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "14px",
+              }}
+            >
+              {mortgageTransitionGuide.steps.map((step) => (
+                <div
+                  key={step.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                    border: "1px solid rgba(148, 163, 184, 0.16)",
+                    display: "grid",
+                    gap: "8px",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                  }}
+                >
+                  <div style={{ width: "fit-content", padding: "6px 10px", borderRadius: "999px", background: "rgba(14, 165, 233, 0.1)", color: "#0369a1", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{step.title}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1fr) minmax(280px, 0.9fr)",
+                gap: "16px",
+                alignItems: "start",
+              }}
+            >
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
+                  border: "1px solid rgba(148, 163, 184, 0.16)",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  Translate The Analyst Terms
+                </div>
+                {mortgageTransitionGuide.keys.map((item) => (
+                  <details
+                    key={item.term}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "16px",
+                      border: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>{item.term}</summary>
+                    <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.7" }}>{item.meaning}</div>
+                  </details>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  padding: "20px 20px 22px",
+                  borderRadius: "22px",
+                  background: "radial-gradient(circle at top right, rgba(56,189,248,0.22) 0%, rgba(56,189,248,0) 36%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  color: "#ffffff",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 18px 36px rgba(15, 23, 42, 0.18)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  When You Want More Depth
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
+                  Use the deeper breakdown as supporting proof
+                </div>
+                <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
+                  The darker section below is there to explain why the mortgage was scored this way, not to overwhelm the first read.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToMortgageSection("continuity-command")}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 20px rgba(255,255,255,0.16)" }}
+                  >
+                    Start With Mortgage Command
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToMortgageSection("loan-summary")}
+                    style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
+                  >
+                    Jump To Loan Summary
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            ref={technicalAnalysisRef}
+            style={{
+              marginTop: "24px",
+              display: "grid",
+              gap: "10px",
+              padding: isTablet ? "20px 18px" : "22px 26px",
+              borderRadius: "28px",
+              background: "radial-gradient(circle at top right, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 34%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+              color: "#ffffff",
+              border: "1px solid rgba(15, 23, 42, 0.12)",
+              boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Deeper Review Starts Here
+            </div>
+            <div style={{ fontSize: isTablet ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
+              Technical breakdown: blockers, document support, property linkage, and mortgage diagnostics
+            </div>
+            <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
+              Everything below this point is the proof layer. It explains the live mortgage command, linked property stack context, document support, and the operational details behind the simpler read above.
+            </div>
+          </section>
+
           <div
             id="continuity-command"
             ref={(node) => setSectionRef("continuity-command", node)}
@@ -710,18 +1247,63 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
               </div>
             </SectionCard>
 
-            <SectionCard title="Debt Review Snapshot">
-              <AIInsightPanel
-                title="Current Mortgage Read"
-                summary={mortgageReview.headline}
-                bullets={[
-                  `Document support: ${mortgageReview.metrics?.documentSupport || "limited"}`,
-                  `Parsed snapshots: ${mortgageReview.metrics?.snapshotCount || 0}`,
-                  `Property links visible: ${mortgageReview.metrics?.propertyLinkCount || 0}`,
-                  `Refinance review: ${mortgageReview.metrics?.refinanceStatus || "limited"}`,
-                  `Payoff readiness: ${mortgageReview.metrics?.payoffStatus || "limited"}`,
-                ]}
-              />
+            <SectionCard title="Review Workspace Handoff">
+              <div style={{ display: "grid", gap: "14px" }}>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                  The mortgage signal grid above already summarizes the current debt read. Shared follow-up belongs in Review Workspace so document gaps, property linkage issues, and payoff or refinance questions can be tracked without repeating the same snapshot twice on this page.
+                </div>
+                <div
+                  style={{
+                    padding: "18px 20px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    display: "grid",
+                    gap: "14px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
+                      {bundle?.mortgageDocuments?.length || 0} document{bundle?.mortgageDocuments?.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
+                      {propertyLinks.length} linked propert{propertyLinks.length === 1 ? "y" : "ies"}
+                    </div>
+                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
+                      {bundle?.mortgageSnapshots?.length || 0} parsed snapshot{bundle?.mortgageSnapshots?.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>{mortgageReview.headline}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    {mortgageReview.metrics?.documentSupport === "strong"
+                      ? "The page has enough live mortgage detail to stay focused on the current signal set here. Use Review Workspace when that work needs cross-household tracking."
+                      : "This loan still needs stronger document support or linked context. Review Workspace is the cleaner place to manage that follow-up beside the rest of the household queue."}
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.(mortgageReviewWorkspaceRoute)}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Open Review Workspace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToMortgageSection("documents")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Jump To Documents
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToMortgageSection("linked-context")}
+                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    >
+                      Jump To Linked Context
+                    </button>
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 
@@ -746,7 +1328,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
             />
           </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+          <div
+            id="property-linking"
+            ref={(node) => setSectionRef("property-linking", node)}
+            style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}
+          >
             <SectionCard title="Linked Property">
               {propertyLinks.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>

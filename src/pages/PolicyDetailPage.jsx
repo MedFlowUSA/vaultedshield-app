@@ -450,6 +450,12 @@ function buildPolicyAdvisorBrief({
       summary:
         "For universal life, start with funding strength, visible charges, continuity support, and whether the current structure still looks durable from the packet.",
     },
+    vul: {
+      eyebrow: "Variable Life Advisor Brief",
+      title: "Read this like a market exposure and policy pressure review.",
+      summary:
+        "For variable life, start with visible account value, allocation detail, charge drag, and whether loans or thin statement support are making the policy harder to trust.",
+    },
     unknown: {
       eyebrow: "Life Policy Advisor Brief",
       title: "Start with the clearest risk and fit questions first.",
@@ -695,6 +701,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   const { isTablet } = useResponsiveLayout();
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
+  const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState(EMPTY_POLICY_DETAIL_BUNDLE);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -1049,9 +1056,132 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
         interpretation: policyInterpretation,
         insightSummary: policyAiSummary,
         basicPolicyAnalysis,
-      }),
+    }),
     [basicPolicyAnalysis, generalLifeScorecard, lifePolicy?.meta?.policyType, policyAiSummary, policyInterpretation]
   );
+  const policyPlainEnglishGuide = useMemo(() => {
+    const everydayVerdict =
+      ranking?.status === "Strong"
+        ? "This policy looks well supported right now"
+        : ranking?.status === "Moderate"
+          ? "This policy looks mixed and needs review"
+          : ranking?.status === "Weak"
+            ? "This policy has visible weak spots"
+            : ranking?.status === "At Risk"
+              ? "This policy may need attention soon"
+              : "This policy is still developing";
+
+    const confidenceDriver =
+      missingFields.length > 0
+        ? `${missingFields.length} core field${missingFields.length === 1 ? "" : "s"} are still missing, which limits how confident this read can be.`
+        : !comparisonRow?.latest_statement_date
+          ? "The policy does not show a clear latest statement date yet, so recency support is weaker."
+          : comparisonRow?.coi_confidence === "weak"
+            ? "Charge and COI visibility are still weak, so cost conclusions should be treated carefully."
+            : "The current statement and charge support make this policy read more trustworthy.";
+
+    return {
+      eyebrow: "Plain-English First",
+      title: "Start here before the technical policy analysis",
+      summary: policyInterpretation.bottom_line_summary,
+      transition:
+        "This top layer gives the simple read first. The technical sections below break the policy into protection confidence, charge drag, interpretation, annual review evidence, and deeper IUL analytics when available.",
+      cards: [
+        {
+          label: "In plain English",
+          value: everydayVerdict,
+          detail: policyInterpretation.bottom_line_summary,
+        },
+        {
+          label: "What to do first",
+          value: policyAdvisorBrief.nextMove,
+          detail:
+            gapAnalysis?.recommendations?.[0] ||
+            adequacyReview?.notes?.[0] ||
+            policyAiSummary.summary,
+        },
+        {
+          label: "Why confidence is limited or strong",
+          value: formatConfidencePercent(gapAnalysis?.confidence) || "Confidence still forming",
+          detail: confidenceDriver,
+        },
+      ],
+      quickFacts: [
+        comparisonRow?.latest_statement_date
+          ? `The latest visible statement is dated ${formatDate(comparisonRow.latest_statement_date)}.`
+          : "No clearly resolved latest statement date is visible yet.",
+        gapAnalysis?.coverageGap
+          ? "A visible protection gap or support issue may be present."
+          : "No obvious protection gap is visible from the current extracted read.",
+        showUnifiedIulReader
+          ? "This file can also be reviewed through the deeper IUL console."
+          : "This file is being reviewed through the general in-force policy view.",
+      ],
+    };
+  }, [
+    adequacyReview?.notes,
+    comparisonRow?.coi_confidence,
+    comparisonRow?.latest_statement_date,
+    gapAnalysis?.confidence,
+    gapAnalysis?.coverageGap,
+    gapAnalysis?.recommendations,
+    missingFields.length,
+    policyAdvisorBrief.nextMove,
+    policyAiSummary.summary,
+    policyInterpretation.bottom_line_summary,
+    ranking?.status,
+    showUnifiedIulReader,
+  ]);
+  const policyTransitionGuide = useMemo(() => {
+    const confidenceLabel = formatConfidencePercent(gapAnalysis?.confidence) || "still forming";
+
+    return {
+      steps: [
+        {
+          label: "Step 1",
+          title: "Start with the simple policy verdict",
+          detail: "Use the plain-English summary above to understand whether this policy looks supported, mixed, or at risk before reading the analyst detail.",
+        },
+        {
+          label: "Step 2",
+          title: "Take the first review move",
+          detail: policyAdvisorBrief.nextMove || "Focus on the first review move so the biggest policy question gets answered first.",
+        },
+        {
+          label: "Step 3",
+          title: "Use the deeper console as proof",
+          detail: "The darker layer below explains the evidence: protection confidence, charge drag, interpretation, annual review support, and deeper IUL analytics when available.",
+        },
+      ],
+      keys: [
+        {
+          term: "Protection Confidence",
+          meaning: `Protection confidence is the page's read on how trustworthy the current coverage picture is. Right now it reads as ${confidenceLabel}.`,
+        },
+        {
+          term: "Charge Drag",
+          meaning: "Charge drag is a plain-English way of saying how much visible policy charges may be slowing the policy's performance.",
+        },
+        {
+          term: "Statement Freshness",
+          meaning: comparisonRow?.latest_statement_date
+            ? `Statement freshness means how current the supporting evidence is. The latest visible statement is dated ${formatDate(comparisonRow.latest_statement_date)}.`
+            : "Statement freshness means how current the supporting evidence is. No clearly resolved latest statement date is visible yet.",
+        },
+        {
+          term: "IUL Console",
+          meaning: showUnifiedIulReader
+            ? "The IUL console is the deeper technical layer for indexed universal life review when the file supports a more detailed policy read."
+            : "The IUL console is the deeper technical layer that appears when a policy file supports more advanced indexed universal life review.",
+        },
+      ],
+    };
+  }, [
+    comparisonRow?.latest_statement_date,
+    gapAnalysis?.confidence,
+    policyAdvisorBrief.nextMove,
+    showUnifiedIulReader,
+  ]);
   const interpretationSignalCards = useMemo(
     () => [
       {
@@ -1319,6 +1449,364 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
               onPrint={handlePrintReport}
             />
           ) : null}
+
+          <section
+            style={{
+              display: "grid",
+              gap: "20px",
+              padding: isTablet ? "24px 18px" : "30px 32px",
+              borderRadius: "28px",
+              background:
+                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 34%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 36%), linear-gradient(145deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 54%, rgba(239,246,255,0.96) 100%)",
+              border: "1px solid rgba(251, 146, 60, 0.22)",
+              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+                gap: "18px",
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "fit-content",
+                    padding: "7px 12px",
+                    borderRadius: "999px",
+                    background: "rgba(255,255,255,0.78)",
+                    border: "1px solid rgba(251,146,60,0.24)",
+                    boxShadow: "0 10px 24px rgba(251,146,60,0.12)",
+                    fontSize: "11px",
+                    color: "#c2410c",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                    fontWeight: 800,
+                  }}
+                >
+                  {policyPlainEnglishGuide.eyebrow}
+                </div>
+                <div style={{ fontSize: isTablet ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
+                  {policyPlainEnglishGuide.title}
+                </div>
+                <div style={{ fontSize: isTablet ? "18px" : "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
+                  {policyPlainEnglishGuide.summary}
+                </div>
+                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{policyPlainEnglishGuide.transition}</div>
+              </div>
+
+              <div
+                style={{
+                  padding: isTablet ? "18px 18px" : "22px 22px",
+                  borderRadius: "24px",
+                  background: "rgba(255,255,255,0.86)",
+                  border: "1px solid rgba(255,255,255,0.72)",
+                  display: "grid",
+                  gap: "14px",
+                  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+                  backdropFilter: "blur(10px)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: "9px",
+                      height: "9px",
+                      borderRadius: "999px",
+                      background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
+                      boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  Quick Read
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
+                  {policyPlainEnglishGuide.quickFacts.map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        lineHeight: "1.7",
+                        padding: "10px 12px",
+                        borderRadius: "14px",
+                        background: "rgba(248,250,252,0.92)",
+                        border: "1px solid rgba(226,232,240,0.95)",
+                      }}
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstSection = quickReviewSections[0]?.section;
+                      if (firstSection) scrollToPolicySection(firstSection);
+                    }}
+                    style={{
+                      ...actionButtonStyle(true),
+                      borderRadius: "999px",
+                      boxShadow: "0 14px 28px rgba(249,115,22,0.24)",
+                    }}
+                  >
+                    Start Review
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{
+                      ...actionButtonStyle(false),
+                      borderRadius: "999px",
+                      background: "rgba(255,255,255,0.88)",
+                      border: "1px solid rgba(148,163,184,0.22)",
+                      boxShadow: "0 12px 24px rgba(15,23,42,0.08)",
+                    }}
+                  >
+                    Step Into The Deeper Breakdown
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "12px",
+              }}
+            >
+              {policyPlainEnglishGuide.cards.map((card) => (
+                <div
+                  key={card.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "rgba(255,255,255,0.94)",
+                    border: "1px solid rgba(255,255,255,0.8)",
+                    display: "grid",
+                    gap: "10px",
+                    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.07)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                    {card.label}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gap: "16px",
+              padding: isTablet ? "22px 16px" : "26px 28px",
+              borderRadius: "26px",
+              background:
+                "radial-gradient(circle at top right, rgba(56,189,248,0.12) 0%, rgba(56,189,248,0) 36%), linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,1) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.18)",
+              boxShadow: "0 20px 45px rgba(15, 23, 42, 0.06)",
+            }}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "fit-content",
+                  padding: "7px 12px",
+                  borderRadius: "999px",
+                  background: "#ffffff",
+                  border: "1px solid rgba(148,163,184,0.18)",
+                  boxShadow: "0 10px 24px rgba(15,23,42,0.06)",
+                  fontSize: "11px",
+                  color: "#475569",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  fontWeight: 800,
+                }}
+              >
+                From Simple To Detailed
+              </div>
+              <div style={{ fontSize: isTablet ? "24px" : "28px", fontWeight: 800, color: "#0f172a", lineHeight: "1.15", letterSpacing: "-0.03em" }}>
+                Read this policy page in layers
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "56rem" }}>
+                You do not need the full policy console to understand what matters. Start with the short answer, take the first move, and only use the deeper proof when you want the technical reasoning behind it.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "12px",
+              }}
+            >
+              {policyTransitionGuide.steps.map((step) => (
+                <div
+                  key={step.label}
+                  style={{
+                    padding: "20px 20px 22px",
+                    borderRadius: "22px",
+                    background: "rgba(255,255,255,0.94)",
+                    border: "1px solid rgba(255,255,255,0.8)",
+                    display: "grid",
+                    gap: "10px",
+                    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.07)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "fit-content",
+                      minWidth: "44px",
+                      padding: "6px 10px",
+                      borderRadius: "999px",
+                      background: "rgba(249,115,22,0.12)",
+                      color: "#c2410c",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontWeight: 800,
+                      fontSize: "11px",
+                    }}
+                  >
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{step.title}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1fr) minmax(280px, 0.9fr)",
+                gap: "14px",
+                alignItems: "start",
+              }}
+            >
+              <div
+                style={{
+                  padding: isTablet ? "18px 18px" : "22px 22px",
+                  borderRadius: "22px",
+                  background: "rgba(255,255,255,0.94)",
+                  border: "1px solid rgba(255,255,255,0.8)",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 18px 36px rgba(15, 23, 42, 0.07)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  Translate The Analyst Terms
+                </div>
+                {policyTransitionGuide.keys.map((item) => (
+                  <details
+                    key={item.term}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: "14px",
+                      border: "1px solid rgba(226,232,240,0.95)",
+                      background: "rgba(248,250,252,0.92)",
+                    }}
+                  >
+                    <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>{item.term}</summary>
+                    <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.7" }}>{item.meaning}</div>
+                  </details>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  padding: isTablet ? "18px 18px" : "22px 22px",
+                  borderRadius: "22px",
+                  background:
+                    "radial-gradient(circle at top left, rgba(59,130,246,0.24) 0%, rgba(59,130,246,0) 36%), linear-gradient(145deg, #0f172a 0%, #111827 54%, #1e293b 100%)",
+                  border: "1px solid rgba(59, 130, 246, 0.22)",
+                  color: "#ffffff",
+                  display: "grid",
+                  gap: "12px",
+                  boxShadow: "0 22px 44px rgba(15, 23, 42, 0.24)",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  When You Want More Depth
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
+                  Use the deeper breakdown as supporting proof
+                </div>
+                <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
+                  The darker section below is where the page shows the analyst evidence behind the simpler policy story.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => scrollToPolicySection("policy_overview")}
+                    style={{
+                      ...actionButtonStyle(false),
+                      borderRadius: "999px",
+                      background: "#ffffff",
+                      color: "#0f172a",
+                      border: "none",
+                      boxShadow: "0 12px 26px rgba(15,23,42,0.25)",
+                    }}
+                  >
+                    Start With Policy Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollToPolicySection("annual_review")}
+                    style={{
+                      ...actionButtonStyle(false),
+                      borderRadius: "999px",
+                      background: "rgba(15,23,42,0.12)",
+                      color: "#ffffff",
+                      border: "1px solid rgba(255,255,255,0.25)",
+                    }}
+                  >
+                    Jump To Annual Review
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            ref={technicalAnalysisRef}
+            style={{
+              display: "grid",
+              gap: "10px",
+              padding: isTablet ? "20px 16px" : "24px 28px",
+              borderRadius: "28px",
+              background:
+                "radial-gradient(circle at top right, rgba(59,130,246,0.22) 0%, rgba(59,130,246,0) 34%), linear-gradient(145deg, #0f172a 0%, #111827 52%, #1e293b 100%)",
+              color: "#ffffff",
+              border: "1px solid rgba(59, 130, 246, 0.18)",
+              boxShadow: "0 26px 54px rgba(15, 23, 42, 0.26)",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Deeper Review Starts Here
+            </div>
+            <div style={{ fontSize: isTablet ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
+              Technical breakdown: protection confidence, charge drag, interpretation depth, annual review evidence, and deeper IUL analytics
+            </div>
+            <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
+              Everything below this point is the proof layer. It explains how trustworthy the read is, where charges and gaps show up, how the policy is performing, and what the evidence supports in more technical detail.
+            </div>
+          </section>
 
           <section
             ref={(node) => setSectionRef("policy_overview", node)}

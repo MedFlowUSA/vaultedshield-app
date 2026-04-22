@@ -18,6 +18,7 @@ import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligen
 import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
+import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
@@ -793,6 +794,7 @@ export default function DashboardPage({ onNavigate }) {
       emergencyAccessCommand,
       bundle: intelligenceBundle,
     });
+  const topDashboardPriority = householdPriorityEngine.priorities[0] || null;
   const assistantHouseholdMap = workflowAwareHouseholdContext.householdMap || householdMap;
   const assistantReviewDigest = workflowAwareHouseholdContext.reviewDigest || reviewDigest;
   const assistantQueueItems = workflowAwareHouseholdContext.activeQueueItems || activeQueueItems;
@@ -887,6 +889,46 @@ export default function DashboardPage({ onNavigate }) {
       }),
     [continuityPercent, continuityStatus, aiIntroModuleCards, totalIssues, totalAssets]
   );
+  const dashboardWelcomeGuide = useMemo(() => {
+    const plainSummary =
+      continuityPercent >= 75
+        ? "Your household already has a strong base. You can treat the deeper analysis here as optional support, not a wall of homework."
+        : continuityPercent >= 50
+          ? "You have a workable household picture, and a few focused fixes will make the rest of the platform feel much easier to trust."
+          : "You are still building the household picture, and that is okay. The goal is one good next step, not instant perfection.";
+
+    return {
+      title: "See the household clearly before you go deeper",
+      summary: plainSummary,
+      transition: topDashboardPriority
+        ? `You do not need to understand every score on this page. Start with ${topDashboardPriority.title.toLowerCase()}, then use the deeper sections only if you want the evidence and cross-module detail behind that recommendation.`
+        : "You do not need to understand every score on this page. This intro is here to tell you what is solid, what needs attention, and where to start without reading the whole dashboard.",
+      quickFacts: [
+        `${continuityPercent}% of the core continuity picture is currently visible.`,
+        `${totalAssets || 0} household asset${totalAssets === 1 ? "" : "s"} and ${totalIssues || 0} active issue${totalIssues === 1 ? "" : "s"} are shaping this read.`,
+        topDashboardPriority ? `Best next move: ${topDashboardPriority.nextAction}.` : "Best next move: open the priority review queue.",
+      ],
+      cards: [
+        {
+          label: "What This Means",
+          value: continuityStatus.label,
+          detail: continuityStatus.explanation,
+        },
+        {
+          label: "Where To Start",
+          value: topDashboardPriority?.title || "Top Priorities",
+          detail:
+            topDashboardPriority?.blocker ||
+            "The queue highlights the one or two things most worth fixing before you spend energy on the deeper analysis.",
+        },
+        {
+          label: "What Can Wait",
+          value: "Historical detail and cross-module evidence",
+          detail: "The technical sections stay here when you want them, but they should support decisions rather than overwhelm the first read.",
+        },
+      ],
+    };
+  }, [continuityPercent, continuityStatus, topDashboardPriority, totalAssets, totalIssues]);
   const showLoadingShell =
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
@@ -895,13 +937,13 @@ export default function DashboardPage({ onNavigate }) {
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
   const householdAssistantSectionLabels = useMemo(
     () => ({
-      "household-priority": "Priority Review Queue",
-      "household-review-digest": "Household Review Digest",
-      "household-risk-map": "Risk And Continuity Map",
-      "property-operating-graph": "Property Operating Graph",
-      "action-required": "Action Required",
-      "insurance-intelligence": "Insurance Intelligence",
-      "module-overview": "Module Overview",
+      "household-priority": "Top Priorities",
+      "household-review-digest": "Recent Progress",
+      "household-risk-map": "Household Readiness Map",
+      "property-operating-graph": "Property Connections",
+      "action-required": "What Needs Attention Now",
+      "insurance-intelligence": "Insurance Review",
+      "module-overview": "Platform Overview",
     }),
     []
   );
@@ -1669,6 +1711,25 @@ export default function DashboardPage({ onNavigate }) {
           </div>
         </header>
 
+        <PlainLanguageBridge
+          eyebrow="Start Here"
+          title={dashboardWelcomeGuide.title}
+        summary={dashboardWelcomeGuide.summary}
+        transition={dashboardWelcomeGuide.transition}
+        quickFacts={dashboardWelcomeGuide.quickFacts}
+        cards={dashboardWelcomeGuide.cards}
+        primaryActionLabel={topDashboardPriority?.nextAction || "Show My First Step"}
+          onPrimaryAction={() =>
+            topDashboardPriority?.route
+              ? onNavigate?.(topDashboardPriority.route)
+              : scrollToDashboardSection("household-priority")
+          }
+          secondaryActionLabel="See Why This Household Reads This Way"
+          onSecondaryAction={() => scrollToDashboardSection("household-risk-map")}
+          compact={isTablet}
+          showAnalysisDivider={false}
+        />
+
         <section
           style={{
             padding: isMobile ? "24px 18px" : isTablet ? "30px 26px" : "36px 40px",
@@ -1835,7 +1896,7 @@ export default function DashboardPage({ onNavigate }) {
               ref={(node) => setSectionRef("household-priority", node)}
             >
               <div style={{ display: "grid", gap: "8px" }}>
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>Top Priorities</div>
                 <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
               </div>
@@ -2114,19 +2175,20 @@ export default function DashboardPage({ onNavigate }) {
             gap: "18px",
           }}
         >
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "20px", fontWeight: 700 }}>Property Stack Operating Graph</div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Property Stack Drill-In</div>
             <div style={{ color: "#94a3b8", lineHeight: "1.8", maxWidth: "900px" }}>
-              See how many property records are fully connected across financing, protection, documents, and portal continuity before you drill into a single module.
+              The dashboard hero already carries the household property stack snapshot. Use the dedicated property and reporting surfaces when you want the full operating graph instead of seeing the same metrics twice here.
             </div>
           </div>
-
-          <OperatingGraphSummaryCards
-            cards={operatingGraphSummary.cards}
-            highlights={operatingGraphSummary.highlights.slice(0, 4)}
-            onNavigate={onNavigate}
-            theme="dark"
-          />
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => onNavigate?.("/property")} style={buttonStyle(true)}>
+              Open Property Hub
+            </button>
+            <button type="button" onClick={() => onNavigate?.("/reports")} style={buttonStyle(false)}>
+              Open Household Report
+            </button>
+          </div>
         </section>
 
         {showHouseholdReport ? (
@@ -2199,7 +2261,7 @@ export default function DashboardPage({ onNavigate }) {
         >
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Review Digest</div>
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>Recent Progress</div>
               <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
                 {assistantReviewDigest.summary}
               </div>
@@ -2271,7 +2333,7 @@ export default function DashboardPage({ onNavigate }) {
         >
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Risk and Continuity Map</div>
+              <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Readiness Map</div>
               <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
                 {assistantHouseholdMap.bottom_line}
               </div>
@@ -2386,7 +2448,7 @@ export default function DashboardPage({ onNavigate }) {
             >
               <div style={{ display: "grid", gap: "12px", marginBottom: "18px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Command Center</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>What Needs Attention First</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {[
                       { label: "Active", value: commandCenter.metrics.active },
@@ -2483,7 +2545,7 @@ export default function DashboardPage({ onNavigate }) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Housing Continuity</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Home And Financing</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {normalizeMetricList(housingCommandCenter.metrics).map((metric) => (
                       <span
@@ -2669,156 +2731,53 @@ export default function DashboardPage({ onNavigate }) {
                   )}
                 </div>
               </div>
-              <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Priority Review Queue</div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Review Workspace Handoff</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {[
                       { label: "Active", value: assistantQueueItems.length },
                       { label: "Changed", value: changedSinceReviewItems.length },
                       { label: "Pending Docs", value: pendingDocumentsCount },
                       { label: "Follow Up", value: followUpCount },
                       { label: "Reviewed", value: resolvedQueueItems.length },
-                  ].map((metric) => (
-                    <span
-                      key={metric.label}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: "999px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        color: "#cbd5e1",
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.05)",
-                      }}
-                    >
-                      {metric.label}: {metric.value}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginTop: "10px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-                These are the most practical household review items currently limiting stronger continuity and cross-asset clarity.
-              </div>
-              <div style={{ marginTop: "16px", display: "grid", gap: "12px" }}>
-                {(assistantQueueItems.length > 0 ? assistantQueueItems : queueItems).map((item, index) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "16px",
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                        Priority {index + 1}
-                      </div>
-                      <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.label}</div>
+                    ].map((metric) => (
                       <span
+                        key={metric.label}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
-                          padding: "5px 9px",
+                          padding: "6px 10px",
                           borderRadius: "999px",
-                          fontSize: "11px",
+                          fontSize: "12px",
                           fontWeight: 700,
-                          color: item.workflow_status === "reviewed" ? "#bbf7d0" : item.workflow_status === "pending_documents" ? "#fde68a" : item.workflow_status === "follow_up" ? "#fdba74" : "#cbd5e1",
-                          background: item.workflow_status === "reviewed" ? "rgba(34,197,94,0.12)" : item.workflow_status === "pending_documents" ? "rgba(245,158,11,0.12)" : item.workflow_status === "follow_up" ? "rgba(249,115,22,0.12)" : "rgba(148,163,184,0.12)",
+                          color: "#cbd5e1",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.05)",
                         }}
                       >
-                        {item.workflow_label}
+                        {metric.label}: {metric.value}
                       </span>
-                      {item.changed_since_review ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "5px 9px",
-                            borderRadius: "999px",
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            color: "#93c5fd",
-                            background: "rgba(59,130,246,0.14)",
-                          }}
-                        >
-                          {item.changed_since_review_label}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div style={{ marginTop: "8px", fontSize: "14px", lineHeight: "1.7", color: "#cbd5e1" }}>
-                      {item.summary}
-                    </div>
-                    <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "5px 9px",
-                          borderRadius: "999px",
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          color: item.workflow_assignee_key ? "#93c5fd" : "#94a3b8",
-                          background: item.workflow_assignee_key ? "rgba(59,130,246,0.14)" : "rgba(148,163,184,0.12)",
-                        }}
-                      >
-                        Owner: {item.workflow_assignee_label}
-                      </span>
-                      <select
-                        value={item.workflow_assignee_key || ""}
-                        onChange={(event) => handleReviewAssignmentUpdate(item.id, event.target.value)}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: "10px",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(15,23,42,0.75)",
-                          color: "#e2e8f0",
-                        }}
-                      >
-                        {assigneeChoices.map((option) => (
-                          <option key={option.key || "unassigned"} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {item.changed_since_review && item.change_signal ? (
-                      <div style={{ marginTop: "8px", fontSize: "13px", lineHeight: "1.6", color: "#93c5fd" }}>
-                        {item.change_signal}
-                      </div>
-                    ) : null}
-                    <div style={{ marginTop: "12px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      <button
-                        onClick={() => item.route && onNavigate?.(item.route)}
-                        style={buttonStyle(false)}
-                      >
-                        {item.action_label || "Open review"}
-                      </button>
-                      <button
-                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
-                        style={buttonStyle(false)}
-                      >
-                        Pending Docs
-                      </button>
-                      <button
-                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
-                        style={buttonStyle(false)}
-                      >
-                        Follow Up
-                      </button>
-                      <button
-                        onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
-                        style={buttonStyle(false)}
-                      >
-                        {item.changed_since_review ? "Review Again" : "Mark Reviewed"}
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
+                  The main priority queue already appears near the top of the dashboard. Shared cross-household follow-up is routed to Review Workspace here so the same queue is not repeated twice on this page.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => onNavigate?.("/review-workspace")} style={buttonStyle(true)}>
+                    Open Review Workspace
+                  </button>
+                  {(assistantQueueItems[0] || queueItems[0])?.route ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.((assistantQueueItems[0] || queueItems[0]).route)}
+                      style={buttonStyle(false)}
+                    >
+                      Open Top Review Item
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {resolvedQueueItems.length > 0 ? (
                 <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -2904,12 +2863,12 @@ export default function DashboardPage({ onNavigate }) {
             border: "1px solid rgba(255,255,255,0.05)",
           }}
         >
-          <div style={{ fontSize: "20px", fontWeight: 700 }}>Action Required</div>
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>What Needs Attention Now</div>
           <div style={{ marginTop: "10px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
             {householdState.error || loadError
               ? "Platform visibility is limited until household data loads cleanly."
               : topActions.length > 0
-                ? "The system is flagging a small number of concrete issues that block stronger continuity and comparison quality."
+                ? "A small number of concrete issues are still blocking a stronger household read and cleaner comparisons."
                 : "No major action items are currently active."}
           </div>
           <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
@@ -2931,7 +2890,7 @@ export default function DashboardPage({ onNavigate }) {
             border: "1px solid rgba(255,255,255,0.05)",
           }}
         >
-          <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance Intelligence</div>
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance Review</div>
           <div
             style={{
               marginTop: "18px",
@@ -2974,7 +2933,7 @@ export default function DashboardPage({ onNavigate }) {
             border: "1px solid rgba(255,255,255,0.05)",
           }}
         >
-          <div style={{ fontSize: "20px", fontWeight: 700 }}>Module Overview</div>
+          <div style={{ fontSize: "20px", fontWeight: 700 }}>Platform Overview</div>
           {isMobile ? (
             <div style={{ marginTop: "18px", display: "grid", gap: "12px" }}>
               {moduleRows.map((row) => {
@@ -3010,7 +2969,7 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                     <div style={{ paddingTop: "2px", color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{row.insight}</div>
                     <div style={{ color: "#64748b", lineHeight: "1.6", fontSize: "13px" }}>
-                      <span style={{ color: "#cbd5e1", fontWeight: 600 }}>Watchpoint:</span> {row.watchpoint}
+                      <span style={{ color: "#cbd5e1", fontWeight: 600 }}>What to watch:</span> {row.watchpoint}
                     </div>
                   </div>
                 );
@@ -3024,7 +2983,7 @@ export default function DashboardPage({ onNavigate }) {
                     <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Module</th>
                     <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Status</th>
                     <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Current Read</th>
-                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>Watchpoint</th>
+                    <th style={{ padding: "0 0 14px 0", fontWeight: 600 }}>What to watch</th>
                   </tr>
                 </thead>
                 <tbody>
