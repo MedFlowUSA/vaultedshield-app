@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildHouseholdReviewReport,
 } from "../lib/domain/platformIntelligence";
-import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import HouseholdAIChat from "../components/household/HouseholdAIChat";
-import { ActionSignalCard, FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
@@ -18,7 +16,6 @@ import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligen
 import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
@@ -40,6 +37,7 @@ import {
   summarizeEstateModule,
   summarizePortalModule,
   summarizeVaultModule,
+  summarizeWarrantyModule,
 } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   buildDashboardCommandCenter,
@@ -50,29 +48,19 @@ import {
   buildHouseholdPriorityEngine,
   buildHouseholdScorecard,
 } from "../lib/domain/platformIntelligence/householdOperatingSystem";
-import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
   return {
     padding: "10px 14px",
     borderRadius: "12px",
-    border: primary ? "none" : "1px solid rgba(255,255,255,0.08)",
-    background: primary ? "#f8fafc" : "rgba(255,255,255,0.04)",
-    color: primary ? "#020617" : "#e2e8f0",
+    border: primary ? "none" : "1px solid rgba(203, 213, 225, 0.92)",
+    background: primary ? "#2563eb" : "#ffffff",
+    color: primary ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 600,
     fontSize: "13px",
-  };
-}
-
-function reportButtonStyle(active = false, primary = false) {
-  if (primary) return buttonStyle(true);
-  return {
-    ...buttonStyle(false),
-    border: active ? "1px solid rgba(147,197,253,0.45)" : "1px solid rgba(255,255,255,0.08)",
-    background: active ? "rgba(59,130,246,0.16)" : "rgba(255,255,255,0.04)",
-    color: active ? "#dbeafe" : "#e2e8f0",
+    boxShadow: primary ? "0 14px 28px rgba(37, 99, 235, 0.18)" : "0 8px 20px rgba(15, 23, 42, 0.06)",
   };
 }
 
@@ -234,14 +222,14 @@ function getModuleStatus(count) {
 }
 
 function getStatusColors(status) {
-  if (status === "Strong") return { color: "#bbf7d0", background: "rgba(34,197,94,0.12)" };
-  if (status === "Moderate") return { color: "#fde68a", background: "rgba(245,158,11,0.12)" };
+  if (status === "Strong") return { color: "#15803d", background: "rgba(34,197,94,0.12)" };
+  if (status === "Moderate") return { color: "#b45309", background: "rgba(245,158,11,0.12)" };
   if (status === "Weak") return { color: "#fdba74", background: "rgba(249,115,22,0.12)" };
-  if (status === "Ready") return { color: "#bbf7d0", background: "rgba(34,197,94,0.12)" };
-  if (status === "Building") return { color: "#fde68a", background: "rgba(245,158,11,0.12)" };
-  if (status === "Needs Review") return { color: "#fca5a5", background: "rgba(239,68,68,0.12)" };
-  if (status === "At Risk") return { color: "#fca5a5", background: "rgba(239,68,68,0.12)" };
-  return { color: "#cbd5e1", background: "rgba(148,163,184,0.12)" };
+  if (status === "Ready") return { color: "#15803d", background: "rgba(34,197,94,0.12)" };
+  if (status === "Building") return { color: "#b45309", background: "rgba(245,158,11,0.12)" };
+  if (status === "Needs Review") return { color: "#b91c1c", background: "rgba(239,68,68,0.12)" };
+  if (status === "At Risk") return { color: "#b91c1c", background: "rgba(239,68,68,0.12)" };
+  return { color: "#475569", background: "rgba(148,163,184,0.12)" };
 }
 
 function getReadableModuleStatus(scoreLikeValue, goodThreshold = 3, moderateThreshold = 1) {
@@ -584,6 +572,305 @@ function HouseholdReportView({ report, onPrint, isCompact = false }) {
   );
 }
 
+function fasciaButtonStyle(primary = false) {
+  return {
+    border: primary ? "none" : "1px solid rgba(203, 213, 225, 0.92)",
+    background: primary ? "#2563eb" : "#ffffff",
+    color: primary ? "#ffffff" : "#0f172a",
+    borderRadius: "999px",
+    padding: "11px 16px",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+    boxShadow: primary ? "0 14px 28px rgba(37, 99, 235, 0.18)" : "0 8px 20px rgba(15, 23, 42, 0.06)",
+  };
+}
+
+function dashboardSurfaceCardStyle(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.92)",
+    boxShadow: "0 12px 32px rgba(15, 23, 42, 0.06)",
+    ...extra,
+  };
+}
+
+function DashboardCard({ children, style = {}, ...rest }) {
+  return (
+    <div style={dashboardSurfaceCardStyle(style)} {...rest}>
+      {children}
+    </div>
+  );
+}
+
+function getDashboardTone(score = 0) {
+  if (score >= 82) return "good";
+  if (score >= 64) return "info";
+  if (score >= 50) return "warning";
+  return "alert";
+}
+
+function getDashboardPalette(tone = "info") {
+  if (tone === "good") {
+    return {
+      accent: "#22c55e",
+      soft: "rgba(34, 197, 94, 0.14)",
+      text: "#166534",
+    };
+  }
+  if (tone === "warning") {
+    return {
+      accent: "#f59e0b",
+      soft: "rgba(245, 158, 11, 0.14)",
+      text: "#92400e",
+    };
+  }
+  if (tone === "alert") {
+    return {
+      accent: "#ef4444",
+      soft: "rgba(239, 68, 68, 0.14)",
+      text: "#991b1b",
+    };
+  }
+  return {
+    accent: "#3b82f6",
+    soft: "rgba(59, 130, 246, 0.14)",
+    text: "#1d4ed8",
+  };
+}
+
+function normalizeDashboardScore(value, fallback = 0) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return fallback;
+  return Math.max(0, Math.min(100, Math.round(Number(value))));
+}
+
+function scoreFromReadinessStatus(status = "", fallback = 46) {
+  const normalized = String(status || "").toLowerCase();
+  if (["excellent", "strong", "healthy", "ready"].includes(normalized)) return 88;
+  if (["good", "moderate", "building", "usable"].includes(normalized)) return 72;
+  if (["needs review", "watch", "starter"].includes(normalized)) return 56;
+  if (["needs attention", "at risk", "weak"].includes(normalized)) return 42;
+  return fallback;
+}
+
+function getFriendlyRingStatus(score, { count = 1, allowExcellent = true, emptyLabel = "Missing Items" } = {}) {
+  if ((count || 0) === 0) return emptyLabel;
+  if (allowExcellent && score >= 90) return "Excellent";
+  if (score >= 80) return "Strong";
+  if (score >= 65) return "Good";
+  if (score >= 50) return "Needs Review";
+  return "Needs Attention";
+}
+
+function getPriorityActionLabel(item = null) {
+  const route = String(item?.route || "").toLowerCase();
+  const action = String(item?.nextAction || item?.label || "").toLowerCase();
+  if (action.includes("upload") || route.includes("upload")) return "Upload";
+  if (action.includes("connect") || route.includes("portal")) return "Connect";
+  if (action.includes("update") || route.includes("property")) return "Update";
+  if (action.includes("report") || route.includes("reports")) return "Open";
+  return "Review Now";
+}
+
+function getCategoryBadge(label = "") {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("insurance")) return "IN";
+  if (normalized.includes("property")) return "PR";
+  if (normalized.includes("document")) return "DC";
+  if (normalized.includes("access")) return "AC";
+  if (normalized.includes("retirement")) return "RT";
+  if (normalized.includes("warranty")) return "WR";
+  return "VS";
+}
+
+function getGreetingLabel() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function DashboardGlyph({ kind = "spark", size = 18, stroke = 1.8 }) {
+  const shared = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: stroke,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
+
+  if (kind === "sun") {
+    return (
+      <svg {...shared}>
+        <circle cx="12" cy="12" r="4.5" />
+        <path d="M12 2.5v2.5M12 19v2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2.5 12H5M19 12h2.5M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+      </svg>
+    );
+  }
+
+  if (kind === "bell") {
+    return (
+      <svg {...shared}>
+        <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 5.3 2.1 6.5 2.1 6.5H4.4s2.1-1.2 2.1-6.5Z" />
+        <path d="M10 18a2.3 2.3 0 0 0 4 0" />
+      </svg>
+    );
+  }
+
+  if (kind === "help") {
+    return (
+      <svg {...shared}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.6 9.2a2.6 2.6 0 1 1 4.4 2c-.8.7-1.6 1.1-1.6 2.3" />
+        <path d="M12 16.8h.01" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...shared}>
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" />
+    </svg>
+  );
+}
+
+function HeaderUtilityButton({ kind, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      style={{
+        width: "42px",
+        height: "42px",
+        borderRadius: "999px",
+        border: "1px solid rgba(203, 213, 225, 0.92)",
+        background: "#ffffff",
+        color: "#475569",
+        display: "grid",
+        placeItems: "center",
+        cursor: "pointer",
+        boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+      }}
+    >
+      <DashboardGlyph kind={kind} size={18} />
+    </button>
+  );
+}
+
+function ScoreRing({ value = 0, size = "md", tone = "info", iconLabel = "", subtitle = "" }) {
+  const palette = getDashboardPalette(tone);
+  const normalizedScore = normalizeDashboardScore(value);
+  const sizeMap = {
+    lg: { diameter: 148, stroke: 12, number: "42px", badge: "34px", subtitle: "12px" },
+    md: { diameter: 96, stroke: 9, number: "28px", badge: "28px", subtitle: "11px" },
+    sm: { diameter: 72, stroke: 7, number: "20px", badge: "24px", subtitle: "10px" },
+  };
+  const ring = sizeMap[size] || sizeMap.md;
+
+  return (
+    <div
+      style={{
+        width: `${ring.diameter}px`,
+        height: `${ring.diameter}px`,
+        borderRadius: "999px",
+        background: `conic-gradient(${palette.accent} ${normalizedScore * 3.6}deg, #e2e8f0 ${normalizedScore * 3.6}deg 360deg)`,
+        display: "grid",
+        placeItems: "center",
+        padding: `${ring.stroke}px`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          borderRadius: "999px",
+          background: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          textAlign: "center",
+          gap: "2px",
+          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        {iconLabel ? (
+          <div
+            style={{
+              width: ring.badge,
+              height: ring.badge,
+              borderRadius: "999px",
+              display: "grid",
+              placeItems: "center",
+              background: palette.soft,
+              color: palette.text,
+              fontSize: size === "lg" ? "11px" : "10px",
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {iconLabel}
+          </div>
+        ) : null}
+        <div style={{ fontSize: ring.number, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>
+          {normalizedScore}
+        </div>
+        <div style={{ fontSize: ring.subtitle, color: "#64748b", fontWeight: 700 }}>{subtitle || "of 100"}</div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardRingCard({ label, score, statusLabel, helper, iconLabel, tone = "info", onClick }) {
+  const palette = getDashboardPalette(tone);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...dashboardSurfaceCardStyle({
+          padding: "22px 18px 20px",
+          display: "grid",
+          gap: "12px",
+          textAlign: "center",
+          cursor: onClick ? "pointer" : "default",
+          minWidth: 0,
+          minHeight: "198px",
+          alignContent: "start",
+        }),
+        border: `1px solid rgba(226, 232, 240, 0.9)`,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <ScoreRing value={score} size="md" tone={tone} iconLabel={iconLabel} subtitle="%" />
+      </div>
+      <div style={{ display: "grid", gap: "5px", justifyItems: "center", textAlign: "center" }}>
+        <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{label}</div>
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: "999px",
+            background: palette.soft,
+            color: palette.text,
+            fontSize: "12px",
+            fontWeight: 800,
+          }}
+        >
+          {statusLabel}
+        </div>
+        <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: "1.45" }}>{helper}</div>
+      </div>
+    </button>
+  );
+}
+
 export default function DashboardPage({ onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
   const { isDemoMode, startDemo } = useDemoMode();
@@ -633,10 +920,6 @@ export default function DashboardPage({ onNavigate }) {
     () => intelligenceBundle?.propertyStackSummary || {},
     [intelligenceBundle?.propertyStackSummary]
   );
-  const operatingGraphSummary = useMemo(
-    () => buildPropertyOperatingGraphSummary(intelligenceBundle || {}),
-    [intelligenceBundle]
-  );
   const continuityPercent = Math.max(
     0,
     Math.min(
@@ -650,9 +933,6 @@ export default function DashboardPage({ onNavigate }) {
     )
   );
   const continuityStatus = getContinuityStatus(continuityPercent);
-  const deathBenefitValues = savedPolicyRows
-    .map((policy) => parseDisplayNumber(policy.death_benefit))
-    .filter((value) => value !== null);
   const coiValues = savedPolicyRows
     .map((policy) => parseDisplayNumber(policy.total_coi))
     .filter((value) => value !== null);
@@ -666,7 +946,6 @@ export default function DashboardPage({ onNavigate }) {
   const missingStatementCount = savedPolicyRows.filter((policy) => !policy.latest_statement_date).length;
   const totalIssues =
     missingFieldPolicies.length + weakPolicyRows.length + missingStatementCount;
-  const totalProtectionCoverage = deathBenefitValues.reduce((sum, value) => sum + value, 0);
   const totalCoi = coiValues.reduce((sum, value) => sum + value, 0);
   const totalVisibleCharges = visibleChargeValues.reduce((sum, value) => sum + value, 0);
   const highestCostPolicy = savedPolicyRows.reduce((best, policy) => {
@@ -794,7 +1073,6 @@ export default function DashboardPage({ onNavigate }) {
       emergencyAccessCommand,
       bundle: intelligenceBundle,
     });
-  const topDashboardPriority = householdPriorityEngine.priorities[0] || null;
   const assistantHouseholdMap = workflowAwareHouseholdContext.householdMap || householdMap;
   const assistantReviewDigest = workflowAwareHouseholdContext.reviewDigest || reviewDigest;
   const assistantQueueItems = workflowAwareHouseholdContext.activeQueueItems || activeQueueItems;
@@ -889,206 +1167,244 @@ export default function DashboardPage({ onNavigate }) {
       }),
     [continuityPercent, continuityStatus, aiIntroModuleCards, totalIssues, totalAssets]
   );
-  const dashboardWelcomeGuide = useMemo(() => {
-    const plainSummary =
-      continuityPercent >= 75
-        ? "Your household already has a strong base. You can treat the deeper analysis here as optional support, not a wall of homework."
-        : continuityPercent >= 50
-          ? "You have a workable household picture, and a few focused fixes will make the rest of the platform feel much easier to trust."
-          : "You are still building the household picture, and that is okay. The goal is one good next step, not instant perfection.";
+  const warrantySummary = useMemo(
+    () => summarizeWarrantyModule(intelligenceBundle?.warranties || []),
+    [intelligenceBundle?.warranties]
+  );
+  const householdName =
+    householdState.household?.household_name ||
+    intelligenceBundle?.household?.household_name ||
+    "Working Household";
+  const overallReadinessScore = normalizeDashboardScore(
+    householdScorecard.overallScore ?? continuityPercent,
+    continuityPercent
+  );
+  const readinessLift = Math.min(8, resolvedQueueItems.length * 4);
+  const readinessTone = getDashboardTone(overallReadinessScore);
+  const heroHeadline =
+    overallReadinessScore >= 82
+      ? "Good progress!"
+      : overallReadinessScore >= 64
+        ? "Steady progress."
+        : "Start with one clear next step.";
+  const heroSummary =
+    householdScorecard.summary ||
+    continuityStatus.explanation ||
+    "VaultedShield is still building the household picture from the records it can see.";
+  const strongestDimension = householdScorecard.strongestDimension || null;
+  const weakestDimension = householdScorecard.weakestDimension || null;
+  const heroSupportLine =
+    strongestDimension && weakestDimension
+      ? `${strongestDimension.label} is currently strongest, while ${weakestDimension.label.toLowerCase()} needs the most support.`
+      : continuityStatus.explanation;
+  const dashboardCategoryRings = useMemo(() => {
+    const protectionDimension = householdScorecard.dimensions.find((item) => item.key === "protection") || null;
+    const propertyDimension = householdScorecard.dimensions.find((item) => item.key === "property") || null;
+    const documentationDimension = householdScorecard.dimensions.find((item) => item.key === "documentation") || null;
+    const continuityDimension = householdScorecard.dimensions.find((item) => item.key === "continuity") || null;
+    const retirementCount = Number(assetCounts.retirement || 0);
+    const retirementScore = retirementCount > 0 ? Math.min(92, 50 + retirementCount * 12) : 42;
+    const warrantyCount = Number(assetCounts.warranty || intelligenceBundle?.warranties?.length || 0);
+    const warrantyScore = warrantyCount > 0
+      ? scoreFromReadinessStatus(warrantySummary.status, 58)
+      : 40;
 
-    return {
-      title: "See the household clearly before you go deeper",
-      summary: plainSummary,
-      transition: topDashboardPriority
-        ? `You do not need to understand every score on this page. Start with ${topDashboardPriority.title.toLowerCase()}, then use the deeper sections only if you want the evidence and cross-module detail behind that recommendation.`
-        : "You do not need to understand every score on this page. This intro is here to tell you what is solid, what needs attention, and where to start without reading the whole dashboard.",
-      quickFacts: [
-        `${continuityPercent}% of the core continuity picture is currently visible.`,
-        `${totalAssets || 0} household asset${totalAssets === 1 ? "" : "s"} and ${totalIssues || 0} active issue${totalIssues === 1 ? "" : "s"} are shaping this read.`,
-        topDashboardPriority ? `Best next move: ${topDashboardPriority.nextAction}.` : "Best next move: open the priority review queue.",
-      ],
-      cards: [
-        {
-          label: "What This Means",
-          value: continuityStatus.label,
-          detail: continuityStatus.explanation,
-        },
-        {
-          label: "Where To Start",
-          value: topDashboardPriority?.title || "Top Priorities",
-          detail:
-            topDashboardPriority?.blocker ||
-            "The queue highlights the one or two things most worth fixing before you spend energy on the deeper analysis.",
-        },
-        {
-          label: "What Can Wait",
-          value: "Historical detail and cross-module evidence",
-          detail: "The technical sections stay here when you want them, but they should support decisions rather than overwhelm the first read.",
-        },
-      ],
-    };
-  }, [continuityPercent, continuityStatus, topDashboardPriority, totalAssets, totalIssues]);
-  const dashboardFasciaCards = useMemo(
-    () => [
+    return [
       {
-        label: "Household Status",
-        value: continuityStatus.label,
-        detail:
-          continuityPercent >= 75
-            ? "The household has a strong readable base. Deeper detail is available, but the first read is already useful."
-            : continuityPercent >= 50
-              ? "The household picture is usable. A few focused improvements will make the read easier to trust."
-              : "The household picture is still forming. Start with one clear next step instead of trying to finish everything.",
-        tone: continuityPercent >= 75 ? "good" : continuityPercent >= 50 ? "warning" : "info",
+        key: "insurance",
+        label: "Insurance",
+        score: normalizeDashboardScore(
+          protectionDimension?.score,
+          scoreFromReadinessStatus(savedPolicyCount > 0 ? (weakPolicyRows.length > 0 || missingStatementCount > 0 ? "needs review" : "strong") : "needs review", 44)
+        ),
+        statusLabel: getFriendlyRingStatus(
+          normalizeDashboardScore(
+            protectionDimension?.score,
+            scoreFromReadinessStatus(savedPolicyCount > 0 ? (weakPolicyRows.length > 0 || missingStatementCount > 0 ? "needs review" : "strong") : "needs review", 44)
+          ),
+          { count: savedPolicyCount, emptyLabel: "Missing Items" }
+        ),
+        helper:
+          savedPolicyCount > 0
+            ? `${savedPolicyCount} polic${savedPolicyCount === 1 ? "y" : "ies"} visible`
+            : "Add the first policy",
+        iconLabel: getCategoryBadge("insurance"),
+        tone: getDashboardTone(
+          normalizeDashboardScore(
+            protectionDimension?.score,
+            scoreFromReadinessStatus(savedPolicyCount > 0 ? (weakPolicyRows.length > 0 || missingStatementCount > 0 ? "needs review" : "strong") : "needs review", 44)
+          )
+        ),
+        route: "/insurance",
       },
       {
-        label: "Needs Attention",
-        value: activeQueueItems.length > 0 ? `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}` : "Nothing urgent",
-        detail:
-          activeQueueItems.length > 0
-            ? "These are the items still shaping household readiness. Start with the first one, not the whole list."
-            : "No active review work is standing out right now. Completed progress is still remembered underneath.",
-        tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
-        actionLabel: "Open Review Workspace",
-        onAction: () => onNavigate?.("/review-workspace"),
-      },
-      {
-        label: "Recently Improved",
-        value:
-          workflowResolutionMemory.recentlyResolved.length > 0
-            ? `${workflowResolutionMemory.recentlyResolved.length} recent win${workflowResolutionMemory.recentlyResolved.length === 1 ? "" : "s"}`
-            : `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}`,
-        detail:
-          workflowResolutionMemory.recentlyResolved[0] ||
-          "Reviewed work stays remembered so the app can show progress, not just open issues.",
-        tone: "good",
-      },
-      {
-        label: "Best Next Step",
-        value: topDashboardPriority?.nextAction || "Add or review one key record",
-        detail:
-          topDashboardPriority?.blocker ||
-          "This is the fastest way to make the household read clearer without opening every technical section.",
-        tone: "info",
-        actionLabel: topDashboardPriority?.route ? "Start Here" : "Open Priorities",
-        onAction: () =>
-          topDashboardPriority?.route
-            ? onNavigate?.(topDashboardPriority.route)
-            : onNavigate?.("/review-workspace"),
-      },
-    ],
-    [
-      activeQueueItems.length,
-      continuityPercent,
-      continuityStatus.label,
-      onNavigate,
-      resolvedQueueItems.length,
-      topDashboardPriority,
-      workflowResolutionMemory.recentlyResolved,
-    ]
-  );
-  const dashboardActionTiles = useMemo(
-    () => [
-      {
-        key: "review-policies",
-        kicker: "Insurance",
-        title: "Review Policies",
-        detail:
-          savedPolicyCount === 0
-            ? "Start the insurance lane with one readable policy so the household picture has real protection evidence."
-            : weakPolicyRows.length > 0 || missingStatementCount > 0
-              ? "Policies are visible, but some still need stronger statements or charge support before the read feels settled."
-              : "Policy review is in a strong place and ready for deeper comparison when you want it.",
-        metric: `${savedPolicyCount} polic${savedPolicyCount === 1 ? "y" : "ies"}`,
-        tone: savedPolicyCount === 0 ? "info" : weakPolicyRows.length > 0 || missingStatementCount > 0 ? "warning" : "good",
-        statusLabel: savedPolicyCount === 0 ? "Start Here" : weakPolicyRows.length > 0 || missingStatementCount > 0 ? "Needs Review" : "Looks Strong",
-        actionLabel: savedPolicyCount === 0 ? "Upload Policy" : "Open Insurance",
-        onAction: () => onNavigate?.(savedPolicyCount === 0 ? "/insurance/life/upload" : "/insurance"),
-      },
-      {
-        key: "review-attention",
-        kicker: "Workspace",
-        title: "Review What Needs Attention",
-        detail:
-          activeQueueItems.length > 0
-            ? "Open the guided review lane and work the most important household items first instead of reading every signal."
-            : "The active queue is quiet right now, so this lane is mostly about confirming progress and keeping momentum.",
-        metric: `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}`,
-        tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
-        statusLabel: activeQueueItems.length > 0 ? "Action Recommended" : "Calm Right Now",
-        actionLabel: "Open Review Workspace",
-        onAction: () => onNavigate?.("/review-workspace"),
-      },
-      {
-        key: "missing-information",
-        kicker: "Documents",
-        title: "Add Missing Information",
-        detail:
-          pendingDocumentsCount > 0
-            ? "Some household review items are waiting on documents, which means a few reads are only partially supported."
-            : "Document coverage is in a workable place, and new uploads will deepen the stronger reads rather than rescue missing ones.",
-        metric: `${pendingDocumentsCount} pending document${pendingDocumentsCount === 1 ? "" : "s"}`,
-        tone: pendingDocumentsCount > 0 ? "warning" : "good",
-        statusLabel: pendingDocumentsCount > 0 ? "Missing Support" : "Well Supported",
-        actionLabel: "Open Upload Center",
-        onAction: () => onNavigate?.("/upload-center"),
-      },
-      {
-        key: "property-stack",
-        kicker: "Property",
-        title: "Check Property Stack",
-        detail:
+        key: "property",
+        label: "Property",
+        score: normalizeDashboardScore(
+          propertyDimension?.score,
+          scoreFromReadinessStatus(propertySummary.propertyCount > 0 ? ((propertySummary.propertiesWithValuationCount || 0) > 0 ? "good" : "needs review") : "needs review", 46)
+        ),
+        statusLabel: getFriendlyRingStatus(
+          normalizeDashboardScore(
+            propertyDimension?.score,
+            scoreFromReadinessStatus(propertySummary.propertyCount > 0 ? ((propertySummary.propertiesWithValuationCount || 0) > 0 ? "good" : "needs review") : "needs review", 46)
+          ),
+          { count: propertySummary.propertyCount || 0, emptyLabel: "Missing Items" }
+        ),
+        helper:
           (propertySummary.propertyCount || 0) > 0
-            ? "Home, mortgage, and homeowners records can be reviewed together here instead of as separate fragments."
-            : "Add a property to anchor the home side of the household picture and make financing/protection easier to understand.",
-        metric: `${propertySummary.propertyCount || 0} propert${propertySummary.propertyCount === 1 ? "y" : "ies"}`,
-        tone: (propertySummary.propertyCount || 0) > 0 ? "info" : "neutral",
-        statusLabel: (propertySummary.propertyCount || 0) > 0 ? "Visible" : "Still Building",
-        actionLabel: "Open Property",
-        onAction: () => onNavigate?.("/property"),
+            ? `${propertySummary.propertyCount || 0} propert${propertySummary.propertyCount === 1 ? "y" : "ies"} tracked`
+            : "Home stack still building",
+        iconLabel: getCategoryBadge("property"),
+        tone: getDashboardTone(
+          normalizeDashboardScore(
+            propertyDimension?.score,
+            scoreFromReadinessStatus(propertySummary.propertyCount > 0 ? ((propertySummary.propertiesWithValuationCount || 0) > 0 ? "good" : "needs review") : "needs review", 46)
+          )
+        ),
+        route: "/property",
       },
       {
-        key: "access-portals",
-        kicker: "Access",
-        title: "Check Access And Portals",
-        detail:
-          (intelligenceBundle?.portals?.length || 0) > 0
-            ? "Portal and access continuity is visible enough to review where critical household systems are linked or still fragile."
-            : "This lane becomes valuable as soon as key household portals are connected and emergency access stops living in memory.",
-        metric: `${intelligenceBundle?.portals?.length || 0} portal${intelligenceBundle?.portals?.length === 1 ? "" : "s"}`,
-        tone: (intelligenceBundle?.portals?.length || 0) > 0 ? "info" : "neutral",
-        statusLabel: (intelligenceBundle?.portals?.length || 0) > 0 ? "Connected" : "Needs Setup",
-        actionLabel: "Open Portals",
-        onAction: () => onNavigate?.("/portals"),
+        key: "documents",
+        label: "Documents",
+        score: normalizeDashboardScore(
+          documentationDimension?.score,
+          scoreFromReadinessStatus(vaultSummary.status, 44)
+        ),
+        statusLabel: getFriendlyRingStatus(
+          normalizeDashboardScore(documentationDimension?.score, scoreFromReadinessStatus(vaultSummary.status, 44)),
+          { count: vaultSummary.metrics?.documents || 0, emptyLabel: "Missing Items" }
+        ),
+        helper:
+          (vaultSummary.metrics?.documents || 0) > 0
+            ? `${vaultSummary.metrics?.documents || 0} document${vaultSummary.metrics?.documents === 1 ? "" : "s"} loaded`
+            : "Document support is light",
+        iconLabel: getCategoryBadge("documents"),
+        tone: getDashboardTone(
+          normalizeDashboardScore(documentationDimension?.score, scoreFromReadinessStatus(vaultSummary.status, 44))
+        ),
+        route: "/upload-center",
       },
       {
-        key: "open-reports",
-        kicker: "Reports",
-        title: "Open Reports",
-        detail:
-          resolvedQueueItems.length > 0
-            ? "Use the reports lane when you want the executive story first, with the deeper technical packet still available underneath."
-            : "The reporting layer is ready to summarize what is visible now, even while more household depth is still being built.",
-        metric: `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}`,
-        tone: resolvedQueueItems.length > 0 ? "good" : "info",
-        statusLabel: resolvedQueueItems.length > 0 ? "Shows Progress" : "Executive View",
-        actionLabel: "Open Reports",
-        onAction: () => onNavigate?.("/reports"),
+        key: "access",
+        label: "Access & Portals",
+        score: normalizeDashboardScore(
+          continuityDimension?.score,
+          scoreFromReadinessStatus(portalSummary.status, 48)
+        ),
+        statusLabel: getFriendlyRingStatus(
+          normalizeDashboardScore(continuityDimension?.score, scoreFromReadinessStatus(portalSummary.status, 48)),
+          { count: portalSummary.metrics?.portals || 0, emptyLabel: "Needs Review" }
+        ),
+        helper:
+          (portalSummary.metrics?.portals || 0) > 0
+            ? `${portalSummary.metrics?.portals || 0} portal${portalSummary.metrics?.portals === 1 ? "" : "s"} connected`
+            : "Access continuity needs setup",
+        iconLabel: getCategoryBadge("access"),
+        tone: getDashboardTone(
+          normalizeDashboardScore(continuityDimension?.score, scoreFromReadinessStatus(portalSummary.status, 48))
+        ),
+        route: "/portals",
       },
-    ],
-    [
-      activeQueueItems.length,
-      intelligenceBundle,
-      missingStatementCount,
-      onNavigate,
-      pendingDocumentsCount,
-      propertySummary,
-      resolvedQueueItems.length,
-      savedPolicyCount,
-      weakPolicyRows.length,
-    ]
-  );
+      {
+        key: "retirement",
+        label: "Retirement",
+        score: normalizeDashboardScore(retirementScore, retirementScore),
+        statusLabel: getFriendlyRingStatus(retirementScore, { count: retirementCount, emptyLabel: "Missing Items" }),
+        helper:
+          retirementCount > 0
+            ? `${retirementCount} account${retirementCount === 1 ? "" : "s"} visible`
+            : "Retirement details are thin",
+        iconLabel: getCategoryBadge("retirement"),
+        tone: getDashboardTone(retirementScore),
+        route: "/retirement",
+      },
+      {
+        key: "warranty",
+        label: "Warranty",
+        score: normalizeDashboardScore(warrantyScore, warrantyScore),
+        statusLabel: getFriendlyRingStatus(warrantyScore, { count: warrantyCount, emptyLabel: "Missing Items" }),
+        helper:
+          warrantyCount > 0
+            ? `${warrantyCount} contract${warrantyCount === 1 ? "" : "s"} tracked`
+            : "Protection add-ons still need intake",
+        iconLabel: getCategoryBadge("warranty"),
+        tone: getDashboardTone(warrantyScore),
+        route: "/warranties",
+      },
+    ];
+  }, [
+    assetCounts,
+    householdScorecard.dimensions,
+    intelligenceBundle?.warranties,
+    missingStatementCount,
+    portalSummary,
+    propertySummary,
+    savedPolicyCount,
+    vaultSummary,
+    warrantySummary.status,
+    weakPolicyRows.length,
+  ]);
+  const priorityRows = useMemo(() => {
+    const mappedPriorities = householdPriorityEngine.priorities.slice(0, 4).map((item, index) => ({
+      id: item.id || `priority-${index}`,
+      badge: getCategoryBadge(item.source || item.title),
+      title: item.title,
+      detail: item.blocker || item.summary || item.consequence || "Open this review item to see the next practical step.",
+      actionLabel: getPriorityActionLabel(item),
+      route: item.route || "/review-workspace",
+      meta: item.impactLabel || item.staleLabel || item.source || "Priority",
+    }));
+
+    if (mappedPriorities.length > 0) return mappedPriorities;
+
+    return topActions.slice(0, 4).map((item, index) => ({
+      id: item.id || `action-${index}`,
+      badge: getCategoryBadge(item.label || item.summary),
+      title: item.label || "Open recommended review",
+      detail: item.summary || "A guided next step is available.",
+      actionLabel: getPriorityActionLabel(item),
+      route: item.route || "/review-workspace",
+      meta: "Priority",
+    }));
+  }, [householdPriorityEngine.priorities, topActions]);
+  const recentlyImprovedRows = useMemo(() => {
+    const derivedRows = assistantReviewDigest.improved_items.slice(0, 3).map((item, index) => ({
+      id: item.id || `improved-${index}`,
+      title: item.label || item.summary || "Household item improved",
+      detail: "Moved into reviewed status and is no longer driving the active queue.",
+      delta: `+${Math.max(1, Math.ceil(readinessLift / Math.max(assistantReviewDigest.improved_items.length, 1)))} pts`,
+    }));
+
+    if (derivedRows.length > 0) return derivedRows;
+
+    return workflowResolutionMemory.recentlyResolved.slice(0, 3).map((item, index) => ({
+      id: `resolved-${index}`,
+      title: item,
+      detail: "Reviewed work is still being remembered in household readiness.",
+      delta: `+${Math.max(1, Math.ceil(readinessLift / Math.max(workflowResolutionMemory.recentlyResolved.length || 1, 1)))} pts`,
+    }));
+  }, [
+    assistantReviewDigest.improved_items,
+    readinessLift,
+    workflowResolutionMemory.recentlyResolved,
+  ]);
+  const upcomingReviewRows = useMemo(() => {
+    const candidates = householdPriorityEngine.priorities.slice(0, 3).map((item, index) => ({
+      id: item.id || `review-${index}`,
+      title: item.title,
+      dueLabel: item.staleLabel || item.nextAction || "Review soon",
+      route: item.route || "/review-workspace",
+    }));
+
+    if (candidates.length > 0) return candidates;
+
+    return [
+      { id: "fallback-insurance", title: "Insurance annual review", dueLabel: "Review soon", route: "/insurance" },
+      { id: "fallback-property", title: "Property stack review", dueLabel: "Review soon", route: "/property" },
+      { id: "fallback-retirement", title: "Retirement check-in", dueLabel: "Review soon", route: "/retirement" },
+    ];
+  }, [householdPriorityEngine.priorities]);
   const showLoadingShell =
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
@@ -1097,6 +1413,7 @@ export default function DashboardPage({ onNavigate }) {
   const householdAssistantSectionLabels = useMemo(
     () => ({
       "household-priority": "Top Priorities",
+      "household-assistant": "Household Guide",
       "household-review-digest": "Recent Progress",
       "household-risk-map": "Household Readiness Map",
       "property-operating-graph": "Property Connections",
@@ -1237,7 +1554,7 @@ export default function DashboardPage({ onNavigate }) {
         style={{
           minHeight: "100vh",
           background: "#020617",
-          color: "#e2e8f0",
+          color: "#334155",
           padding: isMobile ? "16px" : isTablet ? "22px" : "32px",
         }}
       >
@@ -1268,8 +1585,8 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               padding: isMobile ? "24px 18px" : isTablet ? "30px 26px" : "36px 40px",
               borderRadius: isMobile ? "22px" : "28px",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-              border: "1px solid rgba(255,255,255,0.06)",
+              background: "#ffffff",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
               display: "grid",
               gap: "22px",
             }}
@@ -1298,10 +1615,10 @@ export default function DashboardPage({ onNavigate }) {
               <div style={{ fontSize: isMobile ? "34px" : "48px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
                 Welcome to VaultedShield
               </div>
-              <div style={{ fontSize: isMobile ? "18px" : "22px", fontWeight: 700, color: "#f8fafc" }}>
+              <div style={{ fontSize: isMobile ? "18px" : "22px", fontWeight: 700, color: "#0f172a" }}>
                 Let&apos;s build your household profile
               </div>
-              <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
+              <div style={{ fontSize: "15px", lineHeight: "1.8", color: "#475569" }}>
                 Start with one household member, then add a first asset, upload a document, connect a portal, and round out emergency readiness. This setup progress tracks what you&apos;ve actually added without creating fake intelligence.
               </div>
             </div>
@@ -1321,7 +1638,7 @@ export default function DashboardPage({ onNavigate }) {
                   <div style={{ fontSize: "12px", color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
                     {onboardingMission.urgency}
                   </div>
-                  <div style={{ marginTop: "8px", fontSize: isMobile ? "24px" : "28px", fontWeight: 800, color: "#f8fafc" }}>
+                  <div style={{ marginTop: "8px", fontSize: isMobile ? "24px" : "28px", fontWeight: 800, color: "#0f172a" }}>
                     {onboardingMission.headline}
                   </div>
                 </div>
@@ -1331,8 +1648,8 @@ export default function DashboardPage({ onNavigate }) {
                     alignItems: "center",
                     padding: "8px 12px",
                     borderRadius: "999px",
-                    background: "rgba(15,23,42,0.42)",
-                    color: "#e2e8f0",
+                    background: "#f8fafc",
+                    color: "#334155",
                     fontWeight: 700,
                     fontSize: "13px",
                   }}
@@ -1340,7 +1657,7 @@ export default function DashboardPage({ onNavigate }) {
                   {onboardingMission.completionSummary}
                 </div>
               </div>
-              <div style={{ color: "#dbeafe", lineHeight: "1.8", fontSize: "15px" }}>
+              <div style={{ color: "#1d4ed8", lineHeight: "1.8", fontSize: "15px" }}>
                 {onboardingMission.explanation}
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -1365,7 +1682,7 @@ export default function DashboardPage({ onNavigate }) {
 
             <div style={{ display: "grid", gap: "10px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Household setup progress</div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>Household setup progress</div>
                 <div style={{ fontSize: "14px", fontWeight: 800, color: "#93c5fd" }}>{onboardingProgressPercent}% complete</div>
               </div>
               <div style={{ height: "12px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
@@ -1402,12 +1719,12 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "16px 18px",
                     borderRadius: "18px",
-                    background: "rgba(15,23,42,0.32)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                   }}
                 >
                   <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>{metric.label}</div>
-                  <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#f8fafc" }}>{metric.value}</div>
+                  <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>{metric.value}</div>
                 </div>
               ))}
             </div>
@@ -1446,14 +1763,14 @@ export default function DashboardPage({ onNavigate }) {
               style={{
                 padding: sectionPadding,
                 borderRadius: sectionRadius,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.05)",
+                background: "#ffffff",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
                 display: "grid",
                 gap: "12px",
               }}
             >
               <div style={{ fontSize: "20px", fontWeight: 700 }}>What unlocks after your next step</div>
-              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
                 The platform starts producing much more useful signals once a few real household records are connected.
               </div>
               <ul style={{ margin: "4px 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#94a3b8" }}>
@@ -1469,14 +1786,14 @@ export default function DashboardPage({ onNavigate }) {
               style={{
                 padding: sectionPadding,
                 borderRadius: sectionRadius,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.05)",
+                background: "#ffffff",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
                 display: "grid",
                 gap: "12px",
               }}
             >
               <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance onboarding</div>
-              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
                 Uploading a life policy is one of the fastest ways to activate real analysis. Start with a baseline illustration, policy packet, or annual statement when you&apos;re ready.
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
@@ -1495,8 +1812,8 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               padding: sectionPadding,
               borderRadius: sectionRadius,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.05)",
+              background: "#ffffff",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
               display: "grid",
               gap: "14px",
             }}
@@ -1506,7 +1823,7 @@ export default function DashboardPage({ onNavigate }) {
                 Demo Path
               </div>
               <div style={{ fontSize: "24px", fontWeight: 800 }}>A strong first walkthrough</div>
-              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
                 If you want the dashboard to come alive quickly, this is the cleanest setup order for a household demo.
               </div>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", paddingTop: "6px" }}>
@@ -1537,8 +1854,8 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "16px 18px",
                     borderRadius: "18px",
-                    background: "rgba(15,23,42,0.32)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     display: "grid",
                     gap: "8px",
                   }}
@@ -1546,7 +1863,7 @@ export default function DashboardPage({ onNavigate }) {
                   <div style={{ fontSize: "11px", color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 800 }}>
                     Step {index + 1}
                   </div>
-                  <div style={{ color: "#f8fafc", fontWeight: 700, lineHeight: "1.6" }}>{item}</div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.6" }}>{item}</div>
                 </div>
               ))}
             </div>
@@ -1556,8 +1873,8 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               padding: sectionPadding,
               borderRadius: sectionRadius,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.05)",
+              background: "#ffffff",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
               display: "grid",
               gap: "18px",
             }}
@@ -1567,7 +1884,7 @@ export default function DashboardPage({ onNavigate }) {
                 Demo Preview
               </div>
               <div style={{ fontSize: "24px", fontWeight: 800 }}>What a built household looks like</div>
-              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
                 This is a sample preview so you can see the kind of score, priorities, and module guidance VaultedShield starts generating once real household records are connected.
               </div>
             </div>
@@ -1583,8 +1900,8 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   padding: "18px 20px",
                   borderRadius: "18px",
-                  background: "rgba(15,23,42,0.32)",
-                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.96)",
                   display: "grid",
                   gap: "16px",
                 }}
@@ -1593,10 +1910,10 @@ export default function DashboardPage({ onNavigate }) {
                   <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                     {demoHouseholdPreview.householdLabel}
                   </div>
-                  <div style={{ marginTop: "8px", fontSize: "32px", fontWeight: 800, color: "#f8fafc" }}>
+                  <div style={{ marginTop: "8px", fontSize: "32px", fontWeight: 800, color: "#0f172a" }}>
                     {demoHouseholdPreview.score.overall}
                   </div>
-                  <div style={{ marginTop: "6px", color: "#cbd5e1", fontWeight: 700 }}>
+                  <div style={{ marginTop: "6px", color: "#475569", fontWeight: 700 }}>
                     {demoHouseholdPreview.score.status}
                   </div>
                 </div>
@@ -1604,7 +1921,7 @@ export default function DashboardPage({ onNavigate }) {
                   {demoHouseholdPreview.score.dimensions.map((item) => (
                     <div key={item.label} style={{ display: "grid", gap: "6px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "14px" }}>
-                        <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{item.label}</span>
+                        <span style={{ color: "#334155", fontWeight: 600 }}>{item.label}</span>
                         <span style={{ color: "#93c5fd", fontWeight: 800 }}>{item.value}</span>
                       </div>
                       <div style={{ height: "8px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
@@ -1627,8 +1944,8 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "18px 20px",
                     borderRadius: "18px",
-                    background: "rgba(15,23,42,0.32)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     display: "grid",
                     gap: "12px",
                   }}
@@ -1641,19 +1958,19 @@ export default function DashboardPage({ onNavigate }) {
                         style={{
                           padding: "14px 16px",
                           borderRadius: "16px",
-                          background: "rgba(255,255,255,0.03)",
-                          border: "1px solid rgba(255,255,255,0.04)",
+                          background: "#ffffff",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                           display: "grid",
                           gap: "6px",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 700, color: "#f8fafc" }}>{item.label}</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.label}</div>
                           <span style={{ color: "#93c5fd", fontSize: "12px", fontWeight: 800 }}>{item.impact}</span>
                         </div>
-                        <div style={{ color: "#cbd5e1", lineHeight: "1.7" }}>{item.reason}</div>
+                        <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.reason}</div>
                         <div style={{ color: "#94a3b8", fontSize: "14px", lineHeight: "1.7" }}>
-                          <span style={{ color: "#e2e8f0", fontWeight: 700 }}>Next:</span> {item.nextAction}
+                          <span style={{ color: "#334155", fontWeight: 700 }}>Next:</span> {item.nextAction}
                         </div>
                       </div>
                     ))}
@@ -1664,8 +1981,8 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "18px 20px",
                     borderRadius: "18px",
-                    background: "rgba(15,23,42,0.32)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     display: "grid",
                     gap: "10px",
                   }}
@@ -1674,7 +1991,7 @@ export default function DashboardPage({ onNavigate }) {
                   {demoHouseholdPreview.modules.map((item) => (
                     <div key={item.label} style={{ display: "grid", gap: "4px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                        <span style={{ color: "#f8fafc", fontWeight: 700 }}>{item.label}</span>
+                        <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.label}</span>
                         <span style={{ color: "#93c5fd", fontWeight: 800, fontSize: "12px" }}>{item.status}</span>
                       </div>
                       <div style={{ color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{item.note}</div>
@@ -1689,8 +2006,8 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               padding: sectionPadding,
               borderRadius: sectionRadius,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.05)",
+              background: "#ffffff",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
               display: "grid",
               gap: "16px",
             }}
@@ -1700,7 +2017,7 @@ export default function DashboardPage({ onNavigate }) {
                 Demo Advisor
               </div>
               <div style={{ fontSize: "24px", fontWeight: 800 }}>Ask what this system will help with</div>
-              <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+              <div style={{ color: "#475569", lineHeight: "1.8" }}>
                 These answers use the sample household preview above, so you can see how VaultedShield starts thinking once a few real records exist.
               </div>
             </div>
@@ -1721,7 +2038,7 @@ export default function DashboardPage({ onNavigate }) {
                     borderRadius: "999px",
                     border: "1px solid rgba(125,211,252,0.22)",
                     background: "rgba(56,189,248,0.1)",
-                    color: "#dbeafe",
+                    color: "#1d4ed8",
                     cursor: "pointer",
                     fontWeight: 700,
                     fontSize: "12px",
@@ -1741,8 +2058,8 @@ export default function DashboardPage({ onNavigate }) {
                   padding: "12px 14px",
                   borderRadius: "12px",
                   border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(15,23,42,0.42)",
-                  color: "#f8fafc",
+                  background: "#f8fafc",
+                  color: "#0f172a",
                   minWidth: 0,
                 }}
                 onKeyDown={(event) => {
@@ -1766,8 +2083,8 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   padding: "18px 20px",
                   borderRadius: "18px",
-                  background: "rgba(15,23,42,0.32)",
-                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.96)",
                   display: "grid",
                   gap: "10px",
                 }}
@@ -1775,10 +2092,10 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   Demo answer
                 </div>
-                <div style={{ fontWeight: 800, color: "#f8fafc" }}>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>
                   {demoAssistantHistory[demoAssistantHistory.length - 1].question}
                 </div>
-                <div style={{ color: "#cbd5e1", lineHeight: "1.8" }}>
+                <div style={{ color: "#475569", lineHeight: "1.8" }}>
                   {demoAssistantHistory[demoAssistantHistory.length - 1].response.answer_text}
                 </div>
                 <ul style={{ margin: "4px 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#94a3b8" }}>
@@ -1806,22 +2123,20 @@ export default function DashboardPage({ onNavigate }) {
     <div
       style={{
         minHeight: "100vh",
-        background: "#020617",
-        color: "#e2e8f0",
-        padding: isMobile ? "16px" : isTablet ? "22px" : "32px",
+        background: "#f6f8fb",
+        color: "#0f172a",
+        padding: isMobile ? "20px 16px 32px" : isTablet ? "24px 22px 40px" : "32px 28px 48px",
       }}
     >
-      <div style={{ margin: "0 auto", maxWidth: "1180px", display: "grid", gap: "28px" }}>
+      <div style={{ margin: "0 auto", maxWidth: "1280px", display: "grid", gap: "28px" }}>
         {showLoadingShell ? (
           <section
-            style={{
+            style={dashboardSurfaceCardStyle({
               padding: sectionPadding,
-              borderRadius: sectionRadius,
-              background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
-              border: "1px solid rgba(255,255,255,0.06)",
-            }}
+              color: "#334155",
+            })}
           >
-            Preparing dashboard workspace...
+            Preparing your household dashboard...
           </section>
         ) : null}
         <header
@@ -1831,56 +2146,154 @@ export default function DashboardPage({ onNavigate }) {
             justifyContent: "space-between",
             gap: "16px",
             flexWrap: "wrap",
+            marginBottom: isMobile ? "0" : "4px",
           }}
         >
-          <div style={{ fontSize: isMobile ? "16px" : "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
-            VaultedShield
+          <div style={{ display: "grid", gap: "8px", minWidth: 0 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "14px",
+                  background: "linear-gradient(135deg, #fff3bf 0%, #fde68a 100%)",
+                  boxShadow: "0 10px 24px rgba(245, 158, 11, 0.18)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "#b45309",
+                }}
+              >
+                <DashboardGlyph kind="sun" size={20} />
+              </div>
+              <div style={{ fontSize: isMobile ? "28px" : "34px", lineHeight: 1.05, letterSpacing: "-0.04em", fontWeight: 800 }}>
+                {getGreetingLabel()}, {householdName}
+              </div>
+            </div>
+            <div style={{ color: "#64748b", fontSize: "15px", lineHeight: "1.7" }}>
+              Here's your household overview for today.
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-            <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
-              Upload
-            </button>
-            <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/portals")}>
-              Open Portal
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto", alignItems: "center" }}>
+            <HeaderUtilityButton kind="bell" label="Notifications" onClick={() => scrollToDashboardSection("household-priority")} />
+            <HeaderUtilityButton kind="help" label="Help" onClick={() => scrollToDashboardSection("household-assistant")} />
+            <button
+              type="button"
+              onClick={() => scrollToDashboardSection("household-assistant")}
+              style={{ ...fasciaButtonStyle(true), width: isMobile ? "100%" : "auto" }}
+            >
+              Assistant
             </button>
           </div>
         </header>
 
-        <PlainLanguageBridge
-          eyebrow="Start Here"
-          title={dashboardWelcomeGuide.title}
-          summary={dashboardWelcomeGuide.summary}
-          transition={dashboardWelcomeGuide.transition}
-          quickFacts={dashboardWelcomeGuide.quickFacts}
-          cards={dashboardWelcomeGuide.cards}
-          primaryActionLabel={topDashboardPriority?.nextAction || "Show My First Step"}
-          onPrimaryAction={() =>
-            topDashboardPriority?.route
-              ? onNavigate?.(topDashboardPriority.route)
-              : scrollToDashboardSection("household-priority")
-          }
-          secondaryActionLabel="See Why This Household Reads This Way"
-          onSecondaryAction={() => scrollToDashboardSection("household-risk-map")}
-          compact={isTablet}
-          showAnalysisDivider={false}
-        />
+        <section
+          style={{
+            display: "block",
+          }}
+        >
+          <DashboardCard
+            style={{
+              padding: isMobile ? "24px 20px" : isTablet ? "28px 26px" : "34px 32px",
+              display: "grid",
+              gap: "24px",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile
+                  ? "1fr"
+                  : isTablet
+                    ? "minmax(0, 1fr) 170px"
+                    : "minmax(280px, 1.05fr) 210px minmax(280px, 0.95fr)",
+                gap: isMobile ? "20px" : "24px",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Household Readiness</div>
+                <div style={{ color: "#64748b", lineHeight: "1.7" }}>Overall preparedness across all areas</div>
+                <div style={{ color: "#0f172a", fontSize: isMobile ? "28px" : "32px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.04em" }}>
+                  {continuityStatus.label === "Strong" ? "Good progress!" : heroHeadline}
+                </div>
+                <div style={{ color: "#334155", lineHeight: "1.75", maxWidth: "560px" }}>{heroSummary}</div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: "999px", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700, fontSize: "13px" }}>
+                    {displayValue(householdScorecard.overallStatus)}
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: "999px", background: "#f8fafc", color: "#475569", fontWeight: 700, fontSize: "13px" }}>
+                    {displayValue(activeQueueItems.length)} open items
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <ScoreRing value={overallReadinessScore} size="lg" tone={readinessTone} subtitle="of 100" />
+              </div>
+
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.04em", color: "#16a34a" }}>
+                    Good progress!
+                  </div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{heroSupportLine}</div>
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => scrollToDashboardSection("household-risk-map")} style={fasciaButtonStyle(true)}>
+                    View Full Breakdown
+                  </button>
+                  <button type="button" onClick={() => setShowHouseholdReport((current) => !current)} style={fasciaButtonStyle(false)}>
+                    {showHouseholdReport ? "Hide Brief" : "Open Brief"}
+                  </button>
+                </div>
+                <div
+                  style={{
+                    padding: "18px 18px 16px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.9)",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", color: "#16a34a", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                    Since Last Review
+                  </div>
+              {[
+                    { label: "Score lift", value: readinessLift > 0 ? `+${readinessLift} pts` : "0 pts" },
+                    { label: "Issues resolved", value: displayValue(resolvedQueueItems.length) },
+                    { label: "Items improved", value: displayValue(assistantReviewDigest.improved_items.length || recentlyImprovedRows.length) },
+                    { label: "New items added", value: displayValue(changedSinceReviewItems.length) },
+                  ].map((item) => (
+                    <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                      <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
+                      <div style={{ color: "#0f172a", fontWeight: 800 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </DashboardCard>
+        </section>
 
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "repeat(4, minmax(0, 1fr))",
-            gap: "14px",
+            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))",
+            gap: isMobile ? "16px" : "22px",
           }}
         >
-          {dashboardFasciaCards.map((card) => (
-            <ActionSignalCard
-              key={card.label}
-              label={card.label}
-              value={card.value}
-              detail={card.detail}
-              tone={card.tone}
-              actionLabel={card.actionLabel}
-              onAction={card.onAction}
+          {dashboardCategoryRings.map((item) => (
+            <DashboardRingCard
+              key={item.key}
+              label={item.label}
+              score={item.score}
+              statusLabel={item.statusLabel}
+              helper={item.helper}
+              iconLabel={item.iconLabel}
+              tone={item.tone}
+              onClick={() => item.route && onNavigate?.(item.route)}
             />
           ))}
         </section>
@@ -1888,276 +2301,343 @@ export default function DashboardPage({ onNavigate }) {
         <section
           style={{
             display: "grid",
-            gap: "18px",
-            padding: isMobile ? "20px 18px" : "24px 24px 26px",
-            borderRadius: isMobile ? "22px" : "28px",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))",
-            border: "1px solid rgba(255,255,255,0.06)",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(320px, 0.9fr)",
+            gap: "24px",
+            alignItems: "stretch",
           }}
         >
-            <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
-              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 800 }}>
-                Choose Your Lane
+          <div
+            style={dashboardSurfaceCardStyle({
+              padding: isMobile ? "22px 20px" : "24px 24px 26px",
+              display: "grid",
+              gap: "18px",
+              height: "100%",
+            })}
+            ref={(node) => setSectionRef("household-priority", node)}
+          >
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Top Priorities</div>
+              <div style={{ color: "#334155", lineHeight: "1.75" }}>
+                What needs attention first, without the technical overload.
               </div>
-            <div style={{ fontSize: isMobile ? "24px" : "30px", lineHeight: "1.08", letterSpacing: "-0.03em", fontWeight: 800, color: "#f8fafc" }}>
-              Start with a big action tile, not the technical detail
             </div>
-            <div style={{ color: "#94a3b8", lineHeight: "1.75" }}>
-              This is the friendly entry layer. Pick the household lane you want, then let the deeper analysis open only after you click in.
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              {priorityRows.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr) auto",
+                    gap: "14px",
+                    alignItems: "center",
+                    padding: "16px 16px",
+                    borderRadius: "20px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.94)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "16px",
+                      background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                      color: "#1d4ed8",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "13px",
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {item.badge}
+                  </div>
+
+                  <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
+                    <div style={{ color: "#64748b", lineHeight: "1.65", fontSize: "14px" }}>{item.detail}</div>
+                    <div style={{ color: "#2563eb", fontWeight: 700, fontSize: "13px" }}>{item.meta}</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => item.route && onNavigate?.(item.route)}
+                    style={{ ...fasciaButtonStyle(false), width: isMobile ? "100%" : "auto" }}
+                  >
+                    {item.actionLabel}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
           <div
-            style={{
+            style={dashboardSurfaceCardStyle({
+              padding: isMobile ? "22px 20px" : "24px 24px 26px",
               display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
-              gap: "16px",
-            }}
+              gap: "18px",
+              height: "100%",
+            })}
           >
-            {dashboardActionTiles.map((tile) => (
-              <FriendlyActionTile
-                key={tile.key}
-                kicker={tile.kicker}
-                title={tile.title}
-                detail={tile.detail}
-                metric={tile.metric}
-                tone={tile.tone}
-                statusLabel={tile.statusLabel}
-                actionLabel={tile.actionLabel}
-                onAction={tile.onAction}
-              />
-            ))}
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Recently Improved</div>
+              <div style={{ color: "#334155", lineHeight: "1.75" }}>
+                Reviewed work is remembered here, so progress keeps showing up in household readiness.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              {recentlyImprovedRows.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto minmax(0, 1fr) auto",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "14px 16px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(240, 253, 244, 0.95) 0%, rgba(255, 255, 255, 1) 100%)",
+                    border: "1px solid rgba(134, 239, 172, 0.42)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "34px",
+                      height: "34px",
+                      borderRadius: "999px",
+                      background: "#22c55e",
+                      color: "#ffffff",
+                      display: "grid",
+                      placeItems: "center",
+                      fontWeight: 900,
+                    }}
+                  >
+                    +
+                  </div>
+                  <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                    <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                    <div style={{ color: "#475569", lineHeight: "1.6", fontSize: "14px" }}>{item.detail}</div>
+                  </div>
+                  <div style={{ color: "#16a34a", fontWeight: 800, fontSize: "14px" }}>{item.delta}</div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "12px",
+                alignItems: "center",
+                paddingTop: "6px",
+                borderTop: "1px solid rgba(226, 232, 240, 0.9)",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ color: "#475569", fontWeight: 700 }}>Total Score Increase</div>
+              <div style={{ color: "#16a34a", fontWeight: 800 }}>
+                {readinessLift > 0 ? `+${readinessLift} points` : "Building from new work"}
+              </div>
+            </div>
           </div>
         </section>
 
         <section
           style={{
-            padding: isMobile ? "24px 18px" : isTablet ? "30px 26px" : "36px 40px",
-            borderRadius: isMobile ? "22px" : "28px",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-            border: "1px solid rgba(255,255,255,0.06)",
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 0.95fr) minmax(0, 1.05fr)",
+            gap: "24px",
+            alignItems: "stretch",
           }}
         >
-          <div style={{ fontSize: isMobile ? "42px" : "56px", fontWeight: 800, letterSpacing: "-0.04em", lineHeight: 1 }}>
-            {intelligence ? `${continuityPercent}%` : "--"}
-          </div>
-          <div style={{ marginTop: "12px", fontSize: isMobile ? "16px" : "18px", fontWeight: 600, color: "#f8fafc" }}>
-            {continuityStatus.label}
-          </div>
-          <div style={{ marginTop: "10px", maxWidth: "700px", fontSize: "15px", lineHeight: "1.7", color: "#94a3b8" }}>
-            {householdState.error || loadError
-              ? "Household context is limited, so the picture is still partial."
-              : continuityStatus.explanation}
-          </div>
-
           <div
-            style={{
-              marginTop: "28px",
+            style={dashboardSurfaceCardStyle({
+              padding: isMobile ? "22px 20px" : "24px 24px 26px",
               display: "grid",
-              gridTemplateColumns: metricGridColumns,
               gap: "18px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Assets</div>
-              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(totalAssets)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Protection</div>
-              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{totalProtectionCoverage > 0 ? formatCurrency(totalProtectionCoverage) : "--"}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Policies</div>
-              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(savedPolicyCount)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>Issues</div>
-              <div style={{ marginTop: "6px", fontSize: "20px", fontWeight: 700 }}>{displayValue(totalIssues)}</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: "24px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => setShowHouseholdReport((current) => !current)}
-              style={reportButtonStyle(showHouseholdReport, false)}
-            >
-              {showHouseholdReport ? "Hide Household Brief" : "Open Household Brief"}
-            </button>
-            <button type="button" onClick={handlePrintHouseholdReport} style={buttonStyle(true)}>
-              Print Household Report
-            </button>
-          </div>
-
-          <div
-            style={{
-              marginTop: "24px",
-              padding: "18px 20px",
-              borderRadius: "20px",
-              background: "rgba(15,23,42,0.42)",
-              border: "1px solid rgba(255,255,255,0.05)",
-              display: "grid",
-              gap: "14px",
-            }}
+              height: "100%",
+            })}
           >
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>Home Snapshot</div>
-              <div style={{ color: "#94a3b8", lineHeight: "1.7", maxWidth: "760px" }}>
-                A quick read on how well home, financing, protection, documents, and portal access connect before you open any deeper detail.
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Upcoming Reviews</div>
+              <div style={{ color: "#334155", lineHeight: "1.75" }}>
+                A short reminder list for the next household reviews worth opening.
               </div>
             </div>
-            <OperatingGraphSummaryCards
-              cards={operatingGraphSummary.cards.slice(0, 5)}
-              highlights={operatingGraphSummary.highlights.slice(0, 3)}
-              onNavigate={onNavigate}
-              theme="dark"
-            />
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              {upcomingReviewRows.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => item.route && onNavigate?.(item.route)}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    gap: "12px",
+                    alignItems: "center",
+                    padding: "14px 16px",
+                    borderRadius: "18px",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.92)",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                    <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                    <div style={{ color: "#64748b", fontSize: "14px" }}>{item.dueLabel}</div>
+                  </div>
+                  <div style={{ color: "#2563eb", fontWeight: 800, fontSize: "13px" }}>Open</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div
-            style={{
-              marginTop: "28px",
+            style={dashboardSurfaceCardStyle({
+              padding: isMobile ? "22px 20px" : "24px 24px 26px",
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "1.1fr 0.9fr",
               gap: "18px",
-            }}
+              background: "linear-gradient(135deg, #eef4ff 0%, #ffffff 55%, #f8fbff 100%)",
+              height: "100%",
+            })}
           >
-            <div
-              style={{
-                padding: "18px 20px",
-                borderRadius: "20px",
-                background: "rgba(15,23,42,0.42)",
-                border: "1px solid rgba(255,255,255,0.05)",
-                display: "grid",
-                gap: "14px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Household Score</div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: "999px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#cbd5e1",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.05)",
-                  }}
-                >
-                  {displayValue(householdScorecard.overallStatus)}
-                </div>
-              </div>
-              <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdScorecard.summary}</div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))",
-                  gap: "12px",
-                }}
-              >
-                {householdScorecard.dimensions.map((dimension) => (
-                  <div
-                    key={dimension.key}
-                    style={{
-                      padding: "14px",
-                      borderRadius: "16px",
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                      display: "grid",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                      {dimension.label}
-                    </div>
-                    <div style={{ fontSize: "24px", fontWeight: 800, letterSpacing: "-0.03em" }}>
-                      {displayValue(dimension.score)}
-                    </div>
-                    <div style={{ fontSize: "12px", color: dimension.tone === "ready" ? "#86efac" : dimension.tone === "warning" ? "#fdba74" : "#fca5a5", fontWeight: 700 }}>
-                      {dimension.status}
-                    </div>
-                  </div>
-                ))}
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Need Help Understanding Something?</div>
+              <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "520px" }}>
+                Ask our AI assistant to explain your policies, scores, or next best steps in plain English.
               </div>
             </div>
 
             <div
               style={{
-                padding: "18px 20px",
-                borderRadius: "20px",
-                background: "rgba(15,23,42,0.42)",
-                border: "1px solid rgba(255,255,255,0.05)",
                 display: "grid",
-                gap: "14px",
+                gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto",
+                gap: "16px",
+                alignItems: "center",
               }}
-              ref={(node) => setSectionRef("household-priority", node)}
             >
-              <div style={{ display: "grid", gap: "8px" }}>
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Top Priorities</div>
-                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
-                <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
+              <div style={{ display: "grid", gap: "12px" }}>
+                <div style={{ color: "#64748b", lineHeight: "1.7" }}>
+                  Use this when you want the calm explanation first, then the evidence and technical reasoning behind it.
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => scrollToDashboardSection("household-assistant")} style={fasciaButtonStyle(true)}>
+                    Ask Assistant
+                  </button>
+                  <button type="button" onClick={() => onNavigate?.("/reports")} style={fasciaButtonStyle(false)}>
+                    Open Reports
+                  </button>
+                </div>
               </div>
-              <div style={{ display: "grid", gap: "10px" }}>
-                {householdPriorityEngine.priorities.map((item, index) => (
+
+              <div
+                aria-hidden="true"
+                style={{
+                  width: isMobile ? "100%" : "170px",
+                  minHeight: "144px",
+                  borderRadius: "26px",
+                  background: "linear-gradient(180deg, #ffffff 0%, #eaf2ff 100%)",
+                  border: "1px solid rgba(191, 219, 254, 0.9)",
+                  display: "grid",
+                  placeItems: "center",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: "92px",
+                    height: "112px",
+                    borderRadius: "22px",
+                    background: "#ffffff",
+                    border: "1px solid rgba(226, 232, 240, 0.95)",
+                    boxShadow: "0 18px 32px rgba(59, 130, 246, 0.14)",
+                    position: "relative",
+                    zIndex: 2,
+                  }}
+                >
+                  <div style={{ position: "absolute", top: "18px", left: "18px", right: "18px", height: "8px", borderRadius: "999px", background: "#dbeafe" }} />
+                  <div style={{ position: "absolute", top: "34px", left: "18px", right: "24px", height: "8px", borderRadius: "999px", background: "#e2e8f0" }} />
+                  <div style={{ position: "absolute", top: "50px", left: "18px", right: "30px", height: "8px", borderRadius: "999px", background: "#e2e8f0" }} />
                   <div
-                    key={item.id}
                     style={{
-                      padding: "14px 16px",
-                      borderRadius: "16px",
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                      display: "grid",
-                      gap: "10px",
+                      position: "absolute",
+                      bottom: "18px",
+                      right: "14px",
+                      width: "38px",
+                      height: "44px",
+                      borderRadius: "18px 18px 14px 14px",
+                      background: "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)",
+                      boxShadow: "0 10px 18px rgba(37, 99, 235, 0.28)",
                     }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                      <div style={{ display: "grid", gap: "4px" }}>
-                        <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                          Priority {index + 1} · {item.source}
-                        </div>
-                        <div style={{ fontSize: "15px", fontWeight: 700, lineHeight: "1.45" }}>{item.title}</div>
-                      </div>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "5px 9px",
-                          borderRadius: "999px",
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          color: item.urgencyMeta.accent,
-                          background: item.urgencyMeta.background,
-                          border: item.urgencyMeta.border,
-                        }}
-                      >
-                        {item.urgencyMeta.label}
-                      </span>
-                    </div>
-                    <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
-                    <div style={{ color: "#93c5fd", fontSize: "13px", lineHeight: "1.6" }}>Why this matters: {item.impactLabel}</div>
-                    <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
-                    <div>
-                      <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
-                        {item.nextAction}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  />
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "24px",
+                    right: "24px",
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "999px",
+                    background: "rgba(96, 165, 250, 0.24)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "24px",
+                    left: "24px",
+                    width: "22px",
+                    height: "22px",
+                    borderRadius: "999px",
+                    background: "rgba(191, 219, 254, 0.7)",
+                  }}
+                />
               </div>
             </div>
           </div>
         </section>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "16px",
+            alignItems: "flex-end",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "grid", gap: "8px", maxWidth: "760px" }}>
+            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Details
+            </div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Deeper household intelligence</div>
+            <div style={{ color: "#64748b", lineHeight: "1.75" }}>
+              The dashboard opens simple, but the sections below still carry the evidence-backed readiness map, workflow memory, assistant detail, and cross-module review logic.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setShowHouseholdReport((current) => !current)} style={fasciaButtonStyle(false)}>
+              {showHouseholdReport ? "Hide Household Brief" : "Open Household Brief"}
+            </button>
+            <button type="button" onClick={handlePrintHouseholdReport} style={fasciaButtonStyle(false)}>
+              Print Household Report
+            </button>
+          </div>
+        </div>
 
         <section
           data-demo-id="dashboard-risk-map"
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
-            border: "1px solid rgba(255,255,255,0.06)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
             display: "grid",
             gap: "20px",
           }}
@@ -2166,10 +2646,10 @@ export default function DashboardPage({ onNavigate }) {
             <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
               AI Household Intro
             </div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "#f8fafc", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+            <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
               {aiHouseholdIntro.headline}
             </div>
-            <div style={{ maxWidth: "980px", fontSize: "15px", lineHeight: "1.8", color: "#cbd5e1" }}>
+            <div style={{ maxWidth: "980px", fontSize: "15px", lineHeight: "1.8", color: "#475569" }}>
               {householdState.error || loadError
                 ? "VaultedShield is still working with partial household context, so this intro should be read as provisional."
                 : aiHouseholdIntro.body}
@@ -2187,34 +2667,34 @@ export default function DashboardPage({ onNavigate }) {
               style={{
                 padding: "16px 18px",
                 borderRadius: "18px",
-                background: "rgba(15,23,42,0.32)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
               }}
             >
               <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Strong Areas</div>
-              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#bbf7d0" }}>{aiHouseholdIntro.strongCount}</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#15803d" }}>{aiHouseholdIntro.strongCount}</div>
             </div>
             <div
               style={{
                 padding: "16px 18px",
                 borderRadius: "18px",
-                background: "rgba(15,23,42,0.32)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
               }}
             >
               <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Watch Areas</div>
-              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#fde68a" }}>{aiHouseholdIntro.moderateCount}</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#b45309" }}>{aiHouseholdIntro.moderateCount}</div>
             </div>
             <div
               style={{
                 padding: "16px 18px",
                 borderRadius: "18px",
-                background: "rgba(15,23,42,0.32)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
               }}
             >
               <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Weak Areas</div>
-              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#fca5a5" }}>{aiHouseholdIntro.weakCount}</div>
+              <div style={{ marginTop: "8px", fontSize: "24px", fontWeight: 800, color: "#b91c1c" }}>{aiHouseholdIntro.weakCount}</div>
             </div>
           </div>
 
@@ -2235,8 +2715,8 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "18px",
                     borderRadius: "18px",
-                    background: "rgba(15,23,42,0.36)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     display: "grid",
                     gap: "10px",
                     textAlign: "left",
@@ -2244,7 +2724,7 @@ export default function DashboardPage({ onNavigate }) {
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
-                    <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>{card.label}</div>
+                    <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>{card.label}</div>
                     <div
                       style={{
                         display: "inline-flex",
@@ -2261,7 +2741,7 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                   </div>
                   <div style={{ fontSize: "13px", color: "#93c5fd", fontWeight: 700 }}>{card.metric}</div>
-                  <div style={{ color: "#cbd5e1", lineHeight: "1.7", fontSize: "14px" }}>{card.summary}</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7", fontSize: "14px" }}>{card.summary}</div>
                 </button>
               );
             })}
@@ -2273,12 +2753,12 @@ export default function DashboardPage({ onNavigate }) {
               gap: "12px",
               padding: "18px 20px",
               borderRadius: "20px",
-              background: "rgba(15,23,42,0.28)",
-              border: "1px solid rgba(255,255,255,0.06)",
+              background: "#f8fafc",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "baseline" }}>
-              <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>What To Do Next</div>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>What To Do Next</div>
               <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
                 Top 3 Actions
               </div>
@@ -2315,8 +2795,8 @@ export default function DashboardPage({ onNavigate }) {
                     alignItems: "flex-start",
                     padding: "12px 14px",
                     borderRadius: "14px",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.05)",
+                    background: "rgba(226,232,240,0.5)",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     textAlign: "left",
                     cursor: item.route || item.action_key ? "pointer" : "default",
                   }}
@@ -2331,7 +2811,7 @@ export default function DashboardPage({ onNavigate }) {
                       display: "grid",
                       placeItems: "center",
                       background: "rgba(59,130,246,0.16)",
-                      color: "#dbeafe",
+                      color: "#1d4ed8",
                       fontSize: "12px",
                       fontWeight: 800,
                     }}
@@ -2339,8 +2819,8 @@ export default function DashboardPage({ onNavigate }) {
                     {index + 1}
                   </div>
                   <div style={{ display: "grid", gap: "4px", minWidth: 0 }}>
-                    <div style={{ color: "#f8fafc", fontSize: "14px", fontWeight: 700 }}>{item.label}</div>
-                    <div style={{ color: "#cbd5e1", lineHeight: "1.7", fontSize: "14px" }}>{item.summary}</div>
+                    <div style={{ color: "#0f172a", fontSize: "14px", fontWeight: 700 }}>{item.label}</div>
+                    <div style={{ color: "#475569", lineHeight: "1.7", fontSize: "14px" }}>{item.summary}</div>
                   </div>
                 </button>
               ))}
@@ -2369,8 +2849,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
             display: "grid",
             gap: "18px",
           }}
@@ -2397,11 +2877,13 @@ export default function DashboardPage({ onNavigate }) {
 
         <section
           data-demo-id="dashboard-household-assistant"
+          id="household-assistant"
+          ref={(node) => setSectionRef("household-assistant", node)}
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
             display: "grid",
             gap: "18px",
           }}
@@ -2417,8 +2899,8 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               padding: "16px 18px",
               borderRadius: "18px",
-              background: "rgba(15,23,42,0.42)",
-              border: "1px solid rgba(255,255,255,0.05)",
+              background: "#f8fafc",
+              border: "1px solid rgba(226, 232, 240, 0.96)",
               display: "grid",
               gap: "10px",
             }}
@@ -2426,8 +2908,8 @@ export default function DashboardPage({ onNavigate }) {
             <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
               Quick Household Read
             </div>
-            <div style={{ color: "#f8fafc", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
-            <div style={{ color: "#cbd5e1", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
+            <div style={{ color: "#0f172a", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
+            <div style={{ color: "#475569", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
             <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
               Household score: {householdScorecard.overallScore ?? "--"} ({householdScorecard.overallStatus}). Area needing the most support:{" "}
               {householdScorecard.weakestDimension?.label || "—"}.
@@ -2455,8 +2937,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
@@ -2496,8 +2978,8 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   padding: "16px 18px",
                   borderRadius: "18px",
-                  background: "rgba(15,23,42,0.42)",
-                  border: "1px solid rgba(255,255,255,0.05)",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.96)",
                 }}
               >
                 <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
@@ -2510,7 +2992,7 @@ export default function DashboardPage({ onNavigate }) {
             ))}
           </div>
 
-          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#334155" }}>
             {(assistantReviewDigest.bullets.length > 0
               ? assistantReviewDigest.bullets
               : ["Save a review snapshot to start tracking what changed across the household queue."]).map((item) => (
@@ -2527,8 +3009,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "20px", flexWrap: "wrap" }}>
@@ -2543,8 +3025,8 @@ export default function DashboardPage({ onNavigate }) {
                 minWidth: "180px",
                 padding: "16px 18px",
                 borderRadius: "18px",
-                background: "rgba(15,23,42,0.55)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "#eff6ff",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
               }}
             >
               <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
@@ -2553,7 +3035,7 @@ export default function DashboardPage({ onNavigate }) {
               <div style={{ marginTop: "6px", fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em" }}>
                 {displayValue(assistantHouseholdMap.overall_score)}
               </div>
-              <div style={{ marginTop: "6px", fontSize: "14px", fontWeight: 600, color: "#f8fafc" }}>
+              <div style={{ marginTop: "6px", fontSize: "14px", fontWeight: 600, color: "#0f172a" }}>
                 {assistantHouseholdMap.overall_status}
               </div>
             </div>
@@ -2575,8 +3057,8 @@ export default function DashboardPage({ onNavigate }) {
                   style={{
                     padding: "20px",
                     borderRadius: "20px",
-                    background: "rgba(15,23,42,0.42)",
-                    border: "1px solid rgba(255,255,255,0.05)",
+                    background: "#f8fafc",
+                    border: "1px solid rgba(226, 232, 240, 0.96)",
                     display: "grid",
                     gap: "14px",
                   }}
@@ -2642,8 +3124,8 @@ export default function DashboardPage({ onNavigate }) {
               style={{
                 padding: "22px",
                 borderRadius: "20px",
-                background: "rgba(15,23,42,0.42)",
-                border: "1px solid rgba(255,255,255,0.05)",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.96)",
               }}
             >
               <div style={{ display: "grid", gap: "12px", marginBottom: "18px" }}>
@@ -2665,9 +3147,9 @@ export default function DashboardPage({ onNavigate }) {
                           borderRadius: "999px",
                           fontSize: "12px",
                           fontWeight: 700,
-                          color: "#cbd5e1",
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          color: "#475569",
+                          background: "rgba(226,232,240,0.5)",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                         }}
                       >
                         {metric.label}: {metric.value}
@@ -2675,7 +3157,7 @@ export default function DashboardPage({ onNavigate }) {
                     ))}
                   </div>
                 </div>
-                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{commandCenter.headline}</div>
+                <div style={{ color: "#334155", lineHeight: "1.7" }}>{commandCenter.headline}</div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{commandCenter.summary}</div>
                 <div style={{ display: "grid", gap: "10px" }}>
                   {commandCenter.blockers.map((item) => (
@@ -2684,8 +3166,8 @@ export default function DashboardPage({ onNavigate }) {
                       style={{
                         padding: "14px 16px",
                         borderRadius: "16px",
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.05)",
+                        background: "#ffffff",
+                        border: "1px solid rgba(226, 232, 240, 0.96)",
                         display: "grid",
                         gap: "10px",
                       }}
@@ -2716,7 +3198,7 @@ export default function DashboardPage({ onNavigate }) {
                               borderRadius: "999px",
                               fontSize: "11px",
                               fontWeight: 700,
-                              color: "#cbd5e1",
+                              color: "#475569",
                               background: "rgba(148,163,184,0.12)",
                             }}
                           >
@@ -2724,7 +3206,7 @@ export default function DashboardPage({ onNavigate }) {
                           </span>
                         </div>
                       </div>
-                      <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                      <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                       <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                       <div>
                         <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
@@ -2739,7 +3221,7 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   marginTop: "18px",
                   paddingTop: "18px",
-                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                  borderTop: "1px solid rgba(226, 232, 240, 0.96)",
                   display: "grid",
                   gap: "12px",
                 }}
@@ -2757,9 +3239,9 @@ export default function DashboardPage({ onNavigate }) {
                           borderRadius: "999px",
                           fontSize: "12px",
                           fontWeight: 700,
-                          color: "#cbd5e1",
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          color: "#475569",
+                          background: "rgba(226,232,240,0.5)",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                         }}
                       >
                         {metric.label}: {metric.value}
@@ -2767,7 +3249,7 @@ export default function DashboardPage({ onNavigate }) {
                     ))}
                   </div>
                 </div>
-                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{housingCommandCenter.headline}</div>
+                <div style={{ color: "#334155", lineHeight: "1.7" }}>{housingCommandCenter.headline}</div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{housingCommandCenter.summary}</div>
                 <div style={{ display: "grid", gap: "10px" }}>
                   {housingCommandCenter.blockers.length > 0 ? (
@@ -2777,8 +3259,8 @@ export default function DashboardPage({ onNavigate }) {
                         style={{
                           padding: "14px 16px",
                           borderRadius: "16px",
-                          background: "rgba(255,255,255,0.03)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          background: "#ffffff",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                           display: "grid",
                           gap: "10px",
                         }}
@@ -2809,7 +3291,7 @@ export default function DashboardPage({ onNavigate }) {
                                 borderRadius: "999px",
                                 fontSize: "11px",
                                 fontWeight: 700,
-                                color: "#cbd5e1",
+                                color: "#475569",
                                 background: "rgba(148,163,184,0.12)",
                               }}
                             >
@@ -2817,7 +3299,7 @@ export default function DashboardPage({ onNavigate }) {
                             </span>
                           </div>
                         </div>
-                        <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                        <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                         <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                         <div>
                           <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
@@ -2837,7 +3319,7 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   marginTop: "18px",
                   paddingTop: "18px",
-                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                  borderTop: "1px solid rgba(226, 232, 240, 0.96)",
                   display: "grid",
                   gap: "12px",
                 }}
@@ -2855,9 +3337,9 @@ export default function DashboardPage({ onNavigate }) {
                           borderRadius: "999px",
                           fontSize: "12px",
                           fontWeight: 700,
-                          color: "#cbd5e1",
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          color: "#475569",
+                          background: "rgba(226,232,240,0.5)",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                         }}
                       >
                         {metric.label}: {metric.value}
@@ -2865,7 +3347,7 @@ export default function DashboardPage({ onNavigate }) {
                     ))}
                   </div>
                 </div>
-                <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{emergencyAccessCommand.headline}</div>
+                <div style={{ color: "#334155", lineHeight: "1.7" }}>{emergencyAccessCommand.headline}</div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>{emergencyAccessCommand.summary}</div>
                 <div style={{ display: "grid", gap: "10px" }}>
                   {emergencyAccessCommand.blockers.length > 0 ? (
@@ -2875,8 +3357,8 @@ export default function DashboardPage({ onNavigate }) {
                         style={{
                           padding: "14px 16px",
                           borderRadius: "16px",
-                          background: "rgba(255,255,255,0.03)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          background: "#ffffff",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                           display: "grid",
                           gap: "10px",
                         }}
@@ -2907,7 +3389,7 @@ export default function DashboardPage({ onNavigate }) {
                                 borderRadius: "999px",
                                 fontSize: "11px",
                                 fontWeight: 700,
-                                color: "#cbd5e1",
+                                color: "#475569",
                                 background: "rgba(148,163,184,0.12)",
                               }}
                             >
@@ -2915,7 +3397,7 @@ export default function DashboardPage({ onNavigate }) {
                             </span>
                           </div>
                         </div>
-                        <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
+                        <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                         <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                         <div>
                           <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
@@ -2931,7 +3413,7 @@ export default function DashboardPage({ onNavigate }) {
                   )}
                 </div>
               </div>
-              <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: "14px" }}>
+              <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(226, 232, 240, 0.96)", display: "grid", gap: "14px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                   <div style={{ fontSize: "16px", fontWeight: 700 }}>Review Progress And Next Steps</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2951,9 +3433,9 @@ export default function DashboardPage({ onNavigate }) {
                           borderRadius: "999px",
                           fontSize: "12px",
                           fontWeight: 700,
-                          color: "#cbd5e1",
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.05)",
+                          color: "#475569",
+                          background: "rgba(226,232,240,0.5)",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                         }}
                       >
                         {metric.label}: {metric.value}
@@ -2980,8 +3462,8 @@ export default function DashboardPage({ onNavigate }) {
                 </div>
               </div>
               {resolvedQueueItems.length > 0 ? (
-                <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Recently Reviewed</div>
+                <div style={{ marginTop: "18px", paddingTop: "18px", borderTop: "1px solid rgba(226, 232, 240, 0.96)" }}>
+                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>Recently Reviewed</div>
                   <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
                     {resolvedQueueItems.slice(0, 3).map((item) => (
                       <div
@@ -2989,8 +3471,8 @@ export default function DashboardPage({ onNavigate }) {
                         style={{
                           padding: "12px 14px",
                           borderRadius: "14px",
-                          background: "rgba(255,255,255,0.02)",
-                          border: "1px solid rgba(255,255,255,0.04)",
+                          background: "#f8fafc",
+                          border: "1px solid rgba(226, 232, 240, 0.96)",
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
@@ -3014,12 +3496,12 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   padding: "22px",
                   borderRadius: "20px",
-                  background: "rgba(15,23,42,0.42)",
-                  border: "1px solid rgba(255,255,255,0.05)",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.96)",
                 }}
               >
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>What Looks Strong</div>
-                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#334155" }}>
                   {(assistantHouseholdMap.strength_signals.length > 0
                     ? assistantHouseholdMap.strength_signals
                     : ["Household strengths will become more visible as more linked records and review support are added."]).map((item) => (
@@ -3034,12 +3516,12 @@ export default function DashboardPage({ onNavigate }) {
                 style={{
                   padding: "22px",
                   borderRadius: "20px",
-                  background: "rgba(15,23,42,0.42)",
-                  border: "1px solid rgba(255,255,255,0.05)",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.96)",
                 }}
               >
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>What Still Needs More Visibility</div>
-                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+                <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#334155" }}>
                   {(assistantHouseholdMap.visibility_gaps.length > 0
                     ? assistantHouseholdMap.visibility_gaps
                     : ["No major visibility gaps are currently standing out across the visible household records."]).map((item) => (
@@ -3059,8 +3541,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
           }}
         >
           <div style={{ fontSize: "20px", fontWeight: 700 }}>What Needs Attention Now</div>
@@ -3071,7 +3553,7 @@ export default function DashboardPage({ onNavigate }) {
                 ? "A small number of concrete items are still worth looking at next, but the list should feel manageable."
                 : "No major action items are currently active."}
           </div>
-          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
+          <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#334155" }}>
             {(topActions.length > 0 ? topActions : ["No major action items are currently active."]).map((item) => (
               <li key={typeof item === "string" ? item : item.id || item.label || item.summary} style={{ lineHeight: "1.7" }}>
                 {typeof item === "string" ? item : item.summary || item.label}
@@ -3086,8 +3568,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
           }}
         >
           <div style={{ fontSize: "20px", fontWeight: 700 }}>Insurance Review</div>
@@ -3129,8 +3611,8 @@ export default function DashboardPage({ onNavigate }) {
           style={{
             padding: sectionPadding,
             borderRadius: sectionRadius,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            background: "#ffffff",
+            border: "1px solid rgba(226, 232, 240, 0.96)",
           }}
         >
           <div style={{ fontSize: "20px", fontWeight: 700 }}>Platform Overview</div>
@@ -3144,8 +3626,8 @@ export default function DashboardPage({ onNavigate }) {
                     style={{
                       padding: "14px 16px",
                       borderRadius: "16px",
-                      background: "rgba(15,23,42,0.42)",
-                      border: "1px solid rgba(255,255,255,0.05)",
+                      background: "#f8fafc",
+                      border: "1px solid rgba(226, 232, 240, 0.96)",
                       display: "grid",
                       gap: "8px",
                     }}
@@ -3169,7 +3651,7 @@ export default function DashboardPage({ onNavigate }) {
                     </div>
                     <div style={{ paddingTop: "2px", color: "#94a3b8", lineHeight: "1.65", fontSize: "14px" }}>{row.insight}</div>
                     <div style={{ color: "#64748b", lineHeight: "1.6", fontSize: "13px" }}>
-                      <span style={{ color: "#cbd5e1", fontWeight: 600 }}>What to watch:</span> {row.watchpoint}
+                      <span style={{ color: "#475569", fontWeight: 600 }}>What to watch:</span> {row.watchpoint}
                     </div>
                   </div>
                 );
@@ -3190,7 +3672,7 @@ export default function DashboardPage({ onNavigate }) {
                   {moduleRows.map((row) => {
                     const tone = getStatusColors(row.status);
                     return (
-                      <tr key={row.module} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <tr key={row.module} style={{ borderTop: "1px solid rgba(226, 232, 240, 0.96)" }}>
                         <td style={{ padding: "14px 0", fontWeight: 600 }}>{row.module}</td>
                         <td style={{ padding: "14px 0" }}>
                           <span
