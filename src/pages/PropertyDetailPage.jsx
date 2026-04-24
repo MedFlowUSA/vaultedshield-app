@@ -4,6 +4,7 @@ import EmptyState from "../components/shared/EmptyState";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import PageHeader from "../components/layout/PageHeader";
 import PropertyAIChat from "../components/property/PropertyAIChat";
+import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -744,15 +745,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
         {
           label: "In plain English",
           value: everydayVerdict,
-          detail: propertyPageFascia?.meaning || propertyCommandCenter.headline,
+          detail: propertyPageFascia?.meaning || confidenceDriver,
         },
         {
           label: "What to do first",
           value: propertyPageFascia?.primaryAction?.label || "Review the top property issue",
           detail:
-            topPropertyReviewItem?.summary ||
             propertyPageFascia?.explanation?.recommendedAction?.detail ||
-            propertyCommandCenter.headline,
+            "Use the first recommended property step before diving into the deeper stack analysis.",
         },
         {
           label: "Why confidence is limited or strong",
@@ -779,10 +779,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     latestPropertyValuation,
     linkedHomeownersPolicies.length,
     linkedMortgages.length,
-    propertyCommandCenter,
     propertyPageFascia,
     propertyStackAnalytics?.completeness_score,
-    topPropertyReviewItem,
   ]);
   const propertyTransitionGuide = useMemo(() => {
     const stackScore =
@@ -947,6 +945,63 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     reviewScope.householdId,
     topPropertyReviewItem,
   ]);
+  const propertyActionTiles = useMemo(
+    () => [
+      {
+        key: "property-verdict",
+        kicker: "Simple Read",
+        title: propertyPlainEnglishGuide.cards[0]?.value || "Property story still forming",
+        detail: propertyPlainEnglishGuide.cards[0]?.detail || propertyPlainEnglishGuide.summary,
+        metric:
+          propertyStackAnalytics?.completeness_score !== null && propertyStackAnalytics?.completeness_score !== undefined
+            ? `${propertyStackAnalytics.completeness_score}% complete`
+            : "Completeness forming",
+        tone:
+          propertyPageFascia?.status === "Strong"
+            ? "good"
+            : propertyPageFascia?.status === "Stable"
+              ? "warning"
+              : propertyPageFascia?.status === "At Risk"
+                ? "alert"
+                : "info",
+        statusLabel: "Property Status",
+        actionLabel: "See Why",
+        actionKey: "details",
+      },
+      {
+        key: "property-next-step",
+        kicker: "First Move",
+        title: propertyPlainEnglishGuide.cards[1]?.value || "Review the top property issue",
+        detail: propertyPlainEnglishGuide.cards[1]?.detail || "Take the first property step before opening the full stack analysis.",
+        metric: topPropertyReviewItem?.title || "Review path ready",
+        tone: "warning",
+        statusLabel: "Guided Action",
+        actionLabel: propertyPageFascia?.primaryAction?.label || "Open Review Workspace",
+        actionKey: "next-step",
+      },
+      {
+        key: "property-support",
+        kicker: "Support",
+        title: propertyPlainEnglishGuide.cards[2]?.value || "Stack confidence still forming",
+        detail: propertyPlainEnglishGuide.cards[2]?.detail || "The linked mortgage, homeowners, and valuation evidence determine how much this page can trust the stack.",
+        metric: latestPropertyValuation?.midpoint_estimate ? formatCurrency(latestPropertyValuation.midpoint_estimate) : "No valuation yet",
+        tone: latestPropertyValuation?.midpoint_estimate && linkedMortgages.length > 0 && linkedHomeownersPolicies.length > 0 ? "good" : "info",
+        statusLabel: "Evidence Depth",
+        actionLabel: "Open Details",
+        actionKey: "details",
+      },
+    ],
+    [
+      latestPropertyValuation,
+      linkedHomeownersPolicies.length,
+      linkedMortgages.length,
+      propertyPageFascia,
+      propertyPlainEnglishGuide.cards,
+      propertyPlainEnglishGuide.summary,
+      propertyStackAnalytics?.completeness_score,
+      topPropertyReviewItem?.title,
+    ]
+  );
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   const summaryItems = useMemo(() => {
@@ -1340,7 +1395,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       <PageHeader
         eyebrow="Assets"
         title={property?.property_name || linkedAsset?.asset_name || "Property Detail"}
-        description="Live property bundle view backed by property records, documents, snapshots, analytics, and linked platform assets."
+        description="See the property story first, then open the linked records, values, and stack details when you want more depth."
         actions={
           <button onClick={() => onNavigate("/property")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
             Back to Property Hub
@@ -1449,7 +1504,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                     </button>
                   ) : null}
                   <button type="button" onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ ...actionButtonStyle(false), ...(actionButtonLayoutStyle || {}), borderRadius: "999px", padding: "11px 16px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}>
-                    Step Into The Deeper Breakdown
+                    See Supporting Details
                   </button>
                 </div>
               </div>
@@ -1462,25 +1517,28 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 gap: "14px",
               }}
             >
-              {propertyPlainEnglishGuide.cards.map((card) => (
-                <div
-                  key={card.label}
-                  style={{
-                    padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
-                    borderRadius: "22px",
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                    border: "1px solid rgba(148, 163, 184, 0.16)",
-                    display: "grid",
-                    gap: "10px",
-                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+              {propertyActionTiles.map((tile) => (
+                <FriendlyActionTile
+                  key={tile.key}
+                  kicker={tile.kicker}
+                  title={tile.title}
+                  detail={tile.detail}
+                  metric={tile.metric}
+                  tone={tile.tone}
+                  statusLabel={tile.statusLabel}
+                  actionLabel={tile.actionLabel}
+                  onAction={() => {
+                    if (tile.actionKey === "next-step") {
+                      if (propertyPageFascia?.primaryAction) {
+                        handlePropertyFasciaAction(propertyPageFascia.primaryAction);
+                        return;
+                      }
+                      onNavigate?.(propertyReviewWorkspaceRoute);
+                      return;
+                    }
+                    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                >
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    {card.label}
-                  </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-                </div>
+                />
               ))}
             </div>
           </section>
@@ -1559,7 +1617,7 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 }}
               >
                 <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  Translate The Analyst Terms
+                  Helpful Definitions
                 </div>
                 {propertyTransitionGuide.keys.map((item) => (
                   <details
@@ -1590,10 +1648,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 }}
               >
                 <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  When You Want More Depth
+                  When You Want More Detail
                 </div>
                 <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
-                  Use the deeper breakdown as supporting proof
+                  Use the next layer as supporting detail
                 </div>
                 <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
                   The darker section below is where the system shows the analyst evidence behind the simpler property story.
@@ -1632,11 +1690,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
             }}
           >
-            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-              Deeper Review Starts Here
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Supporting Details Start Here
             </div>
             <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-              Technical breakdown: signals, valuation, stack completeness, equity, and linked-context diagnostics
+              Supporting detail: signals, valuation, stack completeness, equity, and linked records
             </div>
             <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
               Everything below this point is the proof layer. It explains the property signals, action feed, valuation logic, equity position, and the linked mortgage and homeowners context behind the simpler read above.

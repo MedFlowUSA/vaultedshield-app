@@ -3,6 +3,7 @@ import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
 import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import { FriendlyActionTile, SuggestedActionsRow } from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
@@ -48,6 +49,68 @@ function statusToneStyles(status) {
     return { color: "#9a3412", background: "#fed7aa" };
   }
   return { color: "#475569", background: "#e2e8f0" };
+}
+
+function urgencyPresentation(urgency = "info") {
+  if (urgency === "critical" || urgency === "high") {
+    return {
+      icon: "🔴",
+      label: "Attention needed",
+      accent: "#991b1b",
+      background: "#fee2e2",
+      border: "1px solid rgba(248, 113, 113, 0.22)",
+    };
+  }
+
+  if (urgency === "warning" || urgency === "medium") {
+    return {
+      icon: "🟡",
+      label: "Needs review",
+      accent: "#92400e",
+      background: "#fef3c7",
+      border: "1px solid rgba(245, 158, 11, 0.22)",
+    };
+  }
+
+  return {
+    icon: "📄",
+    label: "Worth a look",
+    accent: "#475569",
+    background: "#e2e8f0",
+    border: "1px solid rgba(148, 163, 184, 0.22)",
+  };
+}
+
+function friendlyUrgencyPresentation(urgency = "info") {
+  const legacy = urgencyPresentation(urgency);
+
+  if (urgency === "critical" || urgency === "high") {
+    return {
+      icon: "High",
+      label: "Attention needed",
+      accent: legacy.accent,
+      background: legacy.background,
+      border: legacy.border,
+    };
+  }
+
+  if (urgency === "warning" || urgency === "medium") {
+    return {
+      icon: "Review",
+      label: "Needs review",
+      accent: legacy.accent,
+      background: legacy.background,
+      border: legacy.border,
+    };
+  }
+
+  return {
+    icon: "Note",
+    label: "Worth a look",
+    accent: legacy.accent,
+    background: legacy.background,
+    border: legacy.border,
+  };
 }
 
 function sourceOptions(items = []) {
@@ -536,14 +599,14 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     const recentWinCount = workflowResolutionMemory.recentlyResolved.length;
     const topFocusLabel = topVisibleCluster
       ? `${topVisibleCluster.summaryLabels[0] || "Household"}: ${topVisibleCluster.summaryLabels[1] || "Review Needed"}`
-      : activeQueueItems[0]?.label || "Active review queue";
+      : activeQueueItems[0]?.label || "Active review work";
 
     return {
-      title: "Handle what matters first, not the whole queue at once",
+      title: "Handle what matters first, not everything at once",
       summary: workspaceVerdict.summary,
       transition:
         activeQueueItems.length === 0
-          ? "This page now acts more like progress memory than a queue. Start with what has already been completed, then only reopen work when fresh evidence changes the read."
+          ? "This page now acts more like progress memory than a long task list. Start with what has already been completed, then only reopen work when fresh evidence changes the read."
           : "Start with the top workstream, clear what is actively blocking readiness, and use the completed-review memory to show what the household has already improved.",
       quickFacts: [
         `${activeQueueItems.length} active review item${activeQueueItems.length === 1 ? "" : "s"} are still affecting readiness.`,
@@ -584,6 +647,82 @@ export default function ReviewWorkspacePage({ onNavigate }) {
     workflowResolutionMemory.recentlyResolved,
     workflowSummary.summary,
     workspaceVerdict,
+  ]);
+  const reviewWorkspaceActionTiles = useMemo(() => {
+    const pendingDocsCount = Number(metrics.find((item) => item.label === "Waiting On Docs")?.value || 0);
+    const recentWinCount = workflowResolutionMemory.recentlyResolved.length;
+
+    return [
+      {
+        key: "active-work",
+        kicker: "Active Work",
+        title: activeQueueItems.length > 0 ? `${activeQueueItems.length} item${activeQueueItems.length === 1 ? "" : "s"} still need attention` : "No active review work right now",
+        detail:
+          activeQueueItems.length > 0
+            ? "Start with the live review queue so the biggest readiness blocker gets handled before you look at everything else."
+            : "The active queue is quiet, so this workspace can start with progress memory rather than urgency.",
+        metric: topVisibleCluster ? `${topVisibleCluster.count} in top workstream` : "Queue under control",
+        tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
+        statusLabel: activeQueueItems.length > 0 ? "Needs Review" : "Calm Right Now",
+        actionLabel: activeQueueItems.length > 0 ? "Open Active Work" : "See Progress",
+        actionKey: activeQueueItems.length > 0 ? "active-work" : "completed-progress",
+      },
+      {
+        key: "completed-progress",
+        kicker: "Completed Progress",
+        title: recentWinCount > 0 ? `${recentWinCount} recent win${recentWinCount === 1 ? "" : "s"} remembered` : `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}`,
+        detail:
+          recentWinCount > 0
+            ? "This workspace keeps completed work visible as proof of movement, not just as something that disappeared."
+            : "Completed reviews stay held out of active priority until new evidence reopens them.",
+        metric: scoreLift > 0 ? `+${scoreLift} readiness lift` : "Progress still tracked",
+        tone: "good",
+        statusLabel: "Recently Improved",
+        actionLabel: "See Completed Progress",
+        actionKey: "completed-progress",
+      },
+      {
+        key: "missing-evidence",
+        kicker: "Evidence Support",
+        title: pendingDocsCount > 0 ? `${pendingDocsCount} item${pendingDocsCount === 1 ? "" : "s"} are waiting on documents` : "No obvious document bottleneck",
+        detail:
+          pendingDocsCount > 0
+            ? "Some items are blocked on missing evidence, so adding the right record may be faster than debating the issue itself."
+            : "The current queue is not mainly waiting on documents right now.",
+        metric: `${metrics.find((item) => item.label === "Follow Up")?.value || 0} follow-up item${Number(metrics.find((item) => item.label === "Follow Up")?.value || 0) === 1 ? "" : "s"}`,
+        tone: pendingDocsCount > 0 ? "warning" : "neutral",
+        statusLabel: pendingDocsCount > 0 ? "Missing Information" : "Well Supported",
+        actionLabel: "Open Active Work",
+        actionKey: "active-work",
+      },
+      {
+        key: "focus-lane",
+        kicker: "Best Focus",
+        title:
+          topVisibleCluster
+            ? `${topVisibleCluster.summaryLabels[0] || "Household"}: ${topVisibleCluster.summaryLabels[1] || "Review Needed"}`
+            : activeQueueItems[0]?.label || "All review work",
+        detail:
+          topVisibleCluster
+            ? "Use the grouped workstream first so related items can move together instead of one at a time."
+            : assistantFilterState.filters
+              ? "This workspace is currently focused by a saved or assistant-driven filter."
+              : "Open the full work list and choose the next lane that matters most.",
+        metric: assistantFilterState.filters ? "Filtered view active" : "Workspace-wide view",
+        tone: "info",
+        statusLabel: "Guided Focus",
+        actionLabel: assistantFilterState.filters ? "Clear Filters" : "Open Workspace",
+        actionKey: assistantFilterState.filters ? "clear-filters" : "active-work",
+      },
+    ];
+  }, [
+    activeQueueItems,
+    assistantFilterState.filters,
+    metrics,
+    resolvedQueueItems.length,
+    scoreLift,
+    topVisibleCluster,
+    workflowResolutionMemory.recentlyResolved,
   ]);
 
   function handleClearAssistantFilters() {
@@ -626,7 +765,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         secondaryActionLabel="How Progress Is Remembered"
         onSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
         guideTitle="Read this page in three passes"
-        guideDescription="Start with the short status, then move into progress memory, and only use the full queue when you need assignment, routing, or status control."
+        guideDescription="Start with the short status, then move into progress memory, and only use the full work list when you need assignment, routing, or status control."
         guideSteps={[
           {
             label: "Step 1",
@@ -640,8 +779,8 @@ export default function ReviewWorkspacePage({ onNavigate }) {
           },
           {
             label: "Step 3",
-            title: "Open the full queue only when needed",
-            detail: "Use the detailed queue for owners, status updates, saved views, and route-level review work.",
+            title: "Open the full work list only when needed",
+            detail: "Use the detailed work list for owners, status updates, saved views, and route-level review work.",
           },
         ]}
         translatedTerms={[
@@ -662,7 +801,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             meaning: "Items that likely need more evidence before the review can be closed with confidence.",
           },
         ]}
-        depthTitle="Use the full queue when you want assignment, routing, and status control"
+        depthTitle="Use the full work list when you want assignment, routing, and status control"
         depthDescription="The detailed workspace below is the operating layer. It is there to move work, not to be the first thing people have to decode."
         depthPrimaryActionLabel="Jump To Active Work"
         onDepthPrimaryAction={() => scrollToWorkspaceSection("review-work-queue")}
@@ -670,6 +809,46 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         onDepthSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
         showAnalysisDivider={false}
       />
+
+      <section style={{ display: "grid", gap: "10px" }}>
+        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+          Choose Your Lane
+        </div>
+        <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
+          Start with the workspace path that matches what you need right now, then drop into the detailed assignment and status controls only after the direction is clear.
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {reviewWorkspaceActionTiles.map((tile) => (
+            <FriendlyActionTile
+              key={tile.key}
+              kicker={tile.kicker}
+              title={tile.title}
+              detail={tile.detail}
+              metric={tile.metric}
+              tone={tile.tone}
+              statusLabel={tile.statusLabel}
+              actionLabel={tile.actionLabel}
+              onAction={() => {
+                if (tile.actionKey === "completed-progress") {
+                  scrollToWorkspaceSection("review-progress-memory");
+                  return;
+                }
+                if (tile.actionKey === "clear-filters") {
+                  handleClearAssistantFilters();
+                  return;
+                }
+                scrollToWorkspaceSection("review-work-queue");
+              }}
+            />
+          ))}
+        </div>
+      </section>
 
       {assistantFilterState.filters ? (
         <SectionCard
@@ -795,7 +974,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
       </div>
 
       <div id="review-work-queue">
-        <SectionCard title="Active Review Work" subtitle="Filter, sort, save views, assign owners, and apply status changes in one place.">
+        <SectionCard title="Active Review Work" subtitle="These are the household items worth looking at next. Filters, ownership, and workflow controls stay available below.">
         <div style={{ display: "grid", gap: "16px" }}>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {[
@@ -929,54 +1108,58 @@ export default function ReviewWorkspacePage({ onNavigate }) {
               }}
             >
               <div style={{ display: "grid", gap: "6px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Grouped Workstreams</div>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  Start here before scanning the full queue. Similar review items are grouped into visible workstreams so repeated documentation, continuity, and linkage gaps are easier to batch.
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-                {visibleIssueClusters.slice(0, 8).map((cluster, clusterIndex) => (
-                  <div
-                    key={cluster.key}
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "16px",
-                      background: "#ffffff",
-                      border: "1px solid #e2e8f0",
-                      display: "grid",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 800, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                        Workstream {clusterIndex + 1}
-                      </div>
-                      <span
-                        style={{
-                          padding: "5px 9px",
-                          borderRadius: "999px",
-                          background: "#dbeafe",
-                          color: "#1d4ed8",
-                          fontSize: "12px",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {cluster.count} {cluster.count === 1 ? "item" : "items"}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>
-                      {(cluster.summaryLabels[0] || "Household")}: {cluster.summaryLabels[1] || "Review Needed"}
-                    </div>
-                    <div style={{ color: "#475569", lineHeight: "1.6", fontSize: "14px" }}>
-                      Highest urgency: {String(cluster.urgency || "info").replace(/_/g, " ")}
-                    </div>
-                    {cluster.examples.length > 0 ? (
-                      <div style={{ color: "#64748b", fontSize: "13px", lineHeight: "1.6" }}>
-                        {cluster.examples.join(" | ")}
-                      </div>
-                    ) : null}
+                  <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>Similar Review Work, Grouped Together</div>
+                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                    Start here before scanning the full work list. Similar items are grouped together so repeated documentation, continuity, and linkage gaps are easier to handle in one pass.
                   </div>
-                ))}
+                </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {visibleIssueClusters.slice(0, 8).map((cluster, clusterIndex) => {
+                  const urgencyMeta = friendlyUrgencyPresentation(cluster.urgency);
+                  return (
+                    <div
+                      key={cluster.key}
+                      style={{
+                        padding: "16px 16px 18px",
+                        borderRadius: "18px",
+                        background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                        display: "grid",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 800, color: urgencyMeta.accent, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {urgencyMeta.icon} Workstream {clusterIndex + 1}
+                        </div>
+                        <span
+                          style={{
+                            padding: "5px 9px",
+                            borderRadius: "999px",
+                            background: urgencyMeta.background,
+                            color: urgencyMeta.accent,
+                            border: urgencyMeta.border,
+                            fontSize: "12px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {cluster.count} {cluster.count === 1 ? "item" : "items"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a", lineHeight: "1.35" }}>
+                        {(cluster.summaryLabels[0] || "Household")}: {cluster.summaryLabels[1] || "Review Needed"}
+                      </div>
+                      <div style={{ color: "#334155", lineHeight: "1.7", fontSize: "14px" }}>
+                        {urgencyMeta.label}. These items are similar enough to review together instead of one by one.
+                      </div>
+                      {cluster.examples.length > 0 ? (
+                        <div style={{ color: "#64748b", fontSize: "13px", lineHeight: "1.6" }}>
+                          Examples: {cluster.examples.join(" | ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -994,27 +1177,42 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             <div style={{ display: "grid", gap: "12px" }}>
               {visibleItems.map((item, index) => {
                 const workflowTone = statusToneStyles(item.workflow_status);
+                const urgencyMeta = friendlyUrgencyPresentation(item.urgency);
                 const canOpenRoute = Boolean(item.route);
                 return (
                   <div
                     key={item.id}
                     style={{
-                      padding: "16px",
-                      borderRadius: "18px",
-                      border: "1px solid #e2e8f0",
-                      background: "#ffffff",
+                      padding: "18px",
+                      borderRadius: "20px",
+                      border: "1px solid rgba(148, 163, 184, 0.18)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+                      boxShadow: "0 12px 28px rgba(15, 23, 42, 0.04)",
                       display: "grid",
-                      gap: "10px",
+                      gap: "12px",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                       <div style={{ display: "grid", gap: "6px" }}>
                         <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700 }}>
-                          {`Review Item ${index + 1} - ${item.source || "Household"}`}
+                          {`${urgencyMeta.icon} Review Prompt ${index + 1} · ${item.source || "Household"}`}
                         </div>
-                        <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
+                        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", lineHeight: "1.35" }}>{item.label}</div>
                       </div>
                       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: urgencyMeta.accent,
+                            background: urgencyMeta.background,
+                            border: urgencyMeta.border,
+                          }}
+                        >
+                          {urgencyMeta.label}
+                        </span>
                         <span style={{ padding: "6px 10px", borderRadius: "999px", fontSize: "12px", fontWeight: 700, ...workflowTone }}>
                           {item.workflow_label}
                         </span>
@@ -1025,7 +1223,22 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                         ) : null}
                       </div>
                     </div>
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.summary}</div>
+                    <div
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: "16px",
+                        background: "rgba(255,255,255,0.8)",
+                        border: "1px solid rgba(148, 163, 184, 0.16)",
+                        display: "grid",
+                        gap: "8px",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                        What This Means
+                      </div>
+                      <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.summary}</div>
+                      {item.consequence ? <div style={{ color: "#475569", lineHeight: "1.7" }}>{item.consequence}</div> : null}
+                    </div>
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                       <span
                         style={{
@@ -1056,35 +1269,37 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                         {item.change_signal}
                       </div>
                     ) : null}
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => canOpenRoute && onNavigate?.(item.route)}
-                        disabled={!canOpenRoute}
-                        title={canOpenRoute ? item.route : "No route is available for this review item yet."}
-                        style={{
-                          ...actionStyle(true),
-                          cursor: canOpenRoute ? "pointer" : "not-allowed",
-                          opacity: canOpenRoute ? 1 : 0.55,
-                        }}
-                      >
-                        {canOpenRoute ? item.action_label || "Open review" : "Route unavailable"}
-                      </button>
-                      <button type="button" onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)} style={actionStyle(false)}>
-                        Pending Docs
-                      </button>
-                      <button type="button" onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)} style={actionStyle(false)}>
-                        Follow Up
-                      </button>
-                      <button type="button" onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)} style={actionStyle(false)}>
-                        {item.changed_since_review ? "Review Again" : "Mark Reviewed"}
-                      </button>
-                      {item.workflow_status !== REVIEW_WORKFLOW_STATUSES.open.key ? (
-                        <button type="button" onClick={() => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.open.key)} style={actionStyle(false)}>
-                          Reopen
-                        </button>
-                      ) : null}
-                    </div>
+                    <SuggestedActionsRow
+                      actions={[
+                        {
+                          label: canOpenRoute ? item.action_label || "Open review" : "Route unavailable",
+                          onClick: () => canOpenRoute && onNavigate?.(item.route),
+                          kind: "primary",
+                        },
+                        {
+                          label: "Pending Docs",
+                          onClick: () => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key),
+                          kind: "secondary",
+                        },
+                        {
+                          label: "Follow Up",
+                          onClick: () => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.follow_up.key),
+                          kind: "secondary",
+                        },
+                        {
+                          label: item.changed_since_review ? "Review Again" : "Mark Reviewed",
+                          onClick: () => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.reviewed.key),
+                          kind: "secondary",
+                        },
+                        item.workflow_status !== REVIEW_WORKFLOW_STATUSES.open.key
+                          ? {
+                              label: "Reopen",
+                              onClick: () => handleReviewWorkflowUpdate(item.id, REVIEW_WORKFLOW_STATUSES.open.key),
+                              kind: "secondary",
+                            }
+                          : null,
+                      ].filter(Boolean)}
+                    />
                   </div>
                 );
               })}

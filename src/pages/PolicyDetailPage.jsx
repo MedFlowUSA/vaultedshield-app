@@ -5,6 +5,7 @@ import PolicySignalsSummaryCard from "../components/policy/PolicySignalsSummaryC
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
+import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import { IulReaderPanel } from "../features/iul-reader/IulReaderPanel.jsx";
 import { buildIulReaderModel } from "../features/iul-reader/readerModel.js";
 import {
@@ -1182,6 +1183,60 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     policyAdvisorBrief.nextMove,
     showUnifiedIulReader,
   ]);
+  const firstQuickReviewSection = !showUnifiedIulReader ? "interpretation" : "policy_overview";
+  const policyActionTiles = useMemo(
+    () => [
+      {
+        key: "policy-verdict",
+        kicker: "Simple Read",
+        title: policyPlainEnglishGuide.cards[0]?.value || "Policy read is still forming",
+        detail: policyPlainEnglishGuide.cards[0]?.detail || policyInterpretation.bottom_line_summary,
+        metric: ranking?.status || "Developing",
+        tone:
+          ranking?.status === "Strong"
+            ? "good"
+            : ranking?.status === "Moderate"
+              ? "warning"
+              : ranking?.status === "Weak" || ranking?.status === "At Risk"
+                ? "alert"
+                : "info",
+        statusLabel: "Policy Status",
+        actionLabel: "See Why",
+        actionKey: "details",
+      },
+      {
+        key: "policy-next-step",
+        kicker: "First Move",
+        title: policyPlainEnglishGuide.cards[1]?.value || policyAdvisorBrief.nextMove,
+        detail: policyPlainEnglishGuide.cards[1]?.detail || "Start with the best next review move before reading every technical section.",
+        metric: "Health Snapshot",
+        tone: "warning",
+        statusLabel: "Guided Action",
+        actionLabel: "Start Review",
+        actionKey: "review",
+      },
+      {
+        key: "policy-confidence",
+        kicker: "Support",
+        title: policyPlainEnglishGuide.cards[2]?.value || "Confidence still forming",
+        detail: policyPlainEnglishGuide.cards[2]?.detail || "Open the deeper proof when you want to inspect support, charges, and statement recency.",
+        metric: comparisonRow?.latest_statement_date ? formatDate(comparisonRow.latest_statement_date) : "No fresh statement",
+        tone: comparisonRow?.latest_statement_date && comparisonRow?.coi_confidence !== "weak" ? "good" : "info",
+        statusLabel: "Evidence Depth",
+        actionLabel: showUnifiedIulReader ? "Open Technical Console" : "Open Details",
+        actionKey: "details",
+      },
+    ],
+    [
+      comparisonRow?.coi_confidence,
+      comparisonRow?.latest_statement_date,
+      policyAdvisorBrief.nextMove,
+      policyInterpretation.bottom_line_summary,
+      policyPlainEnglishGuide.cards,
+      ranking?.status,
+      showUnifiedIulReader,
+    ]
+  );
   const interpretationSignalCards = useMemo(
     () => [
       {
@@ -1578,28 +1633,27 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
               style={{
                 display: "grid",
                 gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                gap: "12px",
+                gap: "14px",
               }}
             >
-              {policyPlainEnglishGuide.cards.map((card) => (
-                <div
-                  key={card.label}
-                  style={{
-                    padding: "20px 20px 22px",
-                    borderRadius: "22px",
-                    background: "rgba(255,255,255,0.94)",
-                    border: "1px solid rgba(255,255,255,0.8)",
-                    display: "grid",
-                    gap: "10px",
-                    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.07)",
+              {policyActionTiles.map((tile) => (
+                <FriendlyActionTile
+                  key={tile.key}
+                  kicker={tile.kicker}
+                  title={tile.title}
+                  detail={tile.detail}
+                  metric={tile.metric}
+                  tone={tile.tone}
+                  statusLabel={tile.statusLabel}
+                  actionLabel={tile.actionLabel}
+                  onAction={() => {
+                    if (tile.actionKey === "review") {
+                      scrollToPolicySection(firstQuickReviewSection);
+                      return;
+                    }
+                    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                >
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    {card.label}
-                  </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-                </div>
+                />
               ))}
             </div>
           </section>

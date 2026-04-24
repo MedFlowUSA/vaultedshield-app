@@ -4,9 +4,9 @@ import {
 } from "../lib/domain/platformIntelligence";
 import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import HouseholdAIChat from "../components/household/HouseholdAIChat";
+import { ActionSignalCard, FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
-  buildReviewAssignmentOptions,
   buildHouseholdReviewDigest,
   getHouseholdReviewDigestSnapshot,
   getHouseholdReviewWorkflowState,
@@ -929,12 +929,171 @@ export default function DashboardPage({ onNavigate }) {
       ],
     };
   }, [continuityPercent, continuityStatus, topDashboardPriority, totalAssets, totalIssues]);
+  const dashboardFasciaCards = useMemo(
+    () => [
+      {
+        label: "Household Status",
+        value: continuityStatus.label,
+        detail:
+          continuityPercent >= 75
+            ? "The household has a strong readable base. Deeper detail is available, but the first read is already useful."
+            : continuityPercent >= 50
+              ? "The household picture is usable. A few focused improvements will make the read easier to trust."
+              : "The household picture is still forming. Start with one clear next step instead of trying to finish everything.",
+        tone: continuityPercent >= 75 ? "good" : continuityPercent >= 50 ? "warning" : "info",
+      },
+      {
+        label: "Needs Attention",
+        value: activeQueueItems.length > 0 ? `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}` : "Nothing urgent",
+        detail:
+          activeQueueItems.length > 0
+            ? "These are the items still shaping household readiness. Start with the first one, not the whole list."
+            : "No active review work is standing out right now. Completed progress is still remembered underneath.",
+        tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
+        actionLabel: "Open Review Workspace",
+        onAction: () => onNavigate?.("/review-workspace"),
+      },
+      {
+        label: "Recently Improved",
+        value:
+          workflowResolutionMemory.recentlyResolved.length > 0
+            ? `${workflowResolutionMemory.recentlyResolved.length} recent win${workflowResolutionMemory.recentlyResolved.length === 1 ? "" : "s"}`
+            : `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}`,
+        detail:
+          workflowResolutionMemory.recentlyResolved[0] ||
+          "Reviewed work stays remembered so the app can show progress, not just open issues.",
+        tone: "good",
+      },
+      {
+        label: "Best Next Step",
+        value: topDashboardPriority?.nextAction || "Add or review one key record",
+        detail:
+          topDashboardPriority?.blocker ||
+          "This is the fastest way to make the household read clearer without opening every technical section.",
+        tone: "info",
+        actionLabel: topDashboardPriority?.route ? "Start Here" : "Open Priorities",
+        onAction: () =>
+          topDashboardPriority?.route
+            ? onNavigate?.(topDashboardPriority.route)
+            : onNavigate?.("/review-workspace"),
+      },
+    ],
+    [
+      activeQueueItems.length,
+      continuityPercent,
+      continuityStatus.label,
+      onNavigate,
+      resolvedQueueItems.length,
+      topDashboardPriority,
+      workflowResolutionMemory.recentlyResolved,
+    ]
+  );
+  const dashboardActionTiles = useMemo(
+    () => [
+      {
+        key: "review-policies",
+        kicker: "Insurance",
+        title: "Review Policies",
+        detail:
+          savedPolicyCount === 0
+            ? "Start the insurance lane with one readable policy so the household picture has real protection evidence."
+            : weakPolicyRows.length > 0 || missingStatementCount > 0
+              ? "Policies are visible, but some still need stronger statements or charge support before the read feels settled."
+              : "Policy review is in a strong place and ready for deeper comparison when you want it.",
+        metric: `${savedPolicyCount} polic${savedPolicyCount === 1 ? "y" : "ies"}`,
+        tone: savedPolicyCount === 0 ? "info" : weakPolicyRows.length > 0 || missingStatementCount > 0 ? "warning" : "good",
+        statusLabel: savedPolicyCount === 0 ? "Start Here" : weakPolicyRows.length > 0 || missingStatementCount > 0 ? "Needs Review" : "Looks Strong",
+        actionLabel: savedPolicyCount === 0 ? "Upload Policy" : "Open Insurance",
+        onAction: () => onNavigate?.(savedPolicyCount === 0 ? "/insurance/life/upload" : "/insurance"),
+      },
+      {
+        key: "review-attention",
+        kicker: "Workspace",
+        title: "Review What Needs Attention",
+        detail:
+          activeQueueItems.length > 0
+            ? "Open the guided review lane and work the most important household items first instead of reading every signal."
+            : "The active queue is quiet right now, so this lane is mostly about confirming progress and keeping momentum.",
+        metric: `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}`,
+        tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
+        statusLabel: activeQueueItems.length > 0 ? "Action Recommended" : "Calm Right Now",
+        actionLabel: "Open Review Workspace",
+        onAction: () => onNavigate?.("/review-workspace"),
+      },
+      {
+        key: "missing-information",
+        kicker: "Documents",
+        title: "Add Missing Information",
+        detail:
+          pendingDocumentsCount > 0
+            ? "Some household review items are waiting on documents, which means a few reads are only partially supported."
+            : "Document coverage is in a workable place, and new uploads will deepen the stronger reads rather than rescue missing ones.",
+        metric: `${pendingDocumentsCount} pending document${pendingDocumentsCount === 1 ? "" : "s"}`,
+        tone: pendingDocumentsCount > 0 ? "warning" : "good",
+        statusLabel: pendingDocumentsCount > 0 ? "Missing Support" : "Well Supported",
+        actionLabel: "Open Upload Center",
+        onAction: () => onNavigate?.("/upload-center"),
+      },
+      {
+        key: "property-stack",
+        kicker: "Property",
+        title: "Check Property Stack",
+        detail:
+          (propertySummary.propertyCount || 0) > 0
+            ? "Home, mortgage, and homeowners records can be reviewed together here instead of as separate fragments."
+            : "Add a property to anchor the home side of the household picture and make financing/protection easier to understand.",
+        metric: `${propertySummary.propertyCount || 0} propert${propertySummary.propertyCount === 1 ? "y" : "ies"}`,
+        tone: (propertySummary.propertyCount || 0) > 0 ? "info" : "neutral",
+        statusLabel: (propertySummary.propertyCount || 0) > 0 ? "Visible" : "Still Building",
+        actionLabel: "Open Property",
+        onAction: () => onNavigate?.("/property"),
+      },
+      {
+        key: "access-portals",
+        kicker: "Access",
+        title: "Check Access And Portals",
+        detail:
+          (intelligenceBundle?.portals?.length || 0) > 0
+            ? "Portal and access continuity is visible enough to review where critical household systems are linked or still fragile."
+            : "This lane becomes valuable as soon as key household portals are connected and emergency access stops living in memory.",
+        metric: `${intelligenceBundle?.portals?.length || 0} portal${intelligenceBundle?.portals?.length === 1 ? "" : "s"}`,
+        tone: (intelligenceBundle?.portals?.length || 0) > 0 ? "info" : "neutral",
+        statusLabel: (intelligenceBundle?.portals?.length || 0) > 0 ? "Connected" : "Needs Setup",
+        actionLabel: "Open Portals",
+        onAction: () => onNavigate?.("/portals"),
+      },
+      {
+        key: "open-reports",
+        kicker: "Reports",
+        title: "Open Reports",
+        detail:
+          resolvedQueueItems.length > 0
+            ? "Use the reports lane when you want the executive story first, with the deeper technical packet still available underneath."
+            : "The reporting layer is ready to summarize what is visible now, even while more household depth is still being built.",
+        metric: `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}`,
+        tone: resolvedQueueItems.length > 0 ? "good" : "info",
+        statusLabel: resolvedQueueItems.length > 0 ? "Shows Progress" : "Executive View",
+        actionLabel: "Open Reports",
+        onAction: () => onNavigate?.("/reports"),
+      },
+    ],
+    [
+      activeQueueItems.length,
+      intelligenceBundle,
+      missingStatementCount,
+      onNavigate,
+      pendingDocumentsCount,
+      propertySummary,
+      resolvedQueueItems.length,
+      savedPolicyCount,
+      weakPolicyRows.length,
+    ]
+  );
   const showLoadingShell =
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
   const sectionRadius = isMobile ? "20px" : "24px";
   const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))";
-  const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
   const householdAssistantSectionLabels = useMemo(
     () => ({
       "household-priority": "Top Priorities",
@@ -973,30 +1132,6 @@ export default function DashboardPage({ onNavigate }) {
         householdId,
         updates: {
           status,
-          updated_at: new Date().toISOString(),
-        },
-      }),
-    };
-
-    setReviewWorkflowState(nextState);
-    saveHouseholdReviewWorkflowState(reviewScope, nextState);
-  }
-
-  function handleReviewAssignmentUpdate(itemId, assigneeKey) {
-    const householdId = householdState.context.householdId;
-    if (!householdId || !itemId) return;
-    const targetItem = queueItems.find((item) => item.id === itemId) || null;
-    const assignee = assigneeChoices.find((option) => option.key === assigneeKey) || assigneeChoices[0];
-    const nextState = {
-      ...reviewWorkflowState,
-      [itemId]: buildReviewWorkflowStateEntry({
-        item: targetItem,
-        currentEntry: reviewWorkflowState[itemId] || {},
-        householdId,
-        updates: {
-          assignee_key: assignee?.key || "",
-          assignee_label: assignee?.label || "Unassigned",
-          assigned_at: assignee?.key ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         },
       }),
@@ -1053,7 +1188,7 @@ export default function DashboardPage({ onNavigate }) {
     {
       id: "upload_insurance",
       label: "Upload Insurance Policy",
-      description: "Start life insurance analysis with a baseline illustration or policy packet.",
+      description: "Start life insurance review with a baseline illustration or policy packet.",
       route: "/insurance/life/upload",
     },
     {
@@ -1714,11 +1849,11 @@ export default function DashboardPage({ onNavigate }) {
         <PlainLanguageBridge
           eyebrow="Start Here"
           title={dashboardWelcomeGuide.title}
-        summary={dashboardWelcomeGuide.summary}
-        transition={dashboardWelcomeGuide.transition}
-        quickFacts={dashboardWelcomeGuide.quickFacts}
-        cards={dashboardWelcomeGuide.cards}
-        primaryActionLabel={topDashboardPriority?.nextAction || "Show My First Step"}
+          summary={dashboardWelcomeGuide.summary}
+          transition={dashboardWelcomeGuide.transition}
+          quickFacts={dashboardWelcomeGuide.quickFacts}
+          cards={dashboardWelcomeGuide.cards}
+          primaryActionLabel={topDashboardPriority?.nextAction || "Show My First Step"}
           onPrimaryAction={() =>
             topDashboardPriority?.route
               ? onNavigate?.(topDashboardPriority.route)
@@ -1729,6 +1864,71 @@ export default function DashboardPage({ onNavigate }) {
           compact={isTablet}
           showAnalysisDivider={false}
         />
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: isTablet ? "1fr" : "repeat(4, minmax(0, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {dashboardFasciaCards.map((card) => (
+            <ActionSignalCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              detail={card.detail}
+              tone={card.tone}
+              actionLabel={card.actionLabel}
+              onAction={card.onAction}
+            />
+          ))}
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gap: "18px",
+            padding: isMobile ? "20px 18px" : "24px 24px 26px",
+            borderRadius: isMobile ? "22px" : "28px",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+            <div style={{ display: "grid", gap: "8px", maxWidth: "860px" }}>
+              <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 800 }}>
+                Choose Your Lane
+              </div>
+            <div style={{ fontSize: isMobile ? "24px" : "30px", lineHeight: "1.08", letterSpacing: "-0.03em", fontWeight: 800, color: "#f8fafc" }}>
+              Start with a big action tile, not the technical detail
+            </div>
+            <div style={{ color: "#94a3b8", lineHeight: "1.75" }}>
+              This is the friendly entry layer. Pick the household lane you want, then let the deeper analysis open only after you click in.
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {dashboardActionTiles.map((tile) => (
+              <FriendlyActionTile
+                key={tile.key}
+                kicker={tile.kicker}
+                title={tile.title}
+                detail={tile.detail}
+                metric={tile.metric}
+                tone={tile.tone}
+                statusLabel={tile.statusLabel}
+                actionLabel={tile.actionLabel}
+                onAction={tile.onAction}
+              />
+            ))}
+          </div>
+        </section>
 
         <section
           style={{
@@ -1746,7 +1946,7 @@ export default function DashboardPage({ onNavigate }) {
           </div>
           <div style={{ marginTop: "10px", maxWidth: "700px", fontSize: "15px", lineHeight: "1.7", color: "#94a3b8" }}>
             {householdState.error || loadError
-              ? "Household context is limited, so continuity visibility is partial."
+              ? "Household context is limited, so the picture is still partial."
               : continuityStatus.explanation}
           </div>
 
@@ -1782,7 +1982,7 @@ export default function DashboardPage({ onNavigate }) {
               onClick={() => setShowHouseholdReport((current) => !current)}
               style={reportButtonStyle(showHouseholdReport, false)}
             >
-              {showHouseholdReport ? "Hide Household Report" : "Open Household Report"}
+              {showHouseholdReport ? "Hide Household Brief" : "Open Household Brief"}
             </button>
             <button type="button" onClick={handlePrintHouseholdReport} style={buttonStyle(true)}>
               Print Household Report
@@ -1801,9 +2001,9 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>Property Stack Snapshot</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>Home Snapshot</div>
               <div style={{ color: "#94a3b8", lineHeight: "1.7", maxWidth: "760px" }}>
-                A quick household read on how well property, financing, protection, documents, and portal continuity connect before drill-in.
+                A quick read on how well home, financing, protection, documents, and portal access connect before you open any deeper detail.
               </div>
             </div>
             <OperatingGraphSummaryCards
@@ -1918,7 +2118,7 @@ export default function DashboardPage({ onNavigate }) {
                         <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.14em" }}>
                           Priority {index + 1} · {item.source}
                         </div>
-                        <div style={{ fontSize: "14px", fontWeight: 700 }}>{item.title}</div>
+                        <div style={{ fontSize: "15px", fontWeight: 700, lineHeight: "1.45" }}>{item.title}</div>
                       </div>
                       <span
                         style={{
@@ -1937,7 +2137,7 @@ export default function DashboardPage({ onNavigate }) {
                       </span>
                     </div>
                     <div style={{ color: "#e2e8f0", lineHeight: "1.7" }}>{item.blocker}</div>
-                    <div style={{ color: "#93c5fd", fontSize: "13px", lineHeight: "1.6" }}>{item.impactLabel}</div>
+                    <div style={{ color: "#93c5fd", fontSize: "13px", lineHeight: "1.6" }}>Why this matters: {item.impactLabel}</div>
                     <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                     <div>
                       <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
@@ -2207,9 +2407,9 @@ export default function DashboardPage({ onNavigate }) {
           }}
         >
           <div>
-            <div style={{ fontSize: "20px", fontWeight: 700 }}>Ask VaultedShield</div>
+            <div style={{ fontSize: "20px", fontWeight: 700 }}>Household Guide</div>
             <div style={{ marginTop: "10px", maxWidth: "760px", fontSize: "14px", lineHeight: "1.7", color: "#94a3b8" }}>
-              Ask for a structured cross-household read on priority, continuity, changes since review, insurance strength, access readiness, or property-stack alignment.
+              Ask for a plain-English read on what matters first, what changed, where support is thin, or which household area is in the best shape right now.
             </div>
           </div>
 
@@ -2224,12 +2424,12 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             <div style={{ fontSize: "12px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
-              Advisor Brief
+              Quick Household Read
             </div>
             <div style={{ color: "#f8fafc", lineHeight: "1.7" }}>{householdPriorityEngine.headline}</div>
             <div style={{ color: "#cbd5e1", lineHeight: "1.7" }}>{householdPriorityEngine.summary}</div>
             <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
-              Household score: {householdScorecard.overallScore ?? "--"} ({householdScorecard.overallStatus}). Weakest dimension:{" "}
+              Household score: {householdScorecard.overallScore ?? "--"} ({householdScorecard.overallStatus}). Area needing the most support:{" "}
               {householdScorecard.weakestDimension?.label || "—"}.
             </div>
           </div>
@@ -2448,7 +2648,7 @@ export default function DashboardPage({ onNavigate }) {
             >
               <div style={{ display: "grid", gap: "12px", marginBottom: "18px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>What Needs Attention First</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>What To Look At First</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {[
                       { label: "Active", value: commandCenter.metrics.active },
@@ -2545,7 +2745,7 @@ export default function DashboardPage({ onNavigate }) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Home And Financing</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Home And Financing Snapshot</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {normalizeMetricList(housingCommandCenter.metrics).map((metric) => (
                       <span
@@ -2643,7 +2843,7 @@ export default function DashboardPage({ onNavigate }) {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Emergency Cash / Access</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Emergency Cash And Access</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {normalizeMetricList(emergencyAccessCommand.metrics).map((metric) => (
                       <span
@@ -2733,7 +2933,7 @@ export default function DashboardPage({ onNavigate }) {
               </div>
               <div style={{ paddingTop: "18px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: "14px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Review Workspace Handoff</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700 }}>Review Progress And Next Steps</div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     {[
                       { label: "Active", value: assistantQueueItems.length },
@@ -2762,7 +2962,7 @@ export default function DashboardPage({ onNavigate }) {
                   </div>
                 </div>
                 <div style={{ color: "#94a3b8", lineHeight: "1.7" }}>
-                  The main priority queue already appears near the top of the dashboard. Shared cross-household follow-up is routed to Review Workspace here so the same queue is not repeated twice on this page.
+                  This is the handoff into the active review layer. It shows what is still open, what recently changed, and where completed work is already improving household readiness.
                 </div>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                   <button type="button" onClick={() => onNavigate?.("/review-workspace")} style={buttonStyle(true)}>
@@ -2818,7 +3018,7 @@ export default function DashboardPage({ onNavigate }) {
                   border: "1px solid rgba(255,255,255,0.05)",
                 }}
               >
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Strength Signals</div>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>What Looks Strong</div>
                 <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
                   {(assistantHouseholdMap.strength_signals.length > 0
                     ? assistantHouseholdMap.strength_signals
@@ -2838,7 +3038,7 @@ export default function DashboardPage({ onNavigate }) {
                   border: "1px solid rgba(255,255,255,0.05)",
                 }}
               >
-                <div style={{ fontSize: "16px", fontWeight: 700 }}>Visibility Gaps</div>
+                <div style={{ fontSize: "16px", fontWeight: 700 }}>What Still Needs More Visibility</div>
                 <ul style={{ margin: "14px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>
                   {(assistantHouseholdMap.visibility_gaps.length > 0
                     ? assistantHouseholdMap.visibility_gaps
@@ -2868,7 +3068,7 @@ export default function DashboardPage({ onNavigate }) {
             {householdState.error || loadError
               ? "Platform visibility is limited until household data loads cleanly."
               : topActions.length > 0
-                ? "A small number of concrete issues are still blocking a stronger household read and cleaner comparisons."
+                ? "A small number of concrete items are still worth looking at next, but the list should feel manageable."
                 : "No major action items are currently active."}
           </div>
           <ul style={{ margin: "18px 0 0 18px", padding: 0, display: "grid", gap: "10px", color: "#e2e8f0" }}>

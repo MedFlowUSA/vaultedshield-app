@@ -123,13 +123,13 @@ function PriorityCard({ priority }) {
           color: priority.urgencyMeta.accent,
         }}
       >
-        Priority: {priority.urgencyMeta.label}
+        Start Here: {priority.urgencyMeta.label}
       </div>
       <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
         {priority.title}
       </div>
       <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-        {priority.impactLabel} | {priority.nextAction}
+        {priority.nextAction}. {priority.impactLabel}
       </div>
     </div>
   );
@@ -231,7 +231,7 @@ function DesktopPriorityStrip({ priority }) {
           color: priority.urgencyMeta.accent,
         }}
       >
-        Priority: {priority.urgencyMeta.label}
+        Start Here: {priority.urgencyMeta.label}
       </div>
       <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.35" }}>
         {priority.title}

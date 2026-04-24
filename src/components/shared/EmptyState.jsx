@@ -1,20 +1,26 @@
-export default function EmptyState({ title, description, children }) {
+import { CalmEmptyState } from "./FriendlyIntelligenceUI";
+
+export default function EmptyState({
+  title,
+  description,
+  children,
+  icon = "📄",
+  tone = "neutral",
+  supportLabel = "",
+  actionLabel = "",
+  onAction,
+}) {
   return (
-    <div
-      style={{
-        padding: "clamp(18px, 3vw, 24px)",
-        borderRadius: "14px",
-        border: "1px dashed #cbd5e1",
-        background: "#f8fafc",
-        minWidth: 0,
-        overflowWrap: "anywhere",
-      }}
+    <CalmEmptyState
+      title={title}
+      description={description}
+      icon={icon}
+      tone={tone}
+      supportLabel={supportLabel}
+      actionLabel={actionLabel}
+      onAction={onAction}
     >
-      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "clamp(1rem, 2.8vw, 1.15rem)" }}>{title}</div>
-      <p style={{ marginTop: "8px", marginBottom: 0, color: "#64748b", lineHeight: "1.6", maxWidth: "64ch" }}>
-        {description}
-      </p>
-      {children ? <div style={{ marginTop: "14px" }}>{children}</div> : null}
-    </div>
+      {children}
+    </CalmEmptyState>
   );
 }

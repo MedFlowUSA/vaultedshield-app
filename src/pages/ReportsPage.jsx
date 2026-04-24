@@ -17,6 +17,7 @@ import {
 import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
+import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -573,6 +574,120 @@ export default function ReportsPage({ onNavigate }) {
     scoreLift,
     workflowResolutionMemory.recentlyResolved,
   ]);
+  const reportsFasciaCards = useMemo(() => {
+    const topPriority = householdPriorityEngine.priorities[0] || null;
+    const activeReviewTone = activeQueueItems.length > 5 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good";
+    const statusTone =
+      reportsVerdict.label === "Strong" || reportsVerdict.label === "Stable"
+        ? "good"
+        : reportsVerdict.label === "Needs Review"
+          ? "warning"
+          : "info";
+
+    return [
+      {
+        label: "Executive Status",
+        value: reportsVerdict.label,
+        detail: executiveSummaryLines[0] || "The report opens with the simplest household story before any export or module detail.",
+        tone: statusTone,
+      },
+      {
+        label: "Active Reviews",
+        value: activeQueueItems.length > 0 ? `${activeQueueItems.length} open item${activeQueueItems.length === 1 ? "" : "s"}` : "No active items",
+        detail:
+          activeQueueItems.length > 0
+            ? "These are the items still shaping the report story and worth reviewing first."
+            : "The active queue is quiet right now, so the report can lead with progress and readiness.",
+        tone: activeReviewTone,
+        actionLabel: activeQueueItems.length > 0 ? "Open Review Workspace" : undefined,
+        onAction: activeQueueItems.length > 0 ? () => onNavigate?.("/review-workspace") : undefined,
+      },
+      {
+        label: "Completed Progress",
+        value: resolvedQueueItems.length > 0 ? `${resolvedQueueItems.length} completed review${resolvedQueueItems.length === 1 ? "" : "s"}` : "Progress will appear here",
+        detail:
+          scoreLift > 0
+            ? `Completed work is currently lifting the readiness read by +${scoreLift}.`
+            : "Completed work is still remembered here even when the visible lift is modest.",
+        tone: resolvedQueueItems.length > 0 ? "good" : "neutral",
+      },
+      {
+        label: "Best Report To Open",
+        value: topPriority?.title || "Household Brief",
+        detail:
+          topPriority?.blocker ||
+          "Open the household brief first for the cleanest read, then move into executive or insurance packets when needed.",
+        tone: "info",
+        actionLabel: "Open Household Brief",
+        onAction: () => {
+          setSelectedReport("household");
+          scrollToReportsSection("reports-active-view");
+        },
+      },
+    ];
+  }, [
+    activeQueueItems.length,
+    executiveSummaryLines,
+    householdPriorityEngine.priorities,
+    onNavigate,
+    reportsVerdict.label,
+    resolvedQueueItems.length,
+    scoreLift,
+  ]);
+  const reportsActionTiles = useMemo(
+    () => [
+      {
+        key: "reports-status",
+        kicker: "Executive Status",
+        title: reportsFasciaCards[0]?.value || reportsVerdict.label,
+        detail: reportsFasciaCards[0]?.detail || reportsVerdict.summary,
+        metric: `${displayValue(householdScorecard?.overallScore)} score`,
+        tone: reportsFasciaCards[0]?.tone || "info",
+        statusLabel: "Simple Read",
+      },
+      {
+        key: "reports-active",
+        kicker: "Open Work",
+        title: reportsFasciaCards[1]?.value || "No active items",
+        detail: reportsFasciaCards[1]?.detail || "These items still shape the report story.",
+        metric: `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}`,
+        tone: reportsFasciaCards[1]?.tone || "warning",
+        statusLabel: activeQueueItems.length > 0 ? "Needs Review" : "Calm Right Now",
+        actionLabel: reportsFasciaCards[1]?.actionLabel,
+        onAction: reportsFasciaCards[1]?.onAction,
+      },
+      {
+        key: "reports-progress",
+        kicker: "Progress",
+        title: reportsFasciaCards[2]?.value || "Progress will appear here",
+        detail: reportsFasciaCards[2]?.detail || "Completed work is remembered here.",
+        metric: scoreLift > 0 ? `+${scoreLift} lift` : `${resolvedQueueItems.length} completed`,
+        tone: reportsFasciaCards[2]?.tone || "good",
+        statusLabel: resolvedQueueItems.length > 0 ? "Recently Improved" : "Building",
+      },
+      {
+        key: "reports-next",
+        kicker: "Best Report To Open",
+        title: reportsFasciaCards[3]?.value || "Household Brief",
+        detail: reportsFasciaCards[3]?.detail || "Open the report that fits the audience.",
+        metric: selectedReport === "household" ? "Household view active" : "Executive path ready",
+        tone: reportsFasciaCards[3]?.tone || "info",
+        statusLabel: "Guided Action",
+        actionLabel: reportsFasciaCards[3]?.actionLabel,
+        onAction: reportsFasciaCards[3]?.onAction,
+      },
+    ],
+    [
+      activeQueueItems.length,
+      householdScorecard?.overallScore,
+      reportsFasciaCards,
+      reportsVerdict.label,
+      reportsVerdict.summary,
+      resolvedQueueItems.length,
+      scoreLift,
+      selectedReport,
+    ]
+  );
   const onboardingChecklist = useMemo(
     () => buildHouseholdOnboardingChecklist(blankHousehold, bundle || {}, rows),
     [blankHousehold, bundle, rows]
@@ -817,10 +932,10 @@ export default function ReportsPage({ onNavigate }) {
     },
     {
       key: "policy_detail",
-      title: isIulShowcasePolicy(rankedPolicies[0]) ? "IUL Review Console" : "Single Policy Reviews",
-      status: rankedPolicies.length > 0 ? (isIulShowcasePolicy(rankedPolicies[0]) ? "Flagship console live" : "Live in policy detail") : "Waiting",
+      title: isIulShowcasePolicy(rankedPolicies[0]) ? "IUL Review" : "Single Policy Detail",
+      status: rankedPolicies.length > 0 ? (isIulShowcasePolicy(rankedPolicies[0]) ? "Flagship review ready" : "Ready in policy detail") : "Waiting",
       description: isIulShowcasePolicy(rankedPolicies[0])
-        ? "Open the flagship IUL review console for verdict, proof, evidence ledger, annual review, and printable policy reporting."
+        ? "Open the flagship IUL review view for verdict, supporting detail, annual review, and printable policy reporting."
         : "Open any policy detail page for interpretation, AI assistant, annual review, and printable policy report.",
       metrics: [
         { label: "Top Policy", value: rankedPolicies[0]?.product || "-" },
@@ -847,7 +962,7 @@ export default function ReportsPage({ onNavigate }) {
         secondaryActionLabel="See Report Choices"
         onSecondaryAction={() => scrollToReportsSection("report-cards")}
         guideTitle="Use this page in three passes"
-        guideDescription="Start with the executive story, then check progress and active work, and only open the deeper packet when you want proof, export, or module-level detail."
+        guideDescription="Start with the executive story, then check progress and active work, and only open the deeper report when you want supporting detail, export, or module-level detail."
         guideSteps={[
           {
             label: "Step 1",
@@ -861,7 +976,7 @@ export default function ReportsPage({ onNavigate }) {
           },
           {
             label: "Step 3",
-            title: "Open the packet that fits the audience",
+            title: "Open the report that fits the audience",
             detail: "Use household, executive, or insurance report views depending on whether the audience is a family, advisor, or decision-maker.",
           },
         ]}
@@ -883,7 +998,7 @@ export default function ReportsPage({ onNavigate }) {
             meaning: "How usable each major part of the platform already is for real reporting.",
           },
         ]}
-        depthTitle="Open the deeper packet only when you want the proof, export, or module breakdown"
+        depthTitle="Open the deeper report only when you want supporting detail, export, or module breakdown"
         depthDescription="The report layers below are where the platform earns respect, but the first read should stay calm and executive."
         depthPrimaryActionLabel="Jump To Active Report"
         onDepthPrimaryAction={() => scrollToReportsSection("reports-active-view")}
@@ -891,6 +1006,36 @@ export default function ReportsPage({ onNavigate }) {
         onDepthSecondaryAction={handlePrintActiveReport}
         showAnalysisDivider={false}
       />
+
+      <section style={{ display: "grid", gap: "10px" }}>
+        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+          Choose Your Lane
+        </div>
+        <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
+          Start with the report path that fits the audience, then open the fuller packet only when you want exports, module detail, or supporting proof.
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {reportsActionTiles.map((tile) => (
+            <FriendlyActionTile
+              key={tile.key}
+              kicker={tile.kicker}
+              title={tile.title}
+              detail={tile.detail}
+              metric={tile.metric}
+              tone={tile.tone}
+              statusLabel={tile.statusLabel}
+              actionLabel={tile.actionLabel}
+              onAction={tile.onAction}
+            />
+          ))}
+        </div>
+      </section>
 
       <section
         style={{
@@ -905,7 +1050,7 @@ export default function ReportsPage({ onNavigate }) {
         <div style={{ display: "grid", gap: "8px" }}>
           <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>Home And Financing Snapshot</div>
           <div style={{ color: "#475569", lineHeight: "1.8" }}>
-            Property, mortgage, and homeowners now stay in one report lane so the housing stack can be reviewed as a connected operating system instead of three separate modules.
+            Property, mortgage, and homeowners now stay in one report lane so the home picture can be reviewed together instead of as three separate modules.
           </div>
         </div>
 

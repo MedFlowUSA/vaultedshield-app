@@ -37,11 +37,11 @@ function bubbleStyle(role) {
 
 function secondaryButtonStyle(disabled = false) {
   return {
-    padding: "8px 12px",
+    padding: "10px 14px",
     borderRadius: "999px",
-    border: "1px solid rgba(147,197,253,0.18)",
-    background: "rgba(59,130,246,0.08)",
-    color: "#dbeafe",
+    border: "1px solid rgba(148,163,184,0.22)",
+    background: "rgba(248,250,252,0.08)",
+    color: "#e2e8f0",
     cursor: disabled ? "not-allowed" : "pointer",
     fontWeight: 700,
     fontSize: "12px",
@@ -64,18 +64,18 @@ function primaryButtonStyle(disabled = false) {
 function getLoadingMessage(question = "") {
   const normalized = String(question || "").toLowerCase();
   if (normalized.includes("changed") || normalized.includes("review")) {
-    return "Reviewing household changes and queue pressure...";
+    return "Pulling together the latest household review changes...";
   }
   if (normalized.includes("portal") || normalized.includes("access")) {
-    return "Checking continuity access support...";
+    return "Checking access and continuity support...";
   }
   if (normalized.includes("property")) {
-    return "Reading the household property operating graph...";
+    return "Looking through the household property picture...";
   }
   if (normalized.includes("insurance") || normalized.includes("policy")) {
-    return "Reviewing household insurance strength...";
+    return "Reviewing the current insurance picture...";
   }
-  return "Reading the current household intelligence view...";
+  return "Reading the current household picture...";
 }
 
 class HouseholdAiChatErrorBoundary extends Component {
@@ -131,7 +131,7 @@ export default function HouseholdAIChat({
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingLabel, setLoadingLabel] = useState("Reading the current household intelligence view...");
+  const [loadingLabel, setLoadingLabel] = useState("Reading the current household picture...");
   const [runtimeError, setRuntimeError] = useState("");
   const scrollRef = useRef(null);
 
@@ -159,15 +159,15 @@ export default function HouseholdAIChat({
   useEffect(() => {
     setQuestion("");
     setMessages([
-      {
-        id: "household-ai-welcome",
-        role: "assistant",
-        response: {
-          answer:
-            "Ask what needs attention first, what changed, why readiness reads this way, or where continuity support is still thin. VaultedShield will answer from the current household intelligence engine instead of guessing beyond the evidence.",
-          confidence: "medium",
-          source: "household_engine",
-          supportingData: {
+        {
+          id: "household-ai-welcome",
+          role: "assistant",
+          response: {
+            answer:
+              "Ask what needs attention first, what changed recently, or where the household picture still needs support. VaultedShield will start with a plain-English answer and keep the deeper evidence close by when you want it.",
+            confidence: "medium",
+            source: "household_engine",
+            supportingData: {
             facts: [],
             uncertainties: [],
             review_focus: [],
@@ -235,7 +235,7 @@ export default function HouseholdAIChat({
         }
       }, 160);
     },
-    [bundle, householdMap, intelligence, isLoading, priorityEngine, queueItems, reviewDigest, scorecard]
+    [bundle, householdId, householdMap, intelligence, isLoading, priorityEngine, queueItems, reviewDigest, scorecard]
   );
 
   return (
@@ -256,18 +256,23 @@ export default function HouseholdAIChat({
           </div>
         ) : null}
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          {starterPrompts.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => submitQuestion(prompt)}
-              disabled={isLoading}
-              style={secondaryButtonStyle(isLoading)}
-            >
-              {prompt}
-            </button>
-          ))}
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700 }}>
+            Quick Questions
+          </div>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            {starterPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => submitQuestion(prompt)}
+                disabled={isLoading}
+                style={secondaryButtonStyle(isLoading)}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div
@@ -379,7 +384,7 @@ export default function HouseholdAIChat({
           <input
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Ask VaultedShield what matters most across the household"
+            placeholder="Ask what matters most across the household"
             disabled={isLoading}
             style={{
               width: "100%",

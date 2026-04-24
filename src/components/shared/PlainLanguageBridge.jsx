@@ -1,3 +1,5 @@
+import { FriendlyMetricStrip, SuggestedActionsRow } from "./FriendlyIntelligenceUI";
+
 export default function PlainLanguageBridge({
   eyebrow = "Plain-English First",
   title,
@@ -7,14 +9,14 @@ export default function PlainLanguageBridge({
   cards = [],
   primaryActionLabel,
   onPrimaryAction,
-  secondaryActionLabel = "Step Into The Deeper Breakdown",
+  secondaryActionLabel = "See Supporting Details",
   onSecondaryAction,
   guideEyebrow,
   guideTitle,
   guideDescription,
   guideSteps = [],
   translatedTerms = [],
-  depthEyebrow = "When You Want More Depth",
+  depthEyebrow = "When You Want More Detail",
   depthTitle,
   depthDescription,
   depthPrimaryActionLabel,
@@ -22,8 +24,8 @@ export default function PlainLanguageBridge({
   depthSecondaryActionLabel,
   onDepthSecondaryAction,
   analysisRef,
-  analysisEyebrow = "Deeper Review Starts Here",
-  analysisTitle = "Technical breakdown",
+  analysisEyebrow = "Supporting Details Start Here",
+  analysisTitle = "Supporting detail",
   analysisDescription,
   compact = false,
   showAnalysisDivider = true,
@@ -42,15 +44,6 @@ export default function PlainLanguageBridge({
   const sectionShadow = "0 24px 60px rgba(15, 23, 42, 0.08)";
   const surfaceBorder = "1px solid rgba(148, 163, 184, 0.16)";
   const cardShadow = "0 14px 32px rgba(15, 23, 42, 0.06)";
-  const pillButton = {
-    padding: "11px 16px",
-    borderRadius: "999px",
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: "13px",
-    letterSpacing: "-0.01em",
-  };
-
   return (
     <>
       <section
@@ -164,69 +157,16 @@ export default function PlainLanguageBridge({
               ))}
             </ul>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {primaryActionLabel && onPrimaryAction ? (
-                <button
-                  type="button"
-                  onClick={onPrimaryAction}
-                  style={{
-                    ...pillButton,
-                    border: "none",
-                    background: "#0f172a",
-                    color: "#fff",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)",
-                  }}
-                >
-                  {primaryActionLabel}
-                </button>
-              ) : null}
-              {secondaryActionLabel && onSecondaryAction ? (
-                <button
-                  type="button"
-                  onClick={onSecondaryAction}
-                  style={{
-                    ...pillButton,
-                    border: "1px solid rgba(148, 163, 184, 0.35)",
-                    background: "#fff",
-                    color: "#0f172a",
-                    boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)",
-                  }}
-                >
-                  {secondaryActionLabel}
-                </button>
-              ) : null}
-            </div>
+            <SuggestedActionsRow
+              actions={[
+                primaryActionLabel && onPrimaryAction ? { label: primaryActionLabel, onClick: onPrimaryAction, kind: "primary" } : null,
+                secondaryActionLabel && onSecondaryAction ? { label: secondaryActionLabel, onClick: onSecondaryAction, kind: "secondary" } : null,
+              ]}
+            />
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: compact ? "1fr" : "repeat(3, minmax(0, 1fr))",
-            gap: "14px",
-          }}
-        >
-          {cards.map((card) => (
-            <div
-              key={card.label}
-              style={{
-                padding: compact ? "18px 18px 20px" : "20px 20px 22px",
-                borderRadius: "22px",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                border: surfaceBorder,
-                display: "grid",
-                gap: "10px",
-                boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
-              }}
-            >
-              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                {card.label}
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-              <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-            </div>
-          ))}
-        </div>
+        <FriendlyMetricStrip items={cards.map((card) => ({ label: card.label, value: card.value, helper: card.detail }))} />
       </section>
 
       {hasMiddleGuide ? (
@@ -341,7 +281,7 @@ export default function PlainLanguageBridge({
                   }}
                 >
                   <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    Translate The Analyst Terms
+                    Helpful Definitions
                   </div>
                   {translatedTerms.map((item) => (
                     <details
@@ -388,37 +328,16 @@ export default function PlainLanguageBridge({
                     </div>
                   ) : null}
                   {((depthPrimaryActionLabel && onDepthPrimaryAction) || (depthSecondaryActionLabel && onDepthSecondaryAction)) ? (
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                      {depthPrimaryActionLabel && onDepthPrimaryAction ? (
-                        <button
-                          type="button"
-                          onClick={onDepthPrimaryAction}
-                          style={{
-                            ...pillButton,
-                            border: "none",
-                            background: "#fff",
-                            color: "#0f172a",
-                            boxShadow: "0 10px 20px rgba(255,255,255,0.16)",
-                          }}
-                        >
-                          {depthPrimaryActionLabel}
-                        </button>
-                      ) : null}
-                      {depthSecondaryActionLabel && onDepthSecondaryAction ? (
-                        <button
-                          type="button"
-                          onClick={onDepthSecondaryAction}
-                          style={{
-                            ...pillButton,
-                            border: "1px solid rgba(255,255,255,0.25)",
-                            background: "transparent",
-                            color: "#fff",
-                          }}
-                        >
-                          {depthSecondaryActionLabel}
-                        </button>
-                      ) : null}
-                    </div>
+                    <SuggestedActionsRow
+                      actions={[
+                        depthPrimaryActionLabel && onDepthPrimaryAction
+                          ? { label: depthPrimaryActionLabel, onClick: onDepthPrimaryAction, kind: "secondary" }
+                          : null,
+                        depthSecondaryActionLabel && onDepthSecondaryAction
+                          ? { label: depthSecondaryActionLabel, onClick: onDepthSecondaryAction, kind: "secondary" }
+                          : null,
+                      ]}
+                    />
                   ) : null}
                 </div>
               ) : null}

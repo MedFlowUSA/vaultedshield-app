@@ -702,7 +702,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       <PageHeader
         eyebrow="Assets"
         title={mortgageLoan?.loan_name || linkedAsset?.asset_name || "Mortgage Loan Detail"}
-        description="Live mortgage bundle view backed by mortgage loans, documents, snapshots, analytics, and linked platform assets."
+        description="Understand this mortgage at a glance, then open the supporting records and details only when you need them."
         actions={
           <button onClick={() => onNavigate("/mortgage")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
             Back to Mortgage Hub
@@ -879,7 +879,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                     onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                     style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(15, 23, 42, 0.12)", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
                   >
-                    Step Into The Deeper Breakdown
+                    See Supporting Details
                   </button>
                 </div>
               </div>
@@ -989,7 +989,7 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 }}
               >
                 <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  Translate The Analyst Terms
+                  Helpful Definitions
                 </div>
                 {mortgageTransitionGuide.keys.map((item) => (
                   <details
@@ -1020,10 +1020,10 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 }}
               >
                 <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  When You Want More Depth
+                  When You Want More Detail
                 </div>
                 <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
-                  Use the deeper breakdown as supporting proof
+                  Use the next layer as supporting detail
                 </div>
                 <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
                   The darker section below is there to explain why the mortgage was scored this way, not to overwhelm the first read.
@@ -1062,11 +1062,11 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
               boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
             }}
           >
-            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-              Deeper Review Starts Here
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Supporting Details Start Here
             </div>
             <div style={{ fontSize: isTablet ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-              Technical breakdown: blockers, document support, property linkage, and mortgage diagnostics
+              Supporting detail: blockers, document support, property linkage, and mortgage records
             </div>
             <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
               Everything below this point is the proof layer. It explains the live mortgage command, linked property stack context, document support, and the operational details behind the simpler read above.

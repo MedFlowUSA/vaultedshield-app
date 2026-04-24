@@ -10,6 +10,7 @@ import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCar
 import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
 import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
+import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import { useEffect } from "react";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import buildInsurancePageFascia from "../lib/intelligence/fascia/buildInsurancePageFascia";
@@ -450,6 +451,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const atRiskPolicies = rankedPolicies.filter((row) => row.ranking.status === "At Risk");
   const strongContinuityPolicies = rankedPolicies.filter((row) => row.ranking.status === "Strong");
   const gapPolicies = rankedPolicies.filter((row) => row.gapAnalysis?.coverageGap);
+  const missingStatementPolicies = rankedPolicies.filter((row) => !row.latest_statement_date);
   const systemInsight = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return {
@@ -460,7 +462,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
     const bullets = [];
     const weakCoiPolicies = rankedPolicies.filter((row) => row.coi_confidence === "weak");
-    const missingStatementPolicies = rankedPolicies.filter((row) => !row.latest_statement_date);
     const incompleteChargePolicies = rankedPolicies.filter(
       (row) => row.total_visible_charges === null || row.total_visible_charges === undefined
     );
@@ -516,7 +517,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             : `Insurance intelligence is comparing ${rankedPolicies.length} saved polic${rankedPolicies.length === 1 ? "y" : "ies"} using live continuity inputs.`,
       bullets: uniqueBullets.slice(0, 5),
     };
-  }, [atRiskPolicies.length, rankedPolicies, strongContinuityPolicies.length]);
+  }, [atRiskPolicies.length, missingStatementPolicies.length, rankedPolicies, strongContinuityPolicies.length]);
 
   const portfolioDepth = useMemo(() => {
     const structuredPolicies = rankedPolicies.filter((row) => row.structured_data_present);
@@ -848,7 +849,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     [insurancePageFascia, showFasciaExplanation]
   );
   const plainEnglishGuide = useMemo(() => {
-    const confidencePercent = Math.round((protectionSummary.confidence || 0) * 100);
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
     const trustBuilder =
       rankedPolicies.length === 0
@@ -952,6 +952,124 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     summaryError,
     summaryLoading,
   ]);
+  const insuranceFasciaCards = useMemo(() => {
+    const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
+    const topPolicyRoute = topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload";
+    const statusTone =
+      insurancePageFascia.status === "Strong" || insurancePageFascia.status === "Stable"
+        ? "good"
+        : insurancePageFascia.status === "At Risk"
+          ? "alert"
+          : insurancePageFascia.status === "Partial"
+            ? "warning"
+            : "info";
+
+    return [
+      {
+        label: "Insurance Status",
+        value: plainEnglishGuide.cards[0]?.value || insurancePageFascia.status || "Developing",
+        detail: plainEnglishGuide.cards[0]?.detail || plainEnglishGuide.summary,
+        tone: statusTone,
+      },
+      {
+        label: "Needs Attention",
+        value: policiesWithIssues > 0 ? `${pluralize(policiesWithIssues, "policy")} need review` : "No obvious issue",
+        detail:
+          policiesWithIssues > 0
+            ? "Some policies still need stronger statement, charge, or field support before the read should be treated as complete."
+            : "The visible insurance set is not showing an obvious first-order issue.",
+        tone: policiesWithIssues > 0 ? "warning" : "good",
+        actionLabel: policiesWithIssues > 0 ? "Open Review Workspace" : "See Portfolio",
+        onAction: () => onNavigate?.(policiesWithIssues > 0 ? insuranceReviewWorkspaceRoute : "/insurance"),
+      },
+      {
+        label: "Missing Information",
+        value: missingStatementPolicies.length > 0 ? `${pluralize(missingStatementPolicies.length, "policy")} need statements` : "Evidence looks current",
+        detail:
+          missingStatementPolicies.length > 0
+            ? "Fresh statements will make this insurance read more reliable and easier to defend."
+            : "The current evidence is enough to support a stronger first read.",
+        tone: missingStatementPolicies.length > 0 ? "warning" : "good",
+        actionLabel: missingStatementPolicies.length > 0 ? "Upload Statement" : undefined,
+        onAction: missingStatementPolicies.length > 0 ? () => onNavigate?.("/insurance/life/upload") : undefined,
+      },
+      {
+        label: "Best Next Step",
+        value: topPriority?.product ? `Review ${topPriority.product}` : "Upload one readable policy",
+        detail:
+          topPriority?.review_reason ||
+          "Start with a readable policy or statement so the engine can build a grounded review.",
+        tone: "info",
+        actionLabel: topPriority?.policy_id ? "Open Policy" : "Upload Policy",
+        onAction: () => onNavigate?.(topPolicyRoute),
+      },
+    ];
+  }, [
+    insurancePageFascia.status,
+    insuranceReviewWorkspaceRoute,
+    missingStatementPolicies.length,
+    onNavigate,
+    plainEnglishGuide.cards,
+    plainEnglishGuide.summary,
+    policiesWithIssues,
+    portfolioBrief.priority_policies,
+    rankedPolicies,
+  ]);
+  const insuranceActionTiles = useMemo(
+    () => [
+      {
+        key: "insurance-status",
+        kicker: "Portfolio Status",
+        title: insuranceFasciaCards[0]?.value || insurancePageFascia.status || "Developing",
+        detail: insuranceFasciaCards[0]?.detail || plainEnglishGuide.summary,
+        metric: `${rankedPolicies.length} polic${rankedPolicies.length === 1 ? "y" : "ies"}`,
+        tone: insuranceFasciaCards[0]?.tone || "info",
+        statusLabel: "Simple Read",
+      },
+      {
+        key: "insurance-attention",
+        kicker: "Review Queue",
+        title: insuranceFasciaCards[1]?.value || "No obvious issue",
+        detail: insuranceFasciaCards[1]?.detail || "Open the guided insurance review path first.",
+        metric: `${policiesWithIssues} flagged polic${policiesWithIssues === 1 ? "y" : "ies"}`,
+        tone: insuranceFasciaCards[1]?.tone || "warning",
+        statusLabel: policiesWithIssues > 0 ? "Needs Review" : "Calm Right Now",
+        actionLabel: insuranceFasciaCards[1]?.actionLabel,
+        onAction: insuranceFasciaCards[1]?.onAction,
+      },
+      {
+        key: "insurance-missing",
+        kicker: "Evidence Support",
+        title: insuranceFasciaCards[2]?.value || "Evidence looks current",
+        detail: insuranceFasciaCards[2]?.detail || "Fresh statements strengthen the read.",
+        metric: `${missingStatementPolicies.length} statement gap${missingStatementPolicies.length === 1 ? "" : "s"}`,
+        tone: insuranceFasciaCards[2]?.tone || "good",
+        statusLabel: missingStatementPolicies.length > 0 ? "Missing Information" : "Well Supported",
+        actionLabel: insuranceFasciaCards[2]?.actionLabel,
+        onAction: insuranceFasciaCards[2]?.onAction,
+      },
+      {
+        key: "insurance-next-step",
+        kicker: "Best Next Step",
+        title: insuranceFasciaCards[3]?.value || "Upload one readable policy",
+        detail: insuranceFasciaCards[3]?.detail || "Start with the clearest next insurance move.",
+        metric: topPriorityPolicy?.ranking?.status || "Next move ready",
+        tone: insuranceFasciaCards[3]?.tone || "info",
+        statusLabel: "Guided Action",
+        actionLabel: insuranceFasciaCards[3]?.actionLabel,
+        onAction: insuranceFasciaCards[3]?.onAction,
+      },
+    ],
+    [
+      insuranceFasciaCards,
+      insurancePageFascia.status,
+      missingStatementPolicies.length,
+      plainEnglishGuide.summary,
+      policiesWithIssues,
+      rankedPolicies.length,
+      topPriorityPolicy?.ranking?.status,
+    ]
+  );
   const transitionGuide = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
     const confidencePercent = Math.round((protectionSummary.confidence || 0) * 100);
@@ -993,10 +1111,10 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         },
         {
           label: "Charge Visibility",
-          simple: weakConfidencePolicy ? "How clearly the page can see policy drag" : "Whether policy costs are clearly visible",
+          simple: weakestConfidencePolicy ? "How clearly the page can see policy drag" : "Whether policy costs are clearly visible",
           detail:
-            weakConfidencePolicy
-              ? `${weakConfidencePolicy.product || "At least one policy"} still has weak charge support, which makes deeper judgment less trustworthy.`
+            weakestConfidencePolicy
+              ? `${weakestConfidencePolicy.product || "At least one policy"} still has weak charge support, which makes deeper judgment less trustworthy.`
               : "When charge visibility is strong, the page can better judge whether a policy is healthy or quietly under pressure.",
         },
         {
@@ -1019,12 +1137,10 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     };
   }, [
     missingStatementPolicies.length,
-    plainEnglishGuide,
-    policiesWithIssues,
     portfolioBrief.priority_policies,
     protectionSummary.confidence,
     rankedPolicies,
-    weakConfidencePolicy,
+    weakestConfidencePolicy,
   ]);
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "22px 20px" : "26px 28px";
   const sectionRadius = isMobile ? "20px" : "24px";
@@ -1514,39 +1630,40 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                   boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)",
                 }}
               >
-                Step Into The Deeper Breakdown
+                See Supporting Details
               </button>
             </div>
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-            gap: "14px",
-          }}
-        >
-          {plainEnglishGuide.cards.map((card) => (
-            <div
-              key={card.label}
-              style={{
-                padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
-                borderRadius: "22px",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                border: "1px solid rgba(148, 163, 184, 0.16)",
-                display: "grid",
-                gap: "10px",
-                boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
-              }}
-            >
-              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                {card.label}
-              </div>
-              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-              <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-            </div>
-          ))}
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+            Choose Your Lane
+          </div>
+          <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
+            Pick the insurance path that matches what you want to do now, then let the deeper charge, confidence, and comparison layers open only when needed.
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+              gap: "14px",
+            }}
+          >
+            {insuranceActionTiles.map((tile) => (
+              <FriendlyActionTile
+                key={tile.key}
+                kicker={tile.kicker}
+                title={tile.title}
+                detail={tile.detail}
+                metric={tile.metric}
+                tone={tile.tone}
+                statusLabel={tile.statusLabel}
+                actionLabel={tile.actionLabel}
+                onAction={tile.onAction}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1648,7 +1765,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             }}
           >
             <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              Translate The Analyst Terms
+              Helpful Definitions
             </div>
             <div style={{ color: "#475569", lineHeight: "1.75" }}>
               These are the four terms most likely to make the page feel technical. Open any one only when you want the longer explanation.
@@ -1691,13 +1808,13 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             }}
           >
             <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              When You Want More Depth
+              When You Want More Detail
             </div>
             <div style={{ fontSize: "22px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-              The technical layer is there to prove the simple answer
+              The next layer is there to support the simple answer
             </div>
             <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
-              It should feel like supporting evidence, not a second language. Open it when you want proof, comparisons, pressure points, and ranking logic.
+              It should feel like supporting detail, not a second language. Open it when you want comparisons, evidence, pressure points, and policy order.
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button
@@ -1705,14 +1822,14 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 onClick={() => protectionSignalsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                 style={{ ...reportButtonStyle(false, true), width: isMobile ? "100%" : "auto", borderRadius: "999px", padding: "11px 16px" }}
               >
-                Start With Protection Signals
+                Start With Coverage Summary
               </button>
               <button
                 type="button"
                 onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                 style={{ ...reportButtonStyle(false), width: isMobile ? "100%" : "auto", borderRadius: "999px", padding: "11px 16px" }}
               >
-                Jump To Policy Comparison
+                See Policy Comparison
               </button>
             </div>
           </div>
@@ -1733,13 +1850,13 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         }}
       >
         <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-          Deeper Review Starts Here
+          Supporting Details Start Here
         </div>
         <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-          Deeper proof: pressure points, evidence, and ranking logic
+          Supporting detail: pressure points, evidence, and policy order
         </div>
         <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
-          Everything below this point is the proof layer. Use it to verify the verdict, inspect weak evidence, and understand why certain policies rose to the top of the review queue.
+          Everything below this point is the supporting layer. Use it to verify the verdict, inspect thin evidence, and understand why certain policies should be looked at first.
         </div>
       </section>
 

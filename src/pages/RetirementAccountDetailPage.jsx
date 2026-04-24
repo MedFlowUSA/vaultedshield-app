@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import PageHeader from "../components/layout/PageHeader";
 import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
@@ -396,15 +397,14 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
         {
           label: "In plain English",
           value: everydayVerdict,
-          detail: retirementPageFascia?.meaning || retirementCommandCenter.headline,
+          detail: retirementPageFascia?.meaning || confidenceDriver,
         },
         {
           label: "What to do first",
           value: retirementPageFascia?.primaryAction?.label || "Review the top retirement issue",
           detail:
-            topRetirementReviewItem?.summary ||
             retirementPageFascia?.explanation?.recommendedAction?.detail ||
-            retirementCommandCenter.headline,
+            "Take the first recommended retirement step before opening the deeper evidence.",
         },
         {
           label: "Why confidence is limited or strong",
@@ -419,18 +419,15 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
         positionCount > 0
           ? `${positionCount} parsed position${positionCount === 1 ? "" : "s"} are visible in this account.`
           : "No parsed positions are visible yet for this account.",
-        topRetirementReviewItem
-          ? `The current top retirement issue is ${topRetirementReviewItem.summary.toLowerCase()}.`
-          : "No single retirement issue is standing out above the rest right now.",
+        retirementPageFascia?.explanation?.recommendedAction?.detail ||
+          "No single retirement issue is standing out above the rest right now.",
       ],
     };
   }, [
     bundle?.retirementDocuments?.length,
     bundle?.retirementPositions?.length,
     latestSnapshot,
-    retirementCommandCenter,
     retirementPageFascia,
-    topRetirementReviewItem,
   ]);
   const retirementTransitionGuide = useMemo(() => {
     const positionCount = bundle?.retirementPositions?.length || 0;
@@ -487,7 +484,6 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     retirementPageFascia?.primaryAction?.label,
     retirementRead.confidence,
   ]);
-
   const retirementCommandCenter = useMemo(
     () =>
       buildRetirementCommandCenter({
@@ -554,6 +550,59 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
     reviewScope.householdId,
     topRetirementReviewItem,
   ]);
+  const retirementActionTiles = useMemo(
+    () => [
+      {
+        key: "retirement-verdict",
+        kicker: "Simple Read",
+        title: retirementPlainEnglishGuide.cards[0]?.value || "Account read still forming",
+        detail: retirementPlainEnglishGuide.cards[0]?.detail || retirementPlainEnglishGuide.summary,
+        metric: `${bundle?.retirementDocuments?.length || 0} document${(bundle?.retirementDocuments?.length || 0) === 1 ? "" : "s"}`,
+        tone:
+          retirementPageFascia?.status === "Strong"
+            ? "good"
+            : retirementPageFascia?.status === "Stable"
+              ? "warning"
+              : retirementPageFascia?.status === "At Risk"
+                ? "alert"
+                : "info",
+        statusLabel: "Account Status",
+        actionLabel: "See Why",
+        actionKey: "details",
+      },
+      {
+        key: "retirement-next-step",
+        kicker: "First Move",
+        title: retirementPlainEnglishGuide.cards[1]?.value || "Review the top retirement issue",
+        detail: retirementPlainEnglishGuide.cards[1]?.detail || "Take the first retirement step before opening the full evidence stack.",
+        metric: topRetirementReviewItem?.title || "Review path ready",
+        tone: "warning",
+        statusLabel: "Guided Action",
+        actionLabel: retirementPageFascia?.primaryAction?.label || "Open Review Workspace",
+        actionKey: "next-step",
+      },
+      {
+        key: "retirement-support",
+        kicker: "Support",
+        title: retirementPlainEnglishGuide.cards[2]?.value || "Confidence still forming",
+        detail: retirementPlainEnglishGuide.cards[2]?.detail || "Documents, snapshots, and positions determine how much this page can trust the read.",
+        metric: latestSnapshot ? formatDate(latestSnapshot.statement_date || latestSnapshot.snapshot_date) : "No snapshot yet",
+        tone: latestSnapshot && (bundle?.retirementPositions?.length || 0) > 0 ? "good" : "info",
+        statusLabel: "Evidence Depth",
+        actionLabel: "Open Details",
+        actionKey: "details",
+      },
+    ],
+    [
+      bundle?.retirementDocuments?.length,
+      bundle?.retirementPositions?.length,
+      latestSnapshot,
+      retirementPageFascia,
+      retirementPlainEnglishGuide.cards,
+      retirementPlainEnglishGuide.summary,
+      topRetirementReviewItem?.title,
+    ]
+  );
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
   function handleReviewWorkflowUpdate(itemId, status) {
@@ -739,7 +788,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
       <PageHeader
         eyebrow="Retirement Detail"
         title={retirementAccount?.plan_name || linkedAsset?.asset_name || "Retirement Account Detail"}
-        description="Live retirement bundle view backed by retirement accounts, documents, snapshots, analytics, positions, and linked platform assets."
+        description="Get a readable account summary first, then open positions, documents, and supporting detail when you want the fuller picture."
         actions={
           <button
             onClick={() => onNavigate("/retirement")}
@@ -860,7 +909,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                     onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                     style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(15, 23, 42, 0.12)", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
                   >
-                    Step Into The Deeper Breakdown
+                    See Supporting Details
                   </button>
                 </div>
               </div>
@@ -873,25 +922,28 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                 gap: "14px",
               }}
             >
-              {retirementPlainEnglishGuide.cards.map((card) => (
-                <div
-                  key={card.label}
-                  style={{
-                    padding: "20px 20px 22px",
-                    borderRadius: "22px",
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                    border: "1px solid rgba(148, 163, 184, 0.16)",
-                    display: "grid",
-                    gap: "10px",
-                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
+              {retirementActionTiles.map((tile) => (
+                <FriendlyActionTile
+                  key={tile.key}
+                  kicker={tile.kicker}
+                  title={tile.title}
+                  detail={tile.detail}
+                  metric={tile.metric}
+                  tone={tile.tone}
+                  statusLabel={tile.statusLabel}
+                  actionLabel={tile.actionLabel}
+                  onAction={() => {
+                    if (tile.actionKey === "next-step") {
+                      if (retirementPageFascia?.primaryAction) {
+                        handleRetirementFasciaAction(retirementPageFascia.primaryAction);
+                        return;
+                      }
+                      onNavigate?.(retirementReviewWorkspaceRoute);
+                      return;
+                    }
+                    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                >
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    {card.label}
-                  </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-                </div>
+                />
               ))}
             </div>
           </section>
@@ -970,7 +1022,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                 }}
               >
                 <div style={{ fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  Translate The Analyst Terms
+                  Helpful Definitions
                 </div>
                 {retirementTransitionGuide.keys.map((item) => (
                   <details
@@ -1001,10 +1053,10 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                 }}
               >
                 <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  When You Want More Depth
+                  When You Want More Detail
                 </div>
                 <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.25" }}>
-                  Use the deeper breakdown as supporting proof
+                  Use the next layer as supporting detail
                 </div>
                 <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
                   The darker section below is where the account shows its analyst evidence: signals, parsed positions, documents, and review context.
@@ -1043,11 +1095,11 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
             }}
           >
-            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-              Deeper Review Starts Here
+                <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Supporting Details Start Here
             </div>
             <div style={{ fontSize: "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-              Technical breakdown: signals, parsed positions, account diagnostics, and retirement review depth
+              Supporting detail: signals, positions, account records, and retirement review context
             </div>
             <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
               Everything below this point is the proof layer. It explains the retirement signals, action feed, parsed positions, document support, and the command-center logic behind the simpler read above.
