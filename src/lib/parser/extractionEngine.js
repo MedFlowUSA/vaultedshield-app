@@ -267,7 +267,7 @@ function escapeRegExp(value) {
 }
 
 function normalizeText(value) {
-  return value.replace(/\s+/g, " ").replace(/^[:\-]+/, "").trim();
+  return value.replace(/\s+/g, " ").replace(/^[:-]+/, "").trim();
 }
 
 function stripMatchedLabel(line, alias) {
@@ -276,7 +276,7 @@ function stripMatchedLabel(line, alias) {
 }
 
 function normalizeFreeText(value) {
-  return String(value || "").replace(/\s+/g, " ").replace(/^[\s:,\-]+/, "").trim();
+  return String(value || "").replace(/\s+/g, " ").replace(/^[\s:,-]+/, "").trim();
 }
 
 function looksLikeBeneficiaryHeaderValue(value) {
@@ -1629,10 +1629,10 @@ function extractGenericIssueDateField(pages, documentType, carrierName) {
     defaultConfidenceScore: 0.8,
     evidenceLabel: "matched generic issue-date pattern",
     patterns: [
-      { regex: /Issue Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Issue Date", confidenceScore: 0.9 },
-      { regex: /Policy Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Policy Date", confidenceScore: 0.88 },
-      { regex: /Contract Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Contract Date", confidenceScore: 0.86 },
-      { regex: /Date of Issue\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Date of Issue", confidenceScore: 0.9 },
+      { regex: /Issue Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Issue Date", confidenceScore: 0.9 },
+      { regex: /Policy Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Policy Date", confidenceScore: 0.88 },
+      { regex: /Contract Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Contract Date", confidenceScore: 0.86 },
+      { regex: /Date of Issue\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Date of Issue", confidenceScore: 0.9 },
     ],
   });
 }
@@ -1651,12 +1651,12 @@ function extractGenericStatementDateField(pages, fileName, documentType, carrier
     defaultConfidenceScore: 0.76,
     evidenceLabel: "matched generic statement-date pattern",
     patterns: [
-      { regex: /Statement Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Period Ending", confidenceScore: 0.9 },
-      { regex: /Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Period Ending", confidenceScore: 0.88 },
-      { regex: /Year Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Year Ending", confidenceScore: 0.88 },
-      { regex: /As of Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "As of Date", confidenceScore: 0.84 },
-      { regex: /Statement Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Date", confidenceScore: 0.84 },
-      { regex: /Statement Through\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i, label: "Statement Through", confidenceScore: 0.82 },
+      { regex: /Statement Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Statement Period Ending", confidenceScore: 0.9 },
+      { regex: /Period Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Period Ending", confidenceScore: 0.88 },
+      { regex: /Year Ending\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Year Ending", confidenceScore: 0.88 },
+      { regex: /As of Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "As of Date", confidenceScore: 0.84 },
+      { regex: /Statement Date\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Statement Date", confidenceScore: 0.84 },
+      { regex: /Statement Through\s*:?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4})/i, label: "Statement Through", confidenceScore: 0.82 },
     ],
   });
 
@@ -4693,7 +4693,7 @@ export function sortStatementsChronologically(statementHistory) {
   });
 }
 
-function extractDetectedRiderNames(...values) {
+function _extractDetectedRiderNames(...values) {
   const combined = values
     .flatMap((value) => {
       if (Array.isArray(value)) return value;

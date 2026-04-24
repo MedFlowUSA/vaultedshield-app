@@ -110,7 +110,7 @@ function getStateName(stateCode = "") {
   return stateNames[String(stateCode || "").toUpperCase()] || "";
 }
 
-function getStateCode(stateName = "") {
+function _getStateCode(stateName = "") {
   const normalizedState = normalizeText(stateName);
   const statePairs = {
     alabama: "AL",

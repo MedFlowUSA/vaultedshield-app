@@ -401,7 +401,7 @@ function buildConfidenceExplanation(confidence, alignmentConfidence, chronologyS
   return "Confidence is limited because the visible comparison support is still incomplete.";
 }
 
-function buildReviewSupport({ alignmentConfidence, chronology, status, selectedMetricLabel, missingData = [] }) {
+function buildReviewSupport({ alignmentConfidence, chronology, selectedMetricLabel, missingData = [] }) {
   const chronologyStatus = chronology?.status || "limited";
   const matchQuality =
     alignmentConfidence === "high"
@@ -469,7 +469,7 @@ function buildReviewRecommendations({ alignmentConfidence, chronology, currentMa
   return [...new Set(recommendations)].slice(0, 4);
 }
 
-function generateExplanation({ status, confidence, alignmentConfidence, chronology, drivers, metrics, variances, missingData }) {
+function generateExplanation({ status, confidence, alignmentConfidence, chronology, drivers, missingData }) {
   const directAnswer =
     status === "ahead"
       ? "Based on the visible illustration and current in-force data, this policy appears ahead of the original pace."

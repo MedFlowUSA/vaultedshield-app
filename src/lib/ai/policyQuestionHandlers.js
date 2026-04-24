@@ -79,7 +79,7 @@ export function explainPolicyType({ lifePolicy }) {
   );
 }
 
-export function explainPolicyHealth({ lifePolicy, insightSummary }) {
+export function explainPolicyHealth({ insightSummary }) {
   if (!insightSummary) {
     return buildInsufficientDataAnswer("Policy health cannot be resolved because the AI summary is unavailable.");
   }
@@ -183,7 +183,7 @@ export function explainPerformance({ normalizedAnalytics = {}, comparisonSummary
   return buildInsufficientDataAnswer("There is not enough clean growth support yet to explain performance confidently.");
 }
 
-export function explainCharges({ lifePolicy, normalizedAnalytics = {}, comparisonSummary = {} }) {
+export function explainCharges({ normalizedAnalytics = {}, comparisonSummary = {} }) {
   const chargeSummary = normalizedAnalytics?.charge_summary || {};
   if (chargeSummary?.total_coi === null && chargeSummary?.total_visible_policy_charges === null) {
     return buildInsufficientDataAnswer("Charges are not visible enough in this file to explain fee drag confidently.");

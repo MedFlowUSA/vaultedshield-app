@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker?url";
 import logo from "./assets/vaultedshield-logo.png";
@@ -140,7 +140,7 @@ function demoDisplayValue(value, fallback = "Limited visibility") {
   return value;
 }
 
-function maskPolicyNumberLegacy(value) {
+function _maskPolicyNumberLegacy(value) {
   if (!value || value === "Not found") return "Limited visibility";
   const cleaned = String(value).trim();
   if (cleaned.length <= 4) return cleaned;
@@ -444,9 +444,9 @@ function App() {
   useEffect(() => {
     if (!supabaseConfigured) return;
     loadSavedPolicies();
-  }, [supabaseConfigured]);
+  }, [loadSavedPolicies, supabaseConfigured]);
 
-  async function loadSavedPolicies() {
+  const loadSavedPolicies = useCallback(async () => {
     if (!supabaseConfigured) return;
 
     try {
@@ -463,7 +463,7 @@ function App() {
     } finally {
       setSavedPoliciesLoading(false);
     }
-  }
+  }, [supabaseConfigured]);
 
   async function handleLoadSavedPolicy(policyId) {
     if (!policyId) return;

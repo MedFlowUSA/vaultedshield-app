@@ -57,7 +57,7 @@ export function extractRetirementSummary(documentText = "") {
   const accountValue = matchFirstValue(
     text,
     [
-      /(?:total account value|account value|ending balance|current balance|vested balance)\s*[:\-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
+      /(?:total account value|account value|ending balance|current balance|vested balance)\s*[:-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
       /(?:balance as of .*?)\s+(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
     ],
     parseCurrency
@@ -66,8 +66,8 @@ export function extractRetirementSummary(documentText = "") {
   const contributions = matchFirstValue(
     text,
     [
-      /(?:year[- ]to[- ]date contributions|ytd contributions|employee contributions|contributions)\s*[:\-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
-      /(?:deferrals|contribution amount)\s*[:\-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
+      /(?:year[- ]to[- ]date contributions|ytd contributions|employee contributions|contributions)\s*[:-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
+      /(?:deferrals|contribution amount)\s*[:-]?\s*(\$?\(?-?\d[\d,]*(?:\.\d{2})?\)?)/i,
     ],
     parseCurrency
   );
@@ -76,7 +76,7 @@ export function extractRetirementSummary(documentText = "") {
     text,
     [
       /\b(roth 401\(k\)|401\(k\)|403\(b\)|457\(b\)|traditional ira|roth ira|rollover ira|simple ira|sep ira|ira|brokerage ira|pension)\b/i,
-      /(?:plan type|account type)\s*[:\-]?\s*([A-Za-z0-9() \-]+)/i,
+      /(?:plan type|account type)\s*[:-]?\s*([A-Za-z0-9() -]+)/i,
     ],
     (value) => cleanText(value)
   );
@@ -84,7 +84,7 @@ export function extractRetirementSummary(documentText = "") {
   const statementDate = matchFirstValue(
     text,
     [
-      /(?:statement date|period ending|as of|statement period ending)\s*[:\-]?\s*([A-Za-z0-9,\/ ]{6,30})/i,
+      /(?:statement date|period ending|as of|statement period ending)\s*[:-]?\s*([A-Za-z0-9,/ ]{6,30})/i,
     ],
     parseDate
   );

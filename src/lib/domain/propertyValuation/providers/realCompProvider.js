@@ -3,7 +3,7 @@ function toNumber(value, fallback = null) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-function normalizeText(value = "") {
+function _normalizeText(value = "") {
   return String(value || "").trim();
 }
 

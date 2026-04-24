@@ -835,7 +835,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     setQualityNotice("");
     illustrationScan.clearSession();
     statementScan.clearSession();
-  }, [debug.authUserId, debug.householdId]);
+  }, [debug.authUserId, debug.householdId, illustrationScan, statementScan]);
 
   useEffect(() => {
     if (!selectedIllustrationPageId && illustrationScan.pages[0]) {

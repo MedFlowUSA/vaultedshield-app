@@ -38,7 +38,7 @@ export async function buildDocumentSourceHash(file) {
 
     const headBytes = Array.from(new Uint8Array(arrayBuffer.slice(0, Math.min(64, arrayBuffer.byteLength))));
     return buildFallbackSignature(file, headBytes);
-  } catch (error) {
+  } catch {
     return buildFallbackSignature(file);
   }
 }

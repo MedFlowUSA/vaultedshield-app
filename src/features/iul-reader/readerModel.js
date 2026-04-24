@@ -192,7 +192,7 @@ function scoreBand(score) {
   return "risk";
 }
 
-function toneFromBand(band) {
+function _toneFromBand(band) {
   if (band === "strong") return "confirmed";
   if (band === "watch") return "review";
   return "missing";

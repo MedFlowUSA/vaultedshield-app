@@ -208,9 +208,10 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
       impactScore: 30,
       include: insuranceGaps?.auto?.status === "missing",
     },
-  ]
-    .filter((item) => item.include)
-    .map(({ include, ...item }) => item);
+  ].reduce((results, { include, ...item }) => {
+    if (include) results.push(item);
+    return results;
+  }, []);
 
   return [...insuranceItems, ...items]
     .map((item) => ({
@@ -223,7 +224,7 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
 }
 
 export default function HouseholdGoalsDashboardPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const { isMobile } = useResponsiveLayout();
   const { householdState, debug } = usePlatformShellData();
   const [propertyBundles, setPropertyBundles] = useState([]);
   const [propertyLoading, setPropertyLoading] = useState(true);
@@ -510,7 +511,17 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         helper: priorityItems.length ? `${priorityItems[0].urgency}: ${priorityItems[0].title}` : "No urgent planning flags yet",
       },
     ],
-    [activeCollegePlan, collegePlans.length, insuranceGaps.summary.protectionFlags.length, insuranceSummary, mortgageSummary, priorityItems.length, propertySummary, retirementReadiness]
+    [
+      activeCollegePlan,
+      collegeHouseholdRead.headline,
+      collegePlans.length,
+      insuranceGaps.summary.protectionFlags.length,
+      insuranceSummary,
+      mortgageSummary,
+      priorityItems,
+      propertySummary,
+      retirementReadiness,
+    ]
   );
 
   const householdNarrative = useMemo(() => {

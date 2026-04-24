@@ -73,7 +73,7 @@ export function PlatformShellDataProvider({ children, accessSession = null, auth
       scopeSource: scope.scopeSource,
     });
     primeHouseholdReviewWorkflowState({ householdId, userId: authUserId || null }, []);
-  }, [authUserId, canLoadShellData, scope.scopeSource, scopeKey]);
+  }, [authUserId, canLoadShellData, householdId, scope.scopeSource, scopeKey]);
 
   const refreshHouseholdData = useCallback(async () => {
     if (!canLoadShellData) {

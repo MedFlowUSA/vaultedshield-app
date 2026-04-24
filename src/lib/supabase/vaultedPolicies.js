@@ -10,7 +10,7 @@ import {
 } from "../domain/intelligenceEngine.js";
 import {
   analyzePolicyBasics,
-  detectInsuranceGaps,
+  detectInsuranceGaps as _detectInsuranceGaps,
   summarizeInsuranceHousehold,
 } from "../domain/insurance/insuranceIntelligence.js";
 
@@ -1133,7 +1133,7 @@ async function insertSnapshotRecord(payload) {
     };
   }
 
-  const { parser_version, parser_structured_data, ...legacyPayload } = payload;
+  const { parser_version: _parserVersion, parser_structured_data: _parserStructuredData, ...legacyPayload } = payload;
   const retryAttempt = await insertRecord("vaulted_policy_snapshots", legacyPayload);
   return {
     ...retryAttempt,
@@ -1189,15 +1189,13 @@ async function findVaultedPolicyByIdentity({ policyNumber, carrierKey, scopeOver
   const scope = await resolveVaultedPolicyScope(scopeOverride);
   const blockedWrite = blockedVaultedWriteResult(scope);
   if (blockedWrite) return blockedWrite;
-  const { data, error } = await supabase
+  let query = supabase
     .from("vaulted_policies")
     .select("*")
     .eq("policy_number", policyNumber)
-    .eq("carrier_key", carrierKey)
-    [scope.userId ? "eq" : "is"]("user_id", scope.userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("carrier_key", carrierKey);
+  query = scope.userId ? query.eq("user_id", scope.userId) : query.is("user_id", null);
+  const { data, error } = await query.order("updated_at", { ascending: false }).limit(1).maybeSingle();
 
   return { data: data || null, error };
 }

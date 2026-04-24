@@ -273,7 +273,6 @@ function extractChargeRows(lines, pageNumber) {
 
 function extractSymetraAllocationRows(lines, pageNumber) {
   const rows = [];
-  const lowered = lines.map((line) => line.toLowerCase());
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (!/(index|fixed|account|strategy)/i.test(line)) continue;

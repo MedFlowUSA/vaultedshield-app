@@ -35,7 +35,7 @@ function formatPercent(value) {
   })}%`;
 }
 
-function average(values = []) {
+function _average(values = []) {
   const usable = values.filter(isFiniteNumber);
   return usable.length ? usable.reduce((sum, value) => sum + value, 0) / usable.length : null;
 }
@@ -256,7 +256,7 @@ function buildFundingAnalysis({ lifePolicy, normalizedAnalytics, missingData }) 
 
 function buildStrategyAnalysis({ lifePolicy, normalizedAnalytics, missingData }) {
   const strategy = lifePolicy?.typeSpecific || {};
-  const normalizedStrategy = normalizedAnalytics?.structured_debug || {};
+  const _normalizedStrategy = normalizedAnalytics?.structured_debug || {};
   const menuRows = safeArray(normalizedAnalytics?.strategy_menu_rows || lifePolicy?.typeSpecific?.strategyMenuRows);
   const normalizedPolicyStrategyRows = safeArray(lifePolicy?.meta?.strategyRows);
   const candidateRows = menuRows.length ? menuRows : normalizedPolicyStrategyRows;

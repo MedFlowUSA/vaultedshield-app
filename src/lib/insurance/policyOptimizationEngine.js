@@ -59,8 +59,6 @@ function buildConfidenceContext({ policyType, illustrationComparison, iulV2, mis
 
 export function buildPolicyOptimizationEngine({
   lifePolicy = null,
-  normalizedPolicy = {},
-  normalizedAnalytics = {},
   iulV2 = null,
   illustrationComparison = null,
   statementRows = [],

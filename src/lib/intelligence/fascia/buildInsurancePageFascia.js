@@ -290,7 +290,6 @@ function dedupeActions(actions = []) {
 function buildActions({
   status,
   sourceMode,
-  policyCount,
   priorityPolicy,
   hasComparison,
 }) {

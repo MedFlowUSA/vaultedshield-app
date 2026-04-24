@@ -34,7 +34,7 @@ function normalizeFacts(response = {}) {
   if (facts.length > 0) return facts;
 
   const scalarEntries = Object.entries(supportingData)
-    .filter(([key, value]) => !["facts", "why", "uncertainties", "review_focus"].includes(key))
+    .filter(([key]) => !["facts", "why", "uncertainties", "review_focus"].includes(key))
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .slice(0, 6);
 

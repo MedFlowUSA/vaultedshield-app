@@ -215,7 +215,7 @@ function tryFuzzySameLine(lines, normalizedKey, aliases, pageNumber, providerHin
     for (const alias of aliases) {
       const normalizedAlias = alias.toLowerCase();
       if (!lowerLine.includes(normalizedAlias)) continue;
-      const suffix = line.split(/[:\-]/).slice(1).join(":").trim();
+      const suffix = line.split(/[:-]/).slice(1).join(":").trim();
       if (!suffix) continue;
 
       const field = buildFieldResult({
@@ -404,7 +404,7 @@ function buildCompletenessAssessment(extractedFieldMap) {
 
 function buildStatementPeriod(fullText) {
   const match = normalizeText(fullText).match(
-    /(for the period|period ending|statement period)[:\s]+([A-Za-z0-9 ,\-\/]+)/
+    /(for the period|period ending|statement period)[:\s]+([A-Za-z0-9 ,/ -]+)/
   );
   return match ? match[2] : null;
 }

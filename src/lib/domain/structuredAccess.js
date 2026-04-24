@@ -5,7 +5,7 @@ import {
   getStructuredFailedPages,
   getStructuredPageTypes,
   getStructuredFlags,
-  getStructuredQuality as getCanonicalStructuredQuality,
+  getStructuredQuality as _getCanonicalStructuredQuality,
   getStructuredStrategyRows as getCanonicalStructuredStrategyRows,
   getStructuredTableRows,
   hasStrongStructuredSupport as hasCanonicalStrongStructuredSupport,
@@ -16,7 +16,7 @@ function safeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function qualityRank(value) {
+function _qualityRank(value) {
   return { failed: 0, weak: 1, moderate: 2, strong: 3 }[value] ?? 0;
 }
 

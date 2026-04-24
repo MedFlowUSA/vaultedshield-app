@@ -19,7 +19,7 @@ function toSeverity(status) {
   return "low";
 }
 
-function pickHighestSeverity(items = []) {
+function _pickHighestSeverity(items = []) {
   const rank = { high: 3, medium: 2, low: 1 };
   return [...items].sort((left, right) => (rank[right.severity] || 0) - (rank[left.severity] || 0))[0] || null;
 }

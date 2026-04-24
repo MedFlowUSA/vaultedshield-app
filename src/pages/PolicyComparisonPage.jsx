@@ -825,7 +825,14 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
     return () => {
       active = false;
     };
-  }, [basePolicy?.policy_id, comparisonPolicy?.policy_id, debug.authUserId]);
+  }, [
+    basePolicy?.policy_id,
+    comparisonPolicy?.policy_id,
+    debug.authUserId,
+    debug.householdId,
+    debug.ownershipMode,
+    debug.sharedFallbackActive,
+  ]);
 
   function handlePrintReport() {
     setShowComparisonReport(true);
