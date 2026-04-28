@@ -946,7 +946,14 @@ export default function ReportsPage({ onNavigate }) {
   ];
 
   return (
-    <div style={{ display: "grid", gap: "24px" }}>
+    <div
+      style={{
+        display: "grid",
+        gap: "24px",
+        background: "#f6f8fb",
+        padding: "8px 0 32px",
+      }}
+    >
       <PlainLanguageBridge
         eyebrow="Executive View"
         title={reportsWelcomeGuide.title}

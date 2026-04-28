@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { FriendlyActionTile, SuggestedActionsRow } from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
@@ -35,6 +33,17 @@ function actionStyle(primary = false) {
     color: primary ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 700,
+  };
+}
+
+function surfaceCardStyle(extra = {}) {
+  return {
+    padding: "24px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.06)",
+    ...extra,
   };
 }
 
@@ -734,81 +743,128 @@ export default function ReviewWorkspacePage({ onNavigate }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
-        eyebrow="Household Operations"
-        title="Review Workspace"
-        description="Work through the household items that most affect readiness, keep completed work remembered, and move the household forward."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button type="button" onClick={handleRefreshSnapshot} style={actionStyle(false)}>
-              Refresh Progress
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/dashboard")} style={actionStyle(true)}>
-              Back To Dashboard
-            </button>
+    <div
+      style={{
+        display: "grid",
+        gap: "24px",
+        background: "#f6f8fb",
+        padding: "8px 0 32px",
+      }}
+    >
+      <section
+        style={surfaceCardStyle({
+          padding: "30px",
+          display: "grid",
+          gap: "24px",
+        })}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "24px",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div
+              style={{
+                width: "fit-content",
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: "rgba(219, 234, 254, 0.9)",
+                color: "#1d4ed8",
+                fontSize: "12px",
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Household Operations
+            </div>
+            <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Review Workspace</div>
+            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>
+              {reviewWorkspaceWelcomeGuide.title}
+            </div>
+            <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{reviewWorkspaceWelcomeGuide.summary}</div>
+            <div style={{ color: "#64748b", lineHeight: "1.75", maxWidth: "44rem" }}>{reviewWorkspaceWelcomeGuide.transition}</div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory")}
+                style={actionStyle(true)}
+              >
+                {activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
+              </button>
+              <button type="button" onClick={handleRefreshSnapshot} style={actionStyle(false)}>
+                Refresh Progress
+              </button>
+              <button type="button" onClick={() => onNavigate?.("/dashboard")} style={actionStyle(false)}>
+                Back To Dashboard
+              </button>
+            </div>
           </div>
-        }
-      />
 
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={reviewWorkspaceWelcomeGuide.title}
-        summary={reviewWorkspaceWelcomeGuide.summary}
-        transition={reviewWorkspaceWelcomeGuide.transition}
-        quickFacts={reviewWorkspaceWelcomeGuide.quickFacts}
-        cards={reviewWorkspaceWelcomeGuide.cards}
-        primaryActionLabel={activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
-        onPrimaryAction={() =>
-          scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory")
-        }
-        secondaryActionLabel="How Progress Is Remembered"
-        onSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
-        guideTitle="Read this page in three passes"
-        guideDescription="Start with the short status, then move into progress memory, and only use the full work list when you need assignment, routing, or status control."
-        guideSteps={[
-          {
-            label: "Step 1",
-            title: "Check the current status",
-            detail: "See how much review work is still active and whether the household is mostly caught up or still needs attention.",
-          },
-          {
-            label: "Step 2",
-            title: "Notice what already improved",
-            detail: "Completed reviews stay out of the active queue and still contribute to the household read until new evidence changes the story.",
-          },
-          {
-            label: "Step 3",
-            title: "Open the full work list only when needed",
-            detail: "Use the detailed work list for owners, status updates, saved views, and route-level review work.",
-          },
-        ]}
-        translatedTerms={[
-          {
-            term: "Active Review Work",
-            meaning: "Items still affecting readiness right now and worth looking at first.",
-          },
-          {
-            term: "Completed Reviews",
-            meaning: "Items already handled cleanly and kept out of active priority unless something changes.",
-          },
-          {
-            term: "Readiness Lift",
-            meaning: "The positive effect completed work is having on the overall household read.",
-          },
-          {
-            term: "Pending Docs",
-            meaning: "Items that likely need more evidence before the review can be closed with confidence.",
-          },
-        ]}
-        depthTitle="Use the full work list when you want assignment, routing, and status control"
-        depthDescription="The detailed workspace below is the operating layer. It is there to move work, not to be the first thing people have to decode."
-        depthPrimaryActionLabel="Jump To Active Work"
-        onDepthPrimaryAction={() => scrollToWorkspaceSection("review-work-queue")}
-        depthSecondaryActionLabel="Jump To Completed Progress"
-        onDepthSecondaryAction={() => scrollToWorkspaceSection("review-progress-memory")}
-        showAnalysisDivider={false}
-      />
+          <div
+            style={{
+              padding: "24px 20px",
+              borderRadius: "24px",
+              background: "linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)",
+              border: "1px solid rgba(191, 219, 254, 0.85)",
+              display: "grid",
+              gap: "10px",
+              justifyItems: "center",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              Current Status
+            </div>
+            <div style={{ fontSize: "40px", fontWeight: 800, lineHeight: "1", color: "#0f172a" }}>{activeQueueItems.length}</div>
+            <div style={{ color: "#475569", fontWeight: 700 }}>
+              active review item{activeQueueItems.length === 1 ? "" : "s"}
+            </div>
+            <div
+              style={{
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: activeQueueItems.length > 2 ? "#fee2e2" : activeQueueItems.length > 0 ? "#fef3c7" : "#dcfce7",
+                color: activeQueueItems.length > 2 ? "#991b1b" : activeQueueItems.length > 0 ? "#92400e" : "#166534",
+                fontSize: "12px",
+                fontWeight: 800,
+              }}
+            >
+              {workspaceVerdict.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "18px 18px 16px",
+              borderRadius: "18px",
+              background: "#f8fafc",
+              border: "1px solid rgba(226, 232, 240, 0.92)",
+              display: "grid",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+              At A Glance
+            </div>
+            {[
+              { label: "Active work", value: activeQueueItems.length },
+              { label: "Completed reviews", value: resolvedQueueItems.length },
+              { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
+              { label: "Best focus", value: topVisibleCluster?.summaryLabels?.[1] || "Progress memory" },
+            ].map((item) => (
+              <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
+                <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section style={{ display: "grid", gap: "10px" }}>
         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
