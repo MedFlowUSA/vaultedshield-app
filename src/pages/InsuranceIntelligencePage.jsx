@@ -8,7 +8,6 @@ import {
 import PortfolioAIChatBox from "../components/policy/PortfolioAIChatBox";
 import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCard";
 import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
-import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
 import { useEffect } from "react";
@@ -83,17 +82,6 @@ function getGapTone(hasGap, confidence = 0) {
   if (hasGap) return { color: "#991b1b", background: "rgba(239, 68, 68, 0.14)" };
   if (confidence >= 0.75) return { color: "#166534", background: "rgba(34, 197, 94, 0.12)" };
   return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
-}
-
-function getPortfolioPriorityTone(label = "") {
-  const normalized = String(label || "").toLowerCase();
-  if (normalized.includes("critical") || normalized.includes("at risk")) {
-    return { background: "rgba(254, 226, 226, 0.88)", border: "1px solid rgba(248, 113, 113, 0.28)", color: "#991b1b" };
-  }
-  if (normalized.includes("moderate") || normalized.includes("review")) {
-    return { background: "rgba(254, 243, 199, 0.88)", border: "1px solid rgba(245, 158, 11, 0.24)", color: "#92400e" };
-  }
-  return { background: "rgba(239, 246, 255, 0.92)", border: "1px solid rgba(147, 197, 253, 0.26)", color: "#1d4ed8" };
 }
 
 function buildChargeSummaryPreview(row) {
@@ -288,6 +276,105 @@ function PortfolioReportView({ report, onPrint, isCompact = false }) {
       </div>
       {report.sections.map((section) => renderReportSection(section))}
     </section>
+  );
+}
+
+function surfaceCardStyle(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "24px",
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 14px 36px rgba(15, 23, 42, 0.06)",
+    ...extra,
+  };
+}
+
+function normalizeScore(value, fallback = 0) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return fallback;
+  return Math.max(0, Math.min(100, Math.round(Number(value))));
+}
+
+function insuranceStatusScore(status = "", fallback = 52) {
+  const normalized = String(status || "").toLowerCase();
+  if (["strong", "healthy"].includes(normalized)) return 88;
+  if (["stable", "moderate"].includes(normalized)) return 74;
+  if (["partial", "incomplete", "needs review"].includes(normalized)) return 58;
+  if (["at risk", "weak"].includes(normalized)) return 38;
+  return fallback;
+}
+
+function insuranceTonePalette(tone = "info") {
+  if (tone === "good") return { accent: "#22c55e", soft: "rgba(34, 197, 94, 0.14)", text: "#166534" };
+  if (tone === "warning") return { accent: "#f59e0b", soft: "rgba(245, 158, 11, 0.14)", text: "#92400e" };
+  if (tone === "alert") return { accent: "#ef4444", soft: "rgba(239, 68, 68, 0.14)", text: "#991b1b" };
+  return { accent: "#3b82f6", soft: "rgba(59, 130, 246, 0.14)", text: "#1d4ed8" };
+}
+
+function insuranceToneFromScore(score = 0) {
+  if (score >= 82) return "good";
+  if (score >= 64) return "info";
+  if (score >= 50) return "warning";
+  return "alert";
+}
+
+function ScoreRing({ value = 0, size = "md", tone = "info", subtitle = "of 100", iconLabel = "" }) {
+  const palette = insuranceTonePalette(tone);
+  const normalized = normalizeScore(value);
+  const sizes = {
+    lg: { diameter: 152, stroke: 12, number: "42px", badge: "34px", subtitle: "12px" },
+    md: { diameter: 98, stroke: 9, number: "28px", badge: "28px", subtitle: "11px" },
+    sm: { diameter: 74, stroke: 7, number: "20px", badge: "24px", subtitle: "10px" },
+  };
+  const ring = sizes[size] || sizes.md;
+
+  return (
+    <div
+      style={{
+        width: `${ring.diameter}px`,
+        height: `${ring.diameter}px`,
+        borderRadius: "999px",
+        background: `conic-gradient(${palette.accent} ${normalized * 3.6}deg, #e2e8f0 ${normalized * 3.6}deg 360deg)`,
+        display: "grid",
+        placeItems: "center",
+        padding: `${ring.stroke}px`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          borderRadius: "999px",
+          background: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          textAlign: "center",
+          gap: "2px",
+          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        {iconLabel ? (
+          <div
+            style={{
+              width: ring.badge,
+              height: ring.badge,
+              borderRadius: "999px",
+              display: "grid",
+              placeItems: "center",
+              background: palette.soft,
+              color: palette.text,
+              fontSize: size === "lg" ? "11px" : "10px",
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {iconLabel}
+          </div>
+        ) : null}
+        <div style={{ fontSize: ring.number, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>{normalized}</div>
+        <div style={{ fontSize: ring.subtitle, color: "#64748b", fontWeight: 700 }}>{subtitle}</div>
+      </div>
+    </div>
   );
 }
 
@@ -679,7 +766,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       : atRiskPolicies.length > 0
         ? "Needs review"
         : "Stable comparison";
-  const portfolioPriorityTone = getPortfolioPriorityTone(portfolioBrief.priority_label);
   const insuranceAdvisorBrief = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return {
@@ -716,19 +802,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       route: topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload",
     };
   }, [portfolioBrief, rankedPolicies]);
-  const firstPolicy = rankedPolicies[0] || null;
-  const singlePolicyNextSteps = useMemo(() => {
-    if (rankedPolicies.length !== 1 || !firstPolicy) return [];
-    return [
-      firstPolicy.latest_statement_date
-        ? "Add a second statement to turn this into a more useful annual review timeline."
-        : "Upload the first in-force annual statement to improve continuity and trend support.",
-      firstPolicy.total_visible_charges === null || firstPolicy.total_visible_charges === undefined
-        ? "Strengthen charge visibility so COI and total drag are easier to trust."
-        : "Review COI and visible charge drag to confirm whether costs are manageable.",
-      "Add a second policy when available to unlock side-by-side policy health comparison.",
-    ];
-  }, [firstPolicy, rankedPolicies.length]);
   const portfolioSignalStrip = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return [
@@ -835,18 +908,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       summaryError,
       summaryLoading,
     ]
-  );
-  const insurancePageFasciaDisplay = useMemo(
-    () => ({
-      ...insurancePageFascia,
-      tertiaryAction: insurancePageFascia?.tertiaryAction
-        ? {
-            ...insurancePageFascia.tertiaryAction,
-            label: showFasciaExplanation ? "Hide explanation" : insurancePageFascia.tertiaryAction.label,
-          }
-        : null,
-    }),
-    [insurancePageFascia, showFasciaExplanation]
   );
   const plainEnglishGuide = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
@@ -1069,6 +1130,144 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       rankedPolicies.length,
       topPriorityPolicy?.ranking?.status,
     ]
+  );
+  const resolvedStatementCount = rankedPolicies.filter((row) => row.latest_statement_date).length;
+  const strongChargeSupportCount = rankedPolicies.filter(
+    (row) => row.total_visible_charges !== null && row.total_visible_charges !== undefined && row.coi_confidence !== "weak"
+  ).length;
+  const portfolioReadinessScore = normalizeScore(
+    insuranceStatusScore(
+      insurancePageFascia.status,
+      rankedPolicies.length === 0 ? 32 : rankedPolicies.length === 1 ? 61 : 70
+    ),
+    52
+  );
+  const protectionConfidenceScore = normalizeScore(Math.round((protectionSummary.confidence || 0) * 100), gapPolicies.length > 0 ? 42 : 64);
+  const statementSupportScore = rankedPolicies.length > 0 ? normalizeScore((resolvedStatementCount / rankedPolicies.length) * 100, 0) : 0;
+  const chargeSupportScore = rankedPolicies.length > 0 ? normalizeScore((strongChargeSupportCount / rankedPolicies.length) * 100, 0) : 0;
+  const comparisonReadinessScore = rankedPolicies.length <= 1 ? (rankedPolicies.length === 1 ? 52 : 20) : normalizeScore(70 + Math.min(20, (rankedPolicies.length - 2) * 8));
+  const iulReadinessScore = iulShowcasePolicy ? normalizeScore(84 + Math.min(10, iulShowcasePolicy.ranking?.score ? Math.round((iulShowcasePolicy.ranking.score - 60) / 4) : 0), 86) : 44;
+  const insuranceRingCards = useMemo(
+    () => [
+      {
+        key: "portfolio",
+        label: "Portfolio",
+        score: portfolioReadinessScore,
+        status: insurancePortfolioStatus,
+        helper: rankedPolicies.length === 0 ? "Waiting for the first readable policy." : `${pluralize(rankedPolicies.length, "policy")} in the current insurance set.`,
+        tone: insuranceToneFromScore(portfolioReadinessScore),
+        iconLabel: "PF",
+      },
+      {
+        key: "protection",
+        label: "Protection",
+        score: protectionConfidenceScore,
+        status: protectionSummary.gapDetected ? "Needs Review" : protectionConfidenceScore >= 70 ? "Good" : "Partial",
+        helper: protectionSummary.gapDetected ? "Coverage may be incomplete." : "Household coverage view from visible records.",
+        tone: protectionSummary.gapDetected ? "alert" : insuranceToneFromScore(protectionConfidenceScore),
+        iconLabel: "PR",
+      },
+      {
+        key: "statements",
+        label: "Statements",
+        score: statementSupportScore,
+        status: resolvedStatementCount === rankedPolicies.length && rankedPolicies.length > 0 ? "Current" : missingStatementPolicies.length > 0 ? "Missing Items" : "Building",
+        helper: rankedPolicies.length === 0 ? "No statements resolved yet." : `${resolvedStatementCount}/${rankedPolicies.length} policies have a visible latest statement.`,
+        tone: missingStatementPolicies.length > 0 ? "warning" : insuranceToneFromScore(statementSupportScore),
+        iconLabel: "ST",
+      },
+      {
+        key: "charges",
+        label: "Charges",
+        score: chargeSupportScore,
+        status: weakestConfidencePolicy ? "Needs Review" : strongChargeSupportCount === rankedPolicies.length && rankedPolicies.length > 0 ? "Strong" : "Building",
+        helper: rankedPolicies.length === 0 ? "No charge visibility yet." : `${strongChargeSupportCount}/${rankedPolicies.length} policies show stronger charge support.`,
+        tone: weakestConfidencePolicy ? "warning" : insuranceToneFromScore(chargeSupportScore),
+        iconLabel: "CH",
+      },
+      {
+        key: "comparison",
+        label: "Comparison",
+        score: comparisonReadinessScore,
+        status: rankedPolicies.length > 1 ? "Active" : rankedPolicies.length === 1 ? "Building" : "Waiting",
+        helper: rankedPolicies.length > 1 ? "Side-by-side policy review is live." : "A second policy unlocks a stronger comparison story.",
+        tone: rankedPolicies.length > 1 ? "good" : rankedPolicies.length === 1 ? "warning" : "info",
+        iconLabel: "CP",
+      },
+      {
+        key: "iul",
+        label: "IUL Review",
+        score: iulReadinessScore,
+        status: iulShowcasePolicy ? "Available" : "Building",
+        helper: iulShowcasePolicy ? "A flagship policy workspace is ready to open." : "The IUL review console appears when a supported policy is loaded.",
+        tone: iulShowcasePolicy ? "good" : "info",
+        iconLabel: "IU",
+      },
+    ],
+    [
+      chargeSupportScore,
+      comparisonReadinessScore,
+      insurancePortfolioStatus,
+      iulReadinessScore,
+      iulShowcasePolicy,
+      missingStatementPolicies.length,
+      portfolioReadinessScore,
+      protectionConfidenceScore,
+      protectionSummary.gapDetected,
+      rankedPolicies.length,
+      resolvedStatementCount,
+      statementSupportScore,
+      strongChargeSupportCount,
+      weakestConfidencePolicy,
+    ]
+  );
+  const insurancePriorityRows = useMemo(() => {
+    if (portfolioBrief.priority_policies?.length > 0) {
+      return portfolioBrief.priority_policies.slice(0, 4).map((policy, index) => ({
+        id: policy.policy_id || `${policy.product}-${index}`,
+        badge: index + 1,
+        title: policy.product || policy.carrier || `Policy ${index + 1}`,
+        detail: policy.review_reason || policy.interpretation?.bottom_line_summary || "This policy is worth a closer look first.",
+        meta: policy.policy_id ? "Open full policy review" : "Policy detail still forming",
+        actionLabel: policy.policy_id ? getPolicyEntryLabel(policy) : "Review Now",
+        route: policy.policy_id ? getPolicyDetailRoute(policy) : "/insurance/life/upload",
+      }));
+    }
+
+    return [
+      {
+        id: "upload-first-policy",
+        badge: 1,
+        title: "Upload the first readable policy",
+        detail: "This unlocks real policy review, charge visibility, and statement-backed insurance interpretation.",
+        meta: "Start the insurance engine",
+        actionLabel: "Upload Policy",
+        route: "/insurance/life/upload",
+      },
+    ];
+  }, [portfolioBrief.priority_policies]);
+  const insuranceReadRows = useMemo(
+    () => [
+      {
+        id: "status",
+        title: "What this means",
+        detail: plainEnglishGuide.cards[0]?.detail || plainEnglishGuide.summary,
+        accent: plainEnglishGuide.cards[0]?.value || insurancePageFascia.status || "Developing",
+      },
+      {
+        id: "review-first",
+        title: "What to review first",
+        detail: plainEnglishGuide.cards[1]?.detail || "Start with the first recommended policy instead of scanning everything.",
+        accent: plainEnglishGuide.cards[1]?.value || "Best next step",
+      },
+      {
+        id: "changed",
+        title: "What changed in this read",
+        detail: plainEnglishGuide.cards[2]?.detail || "This read strengthens as statement, charge, and policy support improve.",
+        accent: plainEnglishGuide.cards[2]?.value || "Still forming",
+      },
+    ],
+    [insurancePageFascia.status, plainEnglishGuide.cards, plainEnglishGuide.summary]
   );
   const transitionGuide = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
@@ -1357,123 +1556,387 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: "24px" }}>
+    <div
+      style={{
+        display: "grid",
+        gap: "24px",
+        background: "#f6f8fb",
+        padding: isMobile ? "4px 0 28px" : "8px 0 34px",
+      }}
+    >
       <section
-        style={{
+        style={surfaceCardStyle({
+          padding: isMobile ? "24px 20px" : isTablet ? "28px 24px" : "34px 30px",
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.18fr) minmax(320px, 0.82fr)",
-          gap: "18px",
-          padding: isMobile ? "22px 16px" : "28px 30px",
-          borderRadius: sectionRadius,
-          background: "#ffffff",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
-        }}
+          gap: "24px",
+        })}
       >
-        <div style={{ display: "grid", gap: "14px", minWidth: 0 }}>
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              {insuranceAdvisorBrief.eyebrow}
-            </div>
-            <div style={{ fontSize: isMobile ? "24px" : "30px", fontWeight: 800, letterSpacing: "-0.03em", color: "#0f172a", lineHeight: "1.15" }}>
-              Insurance Review
-            </div>
-            <div style={{ fontSize: isMobile ? "20px" : "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>
-              {insuranceAdvisorBrief.headline}
-            </div>
-            <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "860px" }}>
-              {insuranceAdvisorBrief.narrative}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onNavigate?.(insuranceAdvisorBrief.route)}
-              style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
-            >
-              {insuranceAdvisorBrief.nextAction}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (rankedPolicies.length > 1) {
-                  comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                } else {
-                  onNavigate?.("/insurance/life/upload");
-                }
-              }}
-              style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
-            >
-              {rankedPolicies.length > 1 ? "Compare Policies" : "Add Another Policy"}
-            </button>
-          </div>
-        </div>
         <div
           style={{
             display: "grid",
-            gap: "12px",
-            alignContent: "start",
-            minWidth: 0,
+            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "minmax(0, 1fr) 190px" : "minmax(280px, 1.05fr) 220px minmax(280px, 0.95fr)",
+            gap: "24px",
+            alignItems: "center",
           }}
         >
-          <div
-            style={{
-              padding: "16px 18px",
-              borderRadius: "18px",
-              background: portfolioPriorityTone.background,
-              border: portfolioPriorityTone.border,
-              display: "grid",
-              gap: "8px",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: portfolioPriorityTone.color, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              {portfolioBrief.priority_label || "Portfolio Read"}
-            </div>
-            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
-              {portfolioBrief.priority_policies?.[0]?.product || `${rankedPolicies.length} visible policies`}
-            </div>
-            <div style={{ color: "#475569", lineHeight: "1.7" }}>
-              {portfolioBrief.priority_policies?.[0]?.review_reason || portfolioBrief.summary}
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
-            <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
-              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Overall Status</div>
-              <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{insurancePortfolioStatus}</div>
-            </div>
-            <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid rgba(148, 163, 184, 0.18)" }}>
-              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Weakest Area</div>
-              <div style={{ marginTop: "8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{portfolioDepth.cards?.[0]?.title || "Evidence quality"}</div>
-            </div>
-          </div>
-
-          {rankedPolicies.length === 1 ? (
+          <div style={{ display: "grid", gap: "12px" }}>
             <div
               style={{
-                padding: "16px 18px",
+                width: "fit-content",
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: "rgba(219, 234, 254, 0.9)",
+                color: "#1d4ed8",
+                fontSize: "12px",
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Insurance Intelligence
+            </div>
+            <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Policy And Portfolio Status</div>
+            <div style={{ fontSize: isMobile ? "28px" : "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>
+              {plainEnglishGuide.cards[0]?.value || insuranceAdvisorBrief.headline}
+            </div>
+            <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{plainEnglishGuide.summary}</div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {insurancePageFascia.primaryAction ? (
+                <button type="button" onClick={() => handleFasciaAction(insurancePageFascia.primaryAction)} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
+                  {insurancePageFascia.primaryAction.label}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+              >
+                Open Supporting Details
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <ScoreRing value={portfolioReadinessScore} size="lg" tone={insuranceToneFromScore(portfolioReadinessScore)} subtitle="of 100" iconLabel="IN" />
+          </div>
+
+          <div style={{ display: "grid", gap: "16px" }}>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: insurancePageFascia.status === "At Risk" ? "#b91c1c" : "#16a34a" }}>
+                {insurancePageFascia.status === "At Risk" ? "Needs attention" : rankedPolicies.length > 1 ? "Good progress!" : "Good start"}
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.75" }}>{plainEnglishGuide.cards[2]?.detail || insuranceAdvisorBrief.narrative}</div>
+            </div>
+            <div
+              style={{
+                padding: "18px 18px 16px",
                 borderRadius: "18px",
                 background: "#f8fafc",
-                border: "1px solid rgba(148, 163, 184, 0.18)",
+                border: "1px solid rgba(226, 232, 240, 0.92)",
                 display: "grid",
                 gap: "10px",
               }}
             >
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                What Unlocks Next
+              <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                At A Glance
               </div>
-              <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                VaultedShield already has one policy to interpret. The next improvements come from stronger statement history, clearer charge support, and eventually a second policy for comparison.
-              </div>
-              <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
-                {singlePolicyNextSteps.map((item) => (
-                  <li key={item} style={{ lineHeight: "1.7" }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              {[
+                { label: "Policies loaded", value: pluralize(rankedPolicies.length, "policy") },
+                { label: "First review target", value: insurancePriorityRows[0]?.title || "Upload a policy" },
+                { label: "Statement support", value: `${resolvedStatementCount}/${rankedPolicies.length || 0} current` },
+                { label: "Charge support", value: `${strongChargeSupportCount}/${rankedPolicies.length || 0} clearer reads` },
+              ].map((item) => (
+                <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                  <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
+                  <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
+                </div>
+              ))}
             </div>
-          ) : null}
+          </div>
+        </div>
+      </section>
 
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))",
+          gap: isMobile ? "16px" : "20px",
+        }}
+      >
+        {insuranceRingCards.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => {
+              if (item.key === "protection") {
+                protectionSignalsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+              }
+              if (item.key === "comparison") {
+                comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+              }
+              if (item.key === "iul" && iulShowcasePolicy?.policy_id) {
+                onNavigate?.(getPolicyDetailRoute(iulShowcasePolicy));
+                return;
+              }
+              technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            style={{
+              ...surfaceCardStyle({
+                padding: "22px 18px 20px",
+                display: "grid",
+                gap: "12px",
+                textAlign: "center",
+                minHeight: "196px",
+                alignContent: "start",
+                cursor: "pointer",
+              }),
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <ScoreRing value={item.score} size="md" tone={item.tone} subtitle="%" iconLabel={item.iconLabel} />
+            </div>
+            <div style={{ display: "grid", gap: "5px", justifyItems: "center" }}>
+              <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
+              <div
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "999px",
+                  background: insuranceTonePalette(item.tone).soft,
+                  color: insuranceTonePalette(item.tone).text,
+                  fontSize: "12px",
+                  fontWeight: 800,
+                }}
+              >
+                {item.status}
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: "1.45" }}>{item.helper}</div>
+            </div>
+          </button>
+        ))}
+      </section>
+
+      <section style={{ display: "grid", gap: "10px" }}>
+        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+          Choose Your Lane
+        </div>
+        <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
+          Start with the simple path that matches what you need right now, then let the deeper charge, confidence, and comparison layers open only when you ask for them.
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {insuranceActionTiles.map((tile) => (
+            <FriendlyActionTile
+              key={tile.key}
+              kicker={tile.kicker}
+              title={tile.title}
+              detail={tile.detail}
+              metric={tile.metric}
+              tone={tile.tone}
+              statusLabel={tile.statusLabel}
+              actionLabel={tile.actionLabel}
+              onAction={tile.onAction}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.08fr) minmax(320px, 0.92fr)",
+          gap: "24px",
+          alignItems: "stretch",
+        }}
+      >
+        <div
+          style={surfaceCardStyle({
+            padding: isMobile ? "22px 20px" : "24px 24px 26px",
+            display: "grid",
+            gap: "18px",
+            height: "100%",
+          })}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Top Priorities</div>
+            <div style={{ color: "#334155", lineHeight: "1.75" }}>
+              Start with the one or two policies that matter most instead of trying to digest the whole portfolio.
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {insurancePriorityRows.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr) auto",
+                  gap: "14px",
+                  alignItems: "center",
+                  padding: "16px",
+                  borderRadius: "20px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.94)",
+                }}
+              >
+                <div
+                  style={{
+                    width: "42px",
+                    height: "42px",
+                    borderRadius: "16px",
+                    background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                    color: "#1d4ed8",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: "14px",
+                    fontWeight: 800,
+                  }}
+                >
+                  {item.badge}
+                </div>
+                <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
+                  <div style={{ color: "#64748b", lineHeight: "1.65", fontSize: "14px" }}>{item.detail}</div>
+                  <div style={{ color: "#2563eb", fontWeight: 700, fontSize: "13px" }}>{item.meta}</div>
+                </div>
+                <button type="button" onClick={() => onNavigate?.(item.route)} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+                  {item.actionLabel}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={surfaceCardStyle({
+            padding: isMobile ? "22px 20px" : "24px 24px 26px",
+            display: "grid",
+            gap: "18px",
+            height: "100%",
+          })}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>What This Read Is Saying</div>
+            <div style={{ color: "#334155", lineHeight: "1.75" }}>
+              This is the plain-English bridge between the simple verdict and the technical evidence underneath.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: "12px" }}>
+            {insuranceReadRows.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  padding: "16px 18px",
+                  borderRadius: "18px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.94)",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  {item.title}
+                </div>
+                <div style={{ color: "#0f172a", fontWeight: 800, lineHeight: "1.5" }}>{item.accent}</div>
+                <div style={{ color: "#475569", lineHeight: "1.72" }}>{item.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1fr) minmax(320px, 0.9fr)",
+          gap: "24px",
+          alignItems: "stretch",
+        }}
+      >
+        <div
+          style={surfaceCardStyle({
+            padding: isMobile ? "22px 20px" : "24px 24px 26px",
+            display: "grid",
+            gap: "18px",
+            height: "100%",
+          })}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Simple Definitions</div>
+            <div style={{ color: "#334155", lineHeight: "1.75" }}>
+              These are the terms most likely to feel technical. Open one only when you want a longer explanation.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {transitionGuide.keys.map((item) => (
+              <details
+                key={item.label}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  background: "#f8fafc",
+                  border: "1px solid rgba(226, 232, 240, 0.92)",
+                }}
+              >
+                <summary style={{ cursor: "pointer", listStyle: "none" }}>
+                  <div style={{ display: "grid", gap: "4px" }}>
+                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                      {item.label}
+                    </div>
+                    <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.55" }}>{item.simple}</div>
+                  </div>
+                </summary>
+                <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.75" }}>{item.detail}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={surfaceCardStyle({
+            padding: isMobile ? "22px 20px" : "24px 24px 26px",
+            display: "grid",
+            gap: "16px",
+            height: "100%",
+            background: "linear-gradient(135deg, #eef4ff 0%, #ffffff 65%, #f8fbff 100%)",
+          })}
+        >
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+              How To Use This Page
+            </div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.2" }}>
+              Let the simple answer lead, then open the proof
+            </div>
+            <div style={{ color: "#475569", lineHeight: "1.75" }}>
+              The deeper layer is here to support the verdict, not replace it. Use it when you want comparisons, evidence, pressure points, and policy order.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {transitionGuide.steps.map((step) => (
+              <div
+                key={step.label}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "16px",
+                  background: "#ffffff",
+                  border: "1px solid rgba(226, 232, 240, 0.92)",
+                  display: "grid",
+                  gap: "6px",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>{step.label}</div>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.35" }}>{step.title}</div>
+                <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
+              </div>
+            ))}
+          </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button
               type="button"
@@ -1482,17 +1945,16 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             >
               {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
             </button>
-            <button type="button" onClick={handlePrintPortfolioReport} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-              Print Report
-            </button>
-            <button onClick={() => onNavigate?.("/insurance/life/upload")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-              Upload Another Policy
+            <button
+              type="button"
+              onClick={() => setShowFasciaExplanation((current) => !current)}
+              style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+            >
+              {showFasciaExplanation ? "Hide Explanation" : "Why This Read"}
             </button>
           </div>
         </div>
       </section>
-
-      <IntelligenceFasciaCard fascia={insurancePageFasciaDisplay} onAction={handleFasciaAction} isMobile={isMobile} />
 
       <InsightExplanationPanel
         isOpen={showFasciaExplanation}
@@ -1503,360 +1965,22 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       />
 
       <section
-        style={{
-          display: "grid",
-          gap: "20px",
-          padding: isMobile ? "24px 18px" : "30px 32px",
-          borderRadius: sectionRadius,
-          background:
-            "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
-          border: "1px solid rgba(251, 146, 60, 0.18)",
-          boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
-            gap: "18px",
-            alignItems: "start",
-          }}
-        >
-          <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isMobile ? "2px 2px 0" : "4px 4px 0" }}>
-            <div
-              style={{
-                width: "fit-content",
-                padding: "7px 11px",
-                borderRadius: "999px",
-                background: "rgba(255,255,255,0.82)",
-                border: "1px solid rgba(251, 146, 60, 0.18)",
-                boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)",
-                fontSize: "11px",
-                color: "#c2410c",
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
-                fontWeight: 800,
-              }}
-            >
-              {plainEnglishGuide.eyebrow}
-            </div>
-            <div style={{ fontSize: isMobile ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
-              {plainEnglishGuide.title}
-            </div>
-            <div style={{ fontSize: isMobile ? "18px" : "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
-              {plainEnglishGuide.summary}
-            </div>
-            <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{plainEnglishGuide.transition}</div>
-          </div>
-
-          <div
-            style={{
-              padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
-              borderRadius: "24px",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
-              border: "1px solid rgba(148, 163, 184, 0.16)",
-              display: "grid",
-              gap: "14px",
-              boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                style={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "999px",
-                  background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
-                  boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
-                }}
-              />
-              <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                Quick Read
-              </div>
-            </div>
-            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
-              {plainEnglishGuide.quickFacts.map((item) => (
-                <li
-                  key={item}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "16px minmax(0, 1fr)",
-                    gap: "10px",
-                    alignItems: "start",
-                    padding: "10px 12px",
-                    borderRadius: "14px",
-                    background: "rgba(255,255,255,0.78)",
-                    border: "1px solid rgba(226,232,240,0.9)",
-                    lineHeight: "1.65",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "8px",
-                      height: "8px",
-                      marginTop: "8px",
-                      borderRadius: "999px",
-                      background: "#0f172a",
-                    }}
-                  />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {insurancePageFascia.primaryAction ? (
-                <button
-                  type="button"
-                  onClick={() => handleFasciaAction(insurancePageFascia.primaryAction)}
-                  style={{
-                    ...buttonStyle(true),
-                    width: isMobile ? "100%" : "auto",
-                    borderRadius: "999px",
-                    padding: "11px 16px",
-                    boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)",
-                  }}
-                >
-                  {insurancePageFascia.primaryAction.label}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                style={{
-                  ...buttonStyle(false),
-                  width: isMobile ? "100%" : "auto",
-                  borderRadius: "999px",
-                  padding: "11px 16px",
-                  boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)",
-                }}
-              >
-                See Supporting Details
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gap: "10px" }}>
-          <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-            Choose Your Lane
-          </div>
-          <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
-            Pick the insurance path that matches what you want to do now, then let the deeper charge, confidence, and comparison layers open only when needed.
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-              gap: "14px",
-            }}
-          >
-            {insuranceActionTiles.map((tile) => (
-              <FriendlyActionTile
-                key={tile.key}
-                kicker={tile.kicker}
-                title={tile.title}
-                detail={tile.detail}
-                metric={tile.metric}
-                tone={tile.tone}
-                statusLabel={tile.statusLabel}
-                actionLabel={tile.actionLabel}
-                onAction={tile.onAction}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gap: "18px",
-          padding: isMobile ? "22px 18px" : "26px 28px",
-          borderRadius: sectionRadius,
-          background:
-            "radial-gradient(circle at top right, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0) 30%), linear-gradient(135deg, rgba(239,246,255,0.98) 0%, rgba(255,255,255,1) 72%)",
-          border: "1px solid rgba(147, 197, 253, 0.18)",
-          boxShadow: "0 20px 42px rgba(15, 23, 42, 0.05)",
-        }}
-      >
-        <div style={{ display: "grid", gap: "8px", maxWidth: "920px" }}>
-          <div
-            style={{
-              width: "fit-content",
-              padding: "7px 11px",
-              borderRadius: "999px",
-              background: "rgba(255,255,255,0.9)",
-              border: "1px solid rgba(148, 163, 184, 0.18)",
-              fontSize: "11px",
-              color: "#1d4ed8",
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              fontWeight: 800,
-            }}
-          >
-            From Simple To Detailed
-          </div>
-          <div style={{ fontSize: isMobile ? "24px" : "28px", fontWeight: 800, color: "#0f172a", lineHeight: "1.15", letterSpacing: "-0.03em" }}>
-            This page opens up in layers, not all at once
-          </div>
-          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "56rem" }}>
-            You do not need to read this like an analyst from the start. Use the simple verdict first, then the first recommended move, and only then open the deeper proof if you want the technical reasoning behind it.
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-            gap: "12px",
-          }}
-        >
-          {transitionGuide.steps.map((step) => (
-            <div
-              key={step.label}
-              style={{
-                padding: "20px 20px 22px",
-                borderRadius: "22px",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                border: "1px solid rgba(148, 163, 184, 0.16)",
-                display: "grid",
-                gap: "10px",
-                boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
-              }}
-            >
-              <div
-                style={{
-                  width: "fit-content",
-                  padding: "6px 10px",
-                  borderRadius: "999px",
-                  background: "rgba(14, 165, 233, 0.1)",
-                  color: "#0369a1",
-                  fontSize: "11px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 800,
-                }}
-              >
-                {step.label}
-              </div>
-              <div style={{ fontSize: "19px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{step.title}</div>
-              <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.05fr) minmax(300px, 0.95fr)",
-            gap: "16px",
-            alignItems: "start",
-          }}
-        >
-          <div
-            style={{
-              padding: "20px 20px 22px",
-              borderRadius: "22px",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-              border: "1px solid rgba(148, 163, 184, 0.16)",
-              display: "grid",
-              gap: "12px",
-              boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              Helpful Definitions
-            </div>
-            <div style={{ color: "#475569", lineHeight: "1.75" }}>
-              These are the four terms most likely to make the page feel technical. Open any one only when you want the longer explanation.
-            </div>
-            <div style={{ display: "grid", gap: "10px" }}>
-              {transitionGuide.keys.map((item) => (
-                <details
-                  key={item.label}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "16px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.16)",
-                  }}
-                >
-                  <summary style={{ cursor: "pointer", listStyle: "none" }}>
-                    <div style={{ display: "grid", gap: "4px" }}>
-                      <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                        {item.label}
-                      </div>
-                      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.55" }}>{item.simple}</div>
-                    </div>
-                  </summary>
-                  <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.75" }}>{item.detail}</div>
-                </details>
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "20px 20px 22px",
-              borderRadius: "22px",
-              background: "radial-gradient(circle at top right, rgba(56,189,248,0.22) 0%, rgba(56,189,248,0) 36%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-              border: "1px solid rgba(15, 23, 42, 0.12)",
-              color: "#ffffff",
-              display: "grid",
-              gap: "12px",
-              boxShadow: "0 18px 36px rgba(15, 23, 42, 0.18)",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              When You Want More Detail
-            </div>
-            <div style={{ fontSize: "22px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-              The next layer is there to support the simple answer
-            </div>
-            <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8" }}>
-              It should feel like supporting detail, not a second language. Open it when you want comparisons, evidence, pressure points, and policy order.
-            </div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => protectionSignalsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                style={{ ...reportButtonStyle(false, true), width: isMobile ? "100%" : "auto", borderRadius: "999px", padding: "11px 16px" }}
-              >
-                Start With Coverage Summary
-              </button>
-              <button
-                type="button"
-                onClick={() => comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                style={{ ...reportButtonStyle(false), width: isMobile ? "100%" : "auto", borderRadius: "999px", padding: "11px 16px" }}
-              >
-                See Policy Comparison
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
         ref={technicalAnalysisRef}
-        style={{
+        style={surfaceCardStyle({
+          padding: isMobile ? "22px 20px" : "24px 26px",
           display: "grid",
           gap: "10px",
-          padding: isMobile ? "20px 18px" : "22px 26px",
-          borderRadius: sectionRadius,
-          background: "radial-gradient(circle at top right, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0) 34%), linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-          color: "#ffffff",
-          border: "1px solid rgba(15, 23, 42, 0.12)",
-          boxShadow: "0 20px 40px rgba(15, 23, 42, 0.16)",
-        }}
+          background: "linear-gradient(135deg, #f8fbff 0%, #ffffff 45%, #eef6ff 100%)",
+        })}
       >
-        <div style={{ fontSize: "12px", color: "rgba(191, 219, 254, 0.92)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+        <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
           Supporting Details Start Here
         </div>
-        <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em" }}>
-          Supporting detail: pressure points, evidence, and policy order
+        <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em", color: "#0f172a" }}>
+          Deeper insurance detail: evidence, pressure points, and policy order
         </div>
-        <div style={{ color: "rgba(226, 232, 240, 0.9)", lineHeight: "1.8", maxWidth: "60rem" }}>
-          Everything below this point is the supporting layer. Use it to verify the verdict, inspect thin evidence, and understand why certain policies should be looked at first.
+        <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "60rem" }}>
+          Everything below this point is the supporting layer. Use it to verify the verdict, inspect thin evidence, and understand why certain policies should be reviewed before others.
         </div>
       </section>
 
