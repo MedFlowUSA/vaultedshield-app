@@ -2234,8 +2234,21 @@ export default function DashboardPage({ onNavigate }) {
 
               <div style={{ display: "grid", gap: "16px" }}>
                 <div style={{ display: "grid", gap: "8px" }}>
-                  <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.04em", color: "#16a34a" }}>
-                    Good progress!
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      fontWeight: 800,
+                      lineHeight: 1.05,
+                      letterSpacing: "-0.04em",
+                      color:
+                        continuityStatus.label === "Strong"
+                          ? "#16a34a"
+                          : continuityStatus.label === "Moderate"
+                            ? "#b45309"
+                            : "#b91c1c",
+                    }}
+                  >
+                    {continuityStatus.label === "Strong" ? "Good progress!" : continuityStatus.label === "Moderate" ? "Worth watching" : "Needs attention"}
                   </div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>{heroSupportLine}</div>
                 </div>

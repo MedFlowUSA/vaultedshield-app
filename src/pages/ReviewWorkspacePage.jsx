@@ -797,10 +797,10 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                 {activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
               </button>
               <button type="button" onClick={handleRefreshSnapshot} style={actionStyle(false)}>
-                Refresh Progress
+                Refresh Status
               </button>
               <button type="button" onClick={() => onNavigate?.("/dashboard")} style={actionStyle(false)}>
-                Back To Dashboard
+                View Dashboard
               </button>
             </div>
           </div>

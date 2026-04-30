@@ -1611,7 +1611,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
                 style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
               >
-                Open Supporting Details
+                See Supporting Details
               </button>
             </div>
           </div>

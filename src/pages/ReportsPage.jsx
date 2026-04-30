@@ -954,7 +954,20 @@ export default function ReportsPage({ onNavigate }) {
       ],
     },
   ];
-  const activeReportCard = reportCards.find((card) => card.key === activeReport) || reportCards[0];
+  const reportsHeroColor =
+    reportsVerdict.label === "Needs Review"
+      ? "#ef4444"
+      : reportsVerdict.label === "Watch"
+        ? "#f59e0b"
+        : "#22c55e";
+  const reportsHeroHeadline =
+    reportsVerdict.label === "Strong"
+      ? "Executive ready"
+      : reportsVerdict.label === "Stable"
+        ? "Good progress!"
+        : reportsVerdict.label === "Watch"
+          ? "Worth watching"
+          : "Needs attention";
 
   return (
     <div
@@ -1028,7 +1041,7 @@ export default function ReportsPage({ onNavigate }) {
                 width: "144px",
                 height: "144px",
                 borderRadius: "999px",
-                background: `conic-gradient(#22c55e 0deg ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg, #e2e8f0 ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg 360deg)`,
+                background: `conic-gradient(${reportsHeroColor} 0deg ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg, #e2e8f0 ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg 360deg)`,
                 display: "grid",
                 placeItems: "center",
                 boxShadow: "0 24px 50px rgba(15, 23, 42, 0.10)",
@@ -1063,18 +1076,13 @@ export default function ReportsPage({ onNavigate }) {
                   fontWeight: 800,
                   lineHeight: "1.05",
                   letterSpacing: "-0.04em",
-                  color:
-                    reportsVerdict.label === "Needs Review"
-                      ? "#b91c1c"
-                      : reportsVerdict.label === "Watch"
-                        ? "#b45309"
-                        : "#16a34a",
+                  color: reportsHeroColor,
                 }}
               >
-                {reportsVerdict.label === "Strong" ? "Executive-ready" : reportsVerdict.label === "Stable" ? "Good progress!" : reportsVerdict.label === "Watch" ? "Worth watching" : "Needs review"}
+                {reportsHeroHeadline}
               </div>
               <div style={{ color: "#475569", lineHeight: "1.75" }}>
-                {activeReportCard.description}
+                {reportsVerdict.summary}
               </div>
             </div>
             <div
