@@ -18,7 +18,6 @@ import OperatingGraphSummaryCards from "../components/household/OperatingGraphSu
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
@@ -57,6 +56,17 @@ function buttonStyle(primary = false) {
     cursor: "pointer",
     fontWeight: 700,
     fontSize: "13px",
+  };
+}
+
+function surfaceCardStyle(extra = {}) {
+  return {
+    padding: "26px 28px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.06)",
+    ...extra,
   };
 }
 
@@ -944,6 +954,7 @@ export default function ReportsPage({ onNavigate }) {
       ],
     },
   ];
+  const activeReportCard = reportCards.find((card) => card.key === activeReport) || reportCards[0];
 
   return (
     <div
@@ -954,65 +965,146 @@ export default function ReportsPage({ onNavigate }) {
         padding: "8px 0 32px",
       }}
     >
-      <PlainLanguageBridge
-        eyebrow="Executive View"
-        title={reportsWelcomeGuide.title}
-        summary={reportsWelcomeGuide.summary}
-        transition={reportsWelcomeGuide.transition}
-        quickFacts={reportsWelcomeGuide.quickFacts}
-        cards={reportsWelcomeGuide.cards}
-        primaryActionLabel="Open Household Brief"
-        onPrimaryAction={() => {
-          setSelectedReport("household");
-          scrollToReportsSection("reports-active-view");
-        }}
-        secondaryActionLabel="See Report Choices"
-        onSecondaryAction={() => scrollToReportsSection("report-cards")}
-        guideTitle="Use this page in three passes"
-        guideDescription="Start with the executive story, then check progress and active work, and only open the deeper report when you want supporting detail, export, or module-level detail."
-        guideSteps={[
-          {
-            label: "Step 1",
-            title: "Read the short status first",
-            detail: "The top of the page is meant to answer what is okay, what changed, and what deserves attention without making you read the full packet.",
-          },
-          {
-            label: "Step 2",
-            title: "Check progress before open issues",
-            detail: "Completed reviews and readiness lift help show the household is moving forward, not just accumulating work.",
-          },
-          {
-            label: "Step 3",
-            title: "Open the report that fits the audience",
-            detail: "Use household, executive, or insurance report views depending on whether the audience is a family, advisor, or decision-maker.",
-          },
-        ]}
-        translatedTerms={[
-          {
-            term: "Household Score",
-            meaning: "A simple operating read of how complete and review-ready the household currently looks.",
-          },
-          {
-            term: "Active Reviews",
-            meaning: "Items still affecting the report story right now and worth looking at next.",
-          },
-          {
-            term: "Completed Reviews",
-            meaning: "Work already handled and kept out of the active queue unless new evidence changes the story.",
-          },
-          {
-            term: "Module Readiness",
-            meaning: "How usable each major part of the platform already is for real reporting.",
-          },
-        ]}
-        depthTitle="Open the deeper report only when you want supporting detail, export, or module breakdown"
-        depthDescription="The report layers below are where the platform earns respect, but the first read should stay calm and executive."
-        depthPrimaryActionLabel="Jump To Active Report"
-        onDepthPrimaryAction={() => scrollToReportsSection("reports-active-view")}
-        depthSecondaryActionLabel="Print Current Report"
-        onDepthSecondaryAction={handlePrintActiveReport}
-        showAnalysisDivider={false}
-      />
+      <section
+        style={surfaceCardStyle({
+          padding: "32px 30px",
+          display: "grid",
+          gap: "24px",
+        })}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "24px",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div
+              style={{
+                width: "fit-content",
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: "rgba(219, 234, 254, 0.9)",
+                color: "#1d4ed8",
+                fontSize: "12px",
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Executive View
+            </div>
+            <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Reports And Briefings</div>
+            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>
+              {reportsWelcomeGuide.title}
+            </div>
+            <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{reportsWelcomeGuide.summary}</div>
+            <div style={{ color: "#64748b", lineHeight: "1.75", maxWidth: "44rem" }}>{reportsWelcomeGuide.transition}</div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReport("household");
+                  scrollToReportsSection("reports-active-view");
+                }}
+                style={buttonStyle(true)}
+              >
+                Open Household Brief
+              </button>
+              <button type="button" onClick={() => scrollToReportsSection("report-cards")} style={buttonStyle(false)}>
+                See Report Choices
+              </button>
+              <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(false)}>
+                Print Current Report
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                width: "144px",
+                height: "144px",
+                borderRadius: "999px",
+                background: `conic-gradient(#22c55e 0deg ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg, #e2e8f0 ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg 360deg)`,
+                display: "grid",
+                placeItems: "center",
+                boxShadow: "0 24px 50px rgba(15, 23, 42, 0.10)",
+              }}
+            >
+              <div
+                style={{
+                  width: "112px",
+                  height: "112px",
+                  borderRadius: "999px",
+                  background: "#ffffff",
+                  display: "grid",
+                  placeItems: "center",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ display: "grid", gap: "4px" }}>
+                  <div style={{ fontSize: "40px", fontWeight: 800, lineHeight: "1", color: "#0f172a" }}>
+                    {displayValue(householdScorecard?.overallScore)}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>of 100</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "16px" }}>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div
+                style={{
+                  fontSize: "28px",
+                  fontWeight: 800,
+                  lineHeight: "1.05",
+                  letterSpacing: "-0.04em",
+                  color:
+                    reportsVerdict.label === "Needs Review"
+                      ? "#b91c1c"
+                      : reportsVerdict.label === "Watch"
+                        ? "#b45309"
+                        : "#16a34a",
+                }}
+              >
+                {reportsVerdict.label === "Strong" ? "Executive-ready" : reportsVerdict.label === "Stable" ? "Good progress!" : reportsVerdict.label === "Watch" ? "Worth watching" : "Needs review"}
+              </div>
+              <div style={{ color: "#475569", lineHeight: "1.75" }}>
+                {activeReportCard.description}
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "18px 18px 16px",
+                borderRadius: "18px",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.92)",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+                Since Last Review
+              </div>
+              {[
+                { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
+                { label: "Completed reviews", value: resolvedQueueItems.length },
+                { label: "Active work", value: activeQueueItems.length },
+                { label: "Modules needing review", value: moduleReadinessCounts.needsReview },
+              ].map((item) => (
+                <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+                  <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
+                  <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section style={{ display: "grid", gap: "10px" }}>
         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
