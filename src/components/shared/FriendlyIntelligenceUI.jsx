@@ -1,38 +1,14 @@
-const TONES = {
-  neutral: {
-    soft: "#e2e8f0",
-    text: "#334155",
-    border: "rgba(148, 163, 184, 0.26)",
-    gradient: "linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(255,255,255,0.98) 100%)",
-  },
-  good: {
-    soft: "#dcfce7",
-    text: "#166534",
-    border: "rgba(34, 197, 94, 0.24)",
-    gradient: "linear-gradient(180deg, rgba(240,253,244,0.98) 0%, rgba(255,255,255,0.98) 100%)",
-  },
-  warning: {
-    soft: "#fef3c7",
-    text: "#92400e",
-    border: "rgba(245, 158, 11, 0.24)",
-    gradient: "linear-gradient(180deg, rgba(255,251,235,0.98) 0%, rgba(255,255,255,0.98) 100%)",
-  },
-  alert: {
-    soft: "#fee2e2",
-    text: "#991b1b",
-    border: "rgba(248, 113, 113, 0.24)",
-    gradient: "linear-gradient(180deg, rgba(254,242,242,0.98) 0%, rgba(255,255,255,0.98) 100%)",
-  },
-  info: {
-    soft: "#dbeafe",
-    text: "#1d4ed8",
-    border: "rgba(96, 165, 250, 0.22)",
-    gradient: "linear-gradient(180deg, rgba(239,246,255,0.98) 0%, rgba(255,255,255,0.98) 100%)",
-  },
+/* eslint-disable react-refresh/only-export-components */
+import { getReadinessPalette } from "../../lib/presentation/readinessVerdicts";
+
+const RING_SIZES = {
+  sm: { outer: 88, inner: 66, valueSize: 24, subtitleSize: 10, iconSize: 10 },
+  md: { outer: 100, inner: 74, valueSize: 28, subtitleSize: 11, iconSize: 11 },
+  lg: { outer: 144, inner: 112, valueSize: 40, subtitleSize: 12, iconSize: 12 },
 };
 
 function getTone(tone = "neutral") {
-  return TONES[tone] || TONES.neutral;
+  return getReadinessPalette(tone);
 }
 
 function actionButtonStyle(kind = "secondary") {
@@ -63,6 +39,64 @@ function actionButtonStyle(kind = "secondary") {
   };
 }
 
+export function friendlySurfaceCardStyle(extra = {}) {
+  return {
+    padding: "26px 28px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.06)",
+    ...extra,
+  };
+}
+
+export function FriendlySurfaceCard({ children, style = {}, ...rest }) {
+  return (
+    <section style={friendlySurfaceCardStyle(style)} {...rest}>
+      {children}
+    </section>
+  );
+}
+
+export function ScoreRing({ value = 0, size = "md", tone = "info", iconLabel = "", subtitle = "of 100" }) {
+  const config = RING_SIZES[size] || RING_SIZES.md;
+  const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
+  const degrees = Math.max(8, Math.min(360, (safeValue / 100) * 360));
+  const accent = getReadinessPalette(tone).accent;
+
+  return (
+    <div
+      style={{
+        width: `${config.outer}px`,
+        height: `${config.outer}px`,
+        borderRadius: "999px",
+        background: `conic-gradient(${accent} 0deg ${degrees}deg, #e2e8f0 ${degrees}deg 360deg)`,
+        display: "grid",
+        placeItems: "center",
+        boxShadow: "0 24px 50px rgba(15, 23, 42, 0.10)",
+      }}
+    >
+      <div
+        style={{
+          width: `${config.inner}px`,
+          height: `${config.inner}px`,
+          borderRadius: "999px",
+          background: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div style={{ fontSize: `${config.valueSize}px`, fontWeight: 800, lineHeight: "1", color: "#0f172a" }}>{safeValue}</div>
+          <div style={{ fontSize: `${config.subtitleSize}px`, color: "#64748b", fontWeight: 700 }}>{subtitle}</div>
+          {iconLabel ? <div style={{ fontSize: `${config.iconSize}px`, color: accent, fontWeight: 800, letterSpacing: "0.08em" }}>{iconLabel}</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FriendlyStatusPill({ label, tone = "neutral", icon = "" }) {
   const palette = getTone(tone);
 
@@ -88,7 +122,7 @@ export function FriendlyStatusPill({ label, tone = "neutral", icon = "" }) {
 }
 
 export function ConfidenceSupportBadge({ label, tone = "info" }) {
-  return <FriendlyStatusPill label={label} tone={tone} icon="🔍" />;
+  return <FriendlyStatusPill label={label} tone={tone} icon="Support" />;
 }
 
 export function WhyItMattersBlock({ whatFound, whyCare }) {
@@ -226,7 +260,7 @@ export function ExpandableEvidencePanel({
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{title}</div>
-          <FriendlyStatusPill label="Expandable" tone="neutral" icon="🔍" />
+          <FriendlyStatusPill label="Expandable" tone="neutral" icon="Details" />
         </div>
         {subtitle ? <div style={{ color: "#475569", lineHeight: "1.65" }}>{subtitle}</div> : null}
       </summary>
@@ -237,7 +271,7 @@ export function ExpandableEvidencePanel({
 
 export function FriendlyInsightCard({
   eyebrow = "Simple Read",
-  icon = "🧠",
+  icon = "Guide",
   title,
   verdict,
   statusLabel,
@@ -533,6 +567,114 @@ export function FriendlyActionTile({
   );
 }
 
+export function GlanceListPanel({ eyebrow = "At A Glance", items = [] }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        padding: "18px 18px 16px",
+        borderRadius: "18px",
+        background: "#f8fafc",
+        border: "1px solid rgba(226, 232, 240, 0.92)",
+        display: "grid",
+        gap: "10px",
+      }}
+    >
+      <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+        {eyebrow}
+      </div>
+      {items.map((item) => (
+        <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
+          <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
+          <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function FriendlyPageHero({
+  eyebrow,
+  sectionTitle,
+  headline,
+  summary,
+  transition,
+  actions = [],
+  score,
+  scoreTone = "info",
+  scoreSubtitle = "of 100",
+  scoreIconLabel = "",
+  asideHeadline,
+  asideSummary,
+  glanceEyebrow = "At A Glance",
+  glanceItems = [],
+}) {
+  const asideTone = getReadinessPalette(scoreTone).text;
+
+  return (
+    <FriendlySurfaceCard
+      style={{
+        padding: "32px 30px",
+        display: "grid",
+        gap: "24px",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: "24px",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ display: "grid", gap: "12px" }}>
+          {eyebrow ? (
+            <div
+              style={{
+                width: "fit-content",
+                padding: "7px 12px",
+                borderRadius: "999px",
+                background: "rgba(219, 234, 254, 0.9)",
+                color: "#1d4ed8",
+                fontSize: "12px",
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              {eyebrow}
+            </div>
+          ) : null}
+          {sectionTitle ? <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>{sectionTitle}</div> : null}
+          {headline ? <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>{headline}</div> : null}
+          {summary ? <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{summary}</div> : null}
+          {transition ? <div style={{ color: "#64748b", lineHeight: "1.75", maxWidth: "44rem" }}>{transition}</div> : null}
+          <SuggestedActionsRow actions={actions} />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <ScoreRing value={score} size="lg" tone={scoreTone} subtitle={scoreSubtitle} iconLabel={scoreIconLabel} />
+        </div>
+
+        <div style={{ display: "grid", gap: "16px" }}>
+          {(asideHeadline || asideSummary) ? (
+            <div style={{ display: "grid", gap: "8px" }}>
+              {asideHeadline ? (
+                <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: asideTone }}>
+                  {asideHeadline}
+                </div>
+              ) : null}
+              {asideSummary ? <div style={{ color: "#475569", lineHeight: "1.75" }}>{asideSummary}</div> : null}
+            </div>
+          ) : null}
+          <GlanceListPanel eyebrow={glanceEyebrow} items={glanceItems} />
+        </div>
+      </div>
+    </FriendlySurfaceCard>
+  );
+}
+
 export function WhatThisMeansCard(props) {
   return <ActionSignalCard label="What This Means" tone="info" {...props} />;
 }
@@ -556,7 +698,7 @@ export function ExpandForDetailsSection(props) {
 export function CalmEmptyState({
   title,
   description,
-  icon = "📄",
+  icon = "Docs",
   tone = "neutral",
   supportLabel = "",
   actionLabel = "",

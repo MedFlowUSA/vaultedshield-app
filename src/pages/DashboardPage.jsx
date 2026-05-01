@@ -29,7 +29,7 @@ import {
   answerDemoHouseholdQuestion,
   buildDemoHouseholdPreview,
 } from "../lib/onboarding/demoHouseholdPreview";
-import { executeSmartAction } from "../lib/navigation/smartActions";
+import { executeSmartAction, resolveSmartActionRoute } from "../lib/navigation/smartActions";
 import {
   buildModuleReadinessOverview,
   summarizeAssetsModule,
@@ -48,6 +48,16 @@ import {
   buildHouseholdPriorityEngine,
   buildHouseholdScorecard,
 } from "../lib/domain/platformIntelligence/householdOperatingSystem";
+import { ScoreRing } from "../components/shared/FriendlyIntelligenceUI";
+import {
+  buildReadinessVerdict,
+  getFriendlyRingStatus,
+  getReadinessLabelFromScore,
+  getReadinessPalette,
+  getReadinessToneFromScore,
+  getStatusPresentation,
+  scoreFromReadinessStatus,
+} from "../lib/presentation/readinessVerdicts";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
@@ -170,12 +180,14 @@ function buildDependencyActionSignals(dependencySignals = null) {
       candidates.find((candidate) => candidate.source_flag === flag.key) ||
       null;
 
+    const actionKey = matchedCandidate?.action_key || flag.suggested_smart_action_keys?.[0] || null;
+
     return {
       id: `dependency-${flag.key}-${index}`,
       label: flag.action_label || matchedCandidate?.label || flag.title || "Open review",
       summary: flag.explanation,
-      route: flag.route || matchedCandidate?.route || resolveActionSignalRoute(flag.explanation),
-      action_key: matchedCandidate?.action_key || flag.suggested_smart_action_keys?.[0] || null,
+      route: flag.route || matchedCandidate?.route || resolveSmartActionRoute(actionKey) || resolveActionSignalRoute(flag.explanation),
+      action_key: actionKey,
       severity: flag.severity || "moderate",
     };
   });
@@ -219,17 +231,6 @@ function getModuleStatus(count) {
   if (count >= 3) return "Strong";
   if (count >= 1) return "Moderate";
   return "Weak";
-}
-
-function getStatusColors(status) {
-  if (status === "Strong") return { color: "#15803d", background: "rgba(34,197,94,0.12)" };
-  if (status === "Moderate") return { color: "#b45309", background: "rgba(245,158,11,0.12)" };
-  if (status === "Weak") return { color: "#fdba74", background: "rgba(249,115,22,0.12)" };
-  if (status === "Ready") return { color: "#15803d", background: "rgba(34,197,94,0.12)" };
-  if (status === "Building") return { color: "#b45309", background: "rgba(245,158,11,0.12)" };
-  if (status === "Needs Review") return { color: "#b91c1c", background: "rgba(239,68,68,0.12)" };
-  if (status === "At Risk") return { color: "#b91c1c", background: "rgba(239,68,68,0.12)" };
-  return { color: "#475569", background: "rgba(148,163,184,0.12)" };
 }
 
 function getReadableModuleStatus(scoreLikeValue, goodThreshold = 3, moderateThreshold = 1) {
@@ -604,63 +605,9 @@ function DashboardCard({ children, style = {}, ...rest }) {
   );
 }
 
-function getDashboardTone(score = 0) {
-  if (score >= 82) return "good";
-  if (score >= 64) return "info";
-  if (score >= 50) return "warning";
-  return "alert";
-}
-
-function getDashboardPalette(tone = "info") {
-  if (tone === "good") {
-    return {
-      accent: "#22c55e",
-      soft: "rgba(34, 197, 94, 0.14)",
-      text: "#166534",
-    };
-  }
-  if (tone === "warning") {
-    return {
-      accent: "#f59e0b",
-      soft: "rgba(245, 158, 11, 0.14)",
-      text: "#92400e",
-    };
-  }
-  if (tone === "alert") {
-    return {
-      accent: "#ef4444",
-      soft: "rgba(239, 68, 68, 0.14)",
-      text: "#991b1b",
-    };
-  }
-  return {
-    accent: "#3b82f6",
-    soft: "rgba(59, 130, 246, 0.14)",
-    text: "#1d4ed8",
-  };
-}
-
 function normalizeDashboardScore(value, fallback = 0) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return fallback;
   return Math.max(0, Math.min(100, Math.round(Number(value))));
-}
-
-function scoreFromReadinessStatus(status = "", fallback = 46) {
-  const normalized = String(status || "").toLowerCase();
-  if (["excellent", "strong", "healthy", "ready"].includes(normalized)) return 88;
-  if (["good", "moderate", "building", "usable"].includes(normalized)) return 72;
-  if (["needs review", "watch", "starter"].includes(normalized)) return 56;
-  if (["needs attention", "at risk", "weak"].includes(normalized)) return 42;
-  return fallback;
-}
-
-function getFriendlyRingStatus(score, { count = 1, allowExcellent = true, emptyLabel = "Missing Items" } = {}) {
-  if ((count || 0) === 0) return emptyLabel;
-  if (allowExcellent && score >= 90) return "Excellent";
-  if (score >= 80) return "Strong";
-  if (score >= 65) return "Good";
-  if (score >= 50) return "Needs Review";
-  return "Needs Attention";
 }
 
 function getPriorityActionLabel(item = null) {
@@ -764,71 +711,8 @@ function HeaderUtilityButton({ kind, label, onClick }) {
   );
 }
 
-function ScoreRing({ value = 0, size = "md", tone = "info", iconLabel = "", subtitle = "" }) {
-  const palette = getDashboardPalette(tone);
-  const normalizedScore = normalizeDashboardScore(value);
-  const sizeMap = {
-    lg: { diameter: 148, stroke: 12, number: "42px", badge: "34px", subtitle: "12px" },
-    md: { diameter: 96, stroke: 9, number: "28px", badge: "28px", subtitle: "11px" },
-    sm: { diameter: 72, stroke: 7, number: "20px", badge: "24px", subtitle: "10px" },
-  };
-  const ring = sizeMap[size] || sizeMap.md;
-
-  return (
-    <div
-      style={{
-        width: `${ring.diameter}px`,
-        height: `${ring.diameter}px`,
-        borderRadius: "999px",
-        background: `conic-gradient(${palette.accent} ${normalizedScore * 3.6}deg, #e2e8f0 ${normalizedScore * 3.6}deg 360deg)`,
-        display: "grid",
-        placeItems: "center",
-        padding: `${ring.stroke}px`,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          borderRadius: "999px",
-          background: "#ffffff",
-          display: "grid",
-          placeItems: "center",
-          textAlign: "center",
-          gap: "2px",
-          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
-        }}
-      >
-        {iconLabel ? (
-          <div
-            style={{
-              width: ring.badge,
-              height: ring.badge,
-              borderRadius: "999px",
-              display: "grid",
-              placeItems: "center",
-              background: palette.soft,
-              color: palette.text,
-              fontSize: size === "lg" ? "11px" : "10px",
-              fontWeight: 800,
-              letterSpacing: "0.08em",
-            }}
-          >
-            {iconLabel}
-          </div>
-        ) : null}
-        <div style={{ fontSize: ring.number, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>
-          {normalizedScore}
-        </div>
-        <div style={{ fontSize: ring.subtitle, color: "#64748b", fontWeight: 700 }}>{subtitle || "of 100"}</div>
-      </div>
-    </div>
-  );
-}
-
 function DashboardRingCard({ label, score, statusLabel, helper, iconLabel, tone = "info", onClick }) {
-  const palette = getDashboardPalette(tone);
+  const palette = getReadinessPalette(tone);
 
   return (
     <button
@@ -1180,17 +1064,25 @@ export default function DashboardPage({ onNavigate }) {
     continuityPercent
   );
   const readinessLift = Math.min(8, resolvedQueueItems.length * 4);
-  const readinessTone = getDashboardTone(overallReadinessScore);
-  const heroHeadline =
-    overallReadinessScore >= 82
-      ? "Good progress!"
-      : overallReadinessScore >= 64
-        ? "Steady progress."
-        : "Start with one clear next step.";
   const heroSummary =
     householdScorecard.summary ||
     continuityStatus.explanation ||
     "VaultedShield is still building the household picture from the records it can see.";
+  const dashboardVerdict = useMemo(
+    () =>
+      buildReadinessVerdict({
+        label: getReadinessLabelFromScore(overallReadinessScore),
+        summary: heroSummary,
+        headlines: {
+          strong: "Good progress!",
+          stable: "Steady progress.",
+          watch: "Worth watching",
+          needsReview: "Needs attention",
+        },
+      }),
+    [heroSummary, overallReadinessScore]
+  );
+  const readinessTone = dashboardVerdict.tone;
   const strongestDimension = householdScorecard.strongestDimension || null;
   const weakestDimension = householdScorecard.weakestDimension || null;
   const heroSupportLine =
@@ -1229,7 +1121,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${savedPolicyCount} polic${savedPolicyCount === 1 ? "y" : "ies"} visible`
             : "Add the first policy",
         iconLabel: getCategoryBadge("insurance"),
-        tone: getDashboardTone(
+        tone: getReadinessToneFromScore(
           normalizeDashboardScore(
             protectionDimension?.score,
             scoreFromReadinessStatus(savedPolicyCount > 0 ? (weakPolicyRows.length > 0 || missingStatementCount > 0 ? "needs review" : "strong") : "needs review", 44)
@@ -1256,7 +1148,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${propertySummary.propertyCount || 0} propert${propertySummary.propertyCount === 1 ? "y" : "ies"} tracked`
             : "Home stack still building",
         iconLabel: getCategoryBadge("property"),
-        tone: getDashboardTone(
+        tone: getReadinessToneFromScore(
           normalizeDashboardScore(
             propertyDimension?.score,
             scoreFromReadinessStatus(propertySummary.propertyCount > 0 ? ((propertySummary.propertiesWithValuationCount || 0) > 0 ? "good" : "needs review") : "needs review", 46)
@@ -1280,7 +1172,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${vaultSummary.metrics?.documents || 0} document${vaultSummary.metrics?.documents === 1 ? "" : "s"} loaded`
             : "Document support is light",
         iconLabel: getCategoryBadge("documents"),
-        tone: getDashboardTone(
+        tone: getReadinessToneFromScore(
           normalizeDashboardScore(documentationDimension?.score, scoreFromReadinessStatus(vaultSummary.status, 44))
         ),
         route: "/upload-center",
@@ -1301,7 +1193,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${portalSummary.metrics?.portals || 0} portal${portalSummary.metrics?.portals === 1 ? "" : "s"} connected`
             : "Access continuity needs setup",
         iconLabel: getCategoryBadge("access"),
-        tone: getDashboardTone(
+        tone: getReadinessToneFromScore(
           normalizeDashboardScore(continuityDimension?.score, scoreFromReadinessStatus(portalSummary.status, 48))
         ),
         route: "/portals",
@@ -1316,7 +1208,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${retirementCount} account${retirementCount === 1 ? "" : "s"} visible`
             : "Retirement details are thin",
         iconLabel: getCategoryBadge("retirement"),
-        tone: getDashboardTone(retirementScore),
+        tone: getReadinessToneFromScore(retirementScore),
         route: "/retirement",
       },
       {
@@ -1329,7 +1221,7 @@ export default function DashboardPage({ onNavigate }) {
             ? `${warrantyCount} contract${warrantyCount === 1 ? "" : "s"} tracked`
             : "Protection add-ons still need intake",
         iconLabel: getCategoryBadge("warranty"),
-        tone: getDashboardTone(warrantyScore),
+        tone: getReadinessToneFromScore(warrantyScore),
         route: "/warranties",
       },
     ];
@@ -2215,12 +2107,12 @@ export default function DashboardPage({ onNavigate }) {
                 <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Household Readiness</div>
                 <div style={{ color: "#64748b", lineHeight: "1.7" }}>Overall preparedness across all areas</div>
                 <div style={{ color: "#0f172a", fontSize: isMobile ? "28px" : "32px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.04em" }}>
-                  {continuityStatus.label === "Strong" ? "Good progress!" : heroHeadline}
+                  {dashboardVerdict.headline}
                 </div>
                 <div style={{ color: "#334155", lineHeight: "1.75", maxWidth: "560px" }}>{heroSummary}</div>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: "999px", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700, fontSize: "13px" }}>
-                    {displayValue(householdScorecard.overallStatus)}
+                    {dashboardVerdict.label}
                   </span>
                   <span style={{ display: "inline-flex", alignItems: "center", padding: "8px 12px", borderRadius: "999px", background: "#f8fafc", color: "#475569", fontWeight: 700, fontSize: "13px" }}>
                     {displayValue(activeQueueItems.length)} open items
@@ -2240,15 +2132,10 @@ export default function DashboardPage({ onNavigate }) {
                       fontWeight: 800,
                       lineHeight: 1.05,
                       letterSpacing: "-0.04em",
-                      color:
-                        continuityStatus.label === "Strong"
-                          ? "#16a34a"
-                          : continuityStatus.label === "Moderate"
-                            ? "#b45309"
-                            : "#b91c1c",
+                      color: dashboardVerdict.accent,
                     }}
                   >
-                    {continuityStatus.label === "Strong" ? "Good progress!" : continuityStatus.label === "Moderate" ? "Worth watching" : "Needs attention"}
+                    {dashboardVerdict.headline}
                   </div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>{heroSupportLine}</div>
                 </div>
@@ -2719,7 +2606,7 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             {aiIntroModuleCards.map((card) => {
-              const tone = getStatusColors(card.status);
+              const tone = getStatusPresentation(card.status);
               return (
                 <button
                   key={card.key}
@@ -3063,7 +2950,7 @@ export default function DashboardPage({ onNavigate }) {
             }}
           >
             {assistantHouseholdMap.focus_areas.map((area) => {
-              const tone = getStatusColors(area.status);
+              const tone = getStatusPresentation(area.status);
               return (
                 <div
                   key={area.key}
@@ -3632,7 +3519,7 @@ export default function DashboardPage({ onNavigate }) {
           {isMobile ? (
             <div style={{ marginTop: "18px", display: "grid", gap: "12px" }}>
               {moduleRows.map((row) => {
-                const tone = getStatusColors(row.status);
+                const tone = getStatusPresentation(row.status);
                 return (
                   <div
                     key={row.module}
@@ -3683,7 +3570,7 @@ export default function DashboardPage({ onNavigate }) {
                 </thead>
                 <tbody>
                   {moduleRows.map((row) => {
-                    const tone = getStatusColors(row.status);
+                    const tone = getStatusPresentation(row.status);
                     return (
                       <tr key={row.module} style={{ borderTop: "1px solid rgba(226, 232, 240, 0.96)" }}>
                         <td style={{ padding: "14px 0", fontWeight: 600 }}>{row.module}</td>

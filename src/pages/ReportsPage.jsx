@@ -17,7 +17,10 @@ import {
 import OperatingGraphSummaryCards from "../components/household/OperatingGraphSummaryCards";
 import QuickActionGrid from "../components/onboarding/QuickActionGrid";
 import SetupChecklist from "../components/onboarding/SetupChecklist";
-import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import { buildPropertyOperatingGraphSummary } from "../lib/assetLinks/linkedContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "../lib/navigation/insurancePolicyRouting";
@@ -45,6 +48,7 @@ import {
 import { buildWorkflowAwareHouseholdContext } from "../lib/domain/platformIntelligence/workflowMemory";
 import { buildHouseholdReviewQueueItems } from "../lib/domain/platformIntelligence/reviewWorkspaceData";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
+import { buildReadinessVerdict, getFasciaStatusLabel } from "../lib/presentation/readinessVerdicts";
 
 function buttonStyle(primary = false) {
   return {
@@ -56,17 +60,6 @@ function buttonStyle(primary = false) {
     cursor: "pointer",
     fontWeight: 700,
     fontSize: "13px",
-  };
-}
-
-function surfaceCardStyle(extra = {}) {
-  return {
-    padding: "26px 28px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid rgba(15, 23, 42, 0.08)",
-    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.06)",
-    ...extra,
   };
 }
 
@@ -509,28 +502,39 @@ export default function ReportsPage({ onNavigate }) {
   );
   const blankHousehold = useMemo(() => getHouseholdBlankState(bundle || {}, rows), [bundle, rows]);
   const reportsVerdict = useMemo(() => {
+    let rawVerdict;
+
     if (activeQueueItems.length === 0 && (householdScorecard?.overallScore || 0) >= 80) {
-      return {
+      rawVerdict = {
         label: "Strong",
         summary: "The household report picture reads clearly, with little active review pressure and enough structure to support a calm executive summary.",
       };
-    }
-    if (activeQueueItems.length <= 2) {
-      return {
+    } else if (activeQueueItems.length <= 2) {
+      rawVerdict = {
         label: "Stable",
         summary: "The reporting layer is usable and organized, with only a small amount of review work still affecting the story.",
       };
-    }
-    if (activeQueueItems.length <= 5) {
-      return {
+    } else if (activeQueueItems.length <= 5) {
+      rawVerdict = {
         label: "Watch",
         summary: "The report story is visible, but a few active issues still deserve attention before you treat it as fully settled.",
       };
+    } else {
+      rawVerdict = {
+        label: "Needs Review",
+        summary: "The reporting layer already shows real value, but the best presentation is still to start with the summary and be honest about the active work remaining.",
+      };
     }
-    return {
-      label: "Needs Review",
-      summary: "The reporting layer already shows real value, but the best presentation is still to start with the summary and be honest about the active work remaining.",
-    };
+
+    return buildReadinessVerdict({
+      ...rawVerdict,
+      headlines: {
+        strong: "Executive ready",
+        stable: "Good progress!",
+        watch: "Worth watching",
+        needsReview: "Needs attention",
+      },
+    });
   }, [activeQueueItems.length, householdScorecard?.overallScore]);
   const reportsWelcomeGuide = useMemo(() => {
     const topPriority = householdPriorityEngine.priorities[0] || null;
@@ -587,12 +591,7 @@ export default function ReportsPage({ onNavigate }) {
   const reportsFasciaCards = useMemo(() => {
     const topPriority = householdPriorityEngine.priorities[0] || null;
     const activeReviewTone = activeQueueItems.length > 5 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good";
-    const statusTone =
-      reportsVerdict.label === "Strong" || reportsVerdict.label === "Stable"
-        ? "good"
-        : reportsVerdict.label === "Needs Review"
-          ? "warning"
-          : "info";
+    const statusTone = reportsVerdict.tone === "alert" ? "warning" : reportsVerdict.tone;
 
     return [
       {
@@ -641,6 +640,7 @@ export default function ReportsPage({ onNavigate }) {
     householdPriorityEngine.priorities,
     onNavigate,
     reportsVerdict.label,
+    reportsVerdict.tone,
     resolvedQueueItems.length,
     scoreLift,
   ]);
@@ -653,7 +653,7 @@ export default function ReportsPage({ onNavigate }) {
         detail: reportsFasciaCards[0]?.detail || reportsVerdict.summary,
         metric: `${displayValue(householdScorecard?.overallScore)} score`,
         tone: reportsFasciaCards[0]?.tone || "info",
-        statusLabel: "Simple Read",
+        statusLabel: getFasciaStatusLabel("simpleRead"),
       },
       {
         key: "reports-active",
@@ -662,7 +662,7 @@ export default function ReportsPage({ onNavigate }) {
         detail: reportsFasciaCards[1]?.detail || "These items still shape the report story.",
         metric: `${activeQueueItems.length} active item${activeQueueItems.length === 1 ? "" : "s"}`,
         tone: reportsFasciaCards[1]?.tone || "warning",
-        statusLabel: activeQueueItems.length > 0 ? "Needs Review" : "Calm Right Now",
+        statusLabel: getFasciaStatusLabel("attention", { active: activeQueueItems.length > 0 }),
         actionLabel: reportsFasciaCards[1]?.actionLabel,
         onAction: reportsFasciaCards[1]?.onAction,
       },
@@ -673,7 +673,7 @@ export default function ReportsPage({ onNavigate }) {
         detail: reportsFasciaCards[2]?.detail || "Completed work is remembered here.",
         metric: scoreLift > 0 ? `+${scoreLift} lift` : `${resolvedQueueItems.length} completed`,
         tone: reportsFasciaCards[2]?.tone || "good",
-        statusLabel: resolvedQueueItems.length > 0 ? "Recently Improved" : "Building",
+        statusLabel: getFasciaStatusLabel("progress", { improved: resolvedQueueItems.length > 0 }),
       },
       {
         key: "reports-next",
@@ -682,7 +682,7 @@ export default function ReportsPage({ onNavigate }) {
         detail: reportsFasciaCards[3]?.detail || "Open the report that fits the audience.",
         metric: selectedReport === "household" ? "Household view active" : "Executive path ready",
         tone: reportsFasciaCards[3]?.tone || "info",
-        statusLabel: "Guided Action",
+        statusLabel: getFasciaStatusLabel("nextStep"),
         actionLabel: reportsFasciaCards[3]?.actionLabel,
         onAction: reportsFasciaCards[3]?.onAction,
       },
@@ -954,21 +954,6 @@ export default function ReportsPage({ onNavigate }) {
       ],
     },
   ];
-  const reportsHeroColor =
-    reportsVerdict.label === "Needs Review"
-      ? "#ef4444"
-      : reportsVerdict.label === "Watch"
-        ? "#f59e0b"
-        : "#22c55e";
-  const reportsHeroHeadline =
-    reportsVerdict.label === "Strong"
-      ? "Executive ready"
-      : reportsVerdict.label === "Stable"
-        ? "Good progress!"
-        : reportsVerdict.label === "Watch"
-          ? "Worth watching"
-          : "Needs attention";
-
   return (
     <div
       style={{
@@ -978,141 +963,45 @@ export default function ReportsPage({ onNavigate }) {
         padding: "8px 0 32px",
       }}
     >
-      <section
-        style={surfaceCardStyle({
-          padding: "32px 30px",
-          display: "grid",
-          gap: "24px",
-        })}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "24px",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ display: "grid", gap: "12px" }}>
-            <div
-              style={{
-                width: "fit-content",
-                padding: "7px 12px",
-                borderRadius: "999px",
-                background: "rgba(219, 234, 254, 0.9)",
-                color: "#1d4ed8",
-                fontSize: "12px",
-                fontWeight: 800,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              Executive View
-            </div>
-            <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Reports And Briefings</div>
-            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>
-              {reportsWelcomeGuide.title}
-            </div>
-            <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{reportsWelcomeGuide.summary}</div>
-            <div style={{ color: "#64748b", lineHeight: "1.75", maxWidth: "44rem" }}>{reportsWelcomeGuide.transition}</div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedReport("household");
-                  scrollToReportsSection("reports-active-view");
-                }}
-                style={buttonStyle(true)}
-              >
-                Open Household Brief
-              </button>
-              <button type="button" onClick={() => scrollToReportsSection("report-cards")} style={buttonStyle(false)}>
-                See Report Choices
-              </button>
-              <button type="button" onClick={handlePrintActiveReport} style={buttonStyle(false)}>
-                Print Current Report
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <div
-              style={{
-                width: "144px",
-                height: "144px",
-                borderRadius: "999px",
-                background: `conic-gradient(${reportsHeroColor} 0deg ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg, #e2e8f0 ${Math.max(8, Math.min(360, ((Number(householdScorecard?.overallScore) || 0) / 100) * 360))}deg 360deg)`,
-                display: "grid",
-                placeItems: "center",
-                boxShadow: "0 24px 50px rgba(15, 23, 42, 0.10)",
-              }}
-            >
-              <div
-                style={{
-                  width: "112px",
-                  height: "112px",
-                  borderRadius: "999px",
-                  background: "#ffffff",
-                  display: "grid",
-                  placeItems: "center",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ display: "grid", gap: "4px" }}>
-                  <div style={{ fontSize: "40px", fontWeight: 800, lineHeight: "1", color: "#0f172a" }}>
-                    {displayValue(householdScorecard?.overallScore)}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 700 }}>of 100</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: "16px" }}>
-            <div style={{ display: "grid", gap: "8px" }}>
-              <div
-                style={{
-                  fontSize: "28px",
-                  fontWeight: 800,
-                  lineHeight: "1.05",
-                  letterSpacing: "-0.04em",
-                  color: reportsHeroColor,
-                }}
-              >
-                {reportsHeroHeadline}
-              </div>
-              <div style={{ color: "#475569", lineHeight: "1.75" }}>
-                {reportsVerdict.summary}
-              </div>
-            </div>
-            <div
-              style={{
-                padding: "18px 18px 16px",
-                borderRadius: "18px",
-                background: "#f8fafc",
-                border: "1px solid rgba(226, 232, 240, 0.92)",
-                display: "grid",
-                gap: "10px",
-              }}
-            >
-              <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-                Since Last Review
-              </div>
-              {[
-                { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
-                { label: "Completed reviews", value: resolvedQueueItems.length },
-                { label: "Active work", value: activeQueueItems.length },
-                { label: "Modules needing review", value: moduleReadinessCounts.needsReview },
-              ].map((item) => (
-                <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
-                  <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
-                  <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <FriendlyPageHero
+        eyebrow="Executive View"
+        sectionTitle="Reports And Briefings"
+        headline={reportsWelcomeGuide.title}
+        summary={reportsWelcomeGuide.summary}
+        transition={reportsWelcomeGuide.transition}
+        actions={[
+          {
+            label: "Open Household Brief",
+            onClick: () => {
+              setSelectedReport("household");
+              scrollToReportsSection("reports-active-view");
+            },
+            kind: "primary",
+          },
+          {
+            label: "See Report Choices",
+            onClick: () => scrollToReportsSection("report-cards"),
+            kind: "secondary",
+          },
+          {
+            label: "Print Current Report",
+            onClick: handlePrintActiveReport,
+            kind: "secondary",
+          },
+        ]}
+        score={displayValue(householdScorecard?.overallScore)}
+        scoreTone={reportsVerdict.tone}
+        scoreSubtitle="of 100"
+        asideHeadline={reportsVerdict.headline}
+        asideSummary={reportsVerdict.summary}
+        glanceEyebrow="Since Last Review"
+        glanceItems={[
+          { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
+          { label: "Completed reviews", value: resolvedQueueItems.length },
+          { label: "Active work", value: activeQueueItems.length },
+          { label: "Modules needing review", value: moduleReadinessCounts.needsReview },
+        ]}
+      />
 
       <section style={{ display: "grid", gap: "10px" }}>
         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>

@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
-import { FriendlyActionTile, SuggestedActionsRow } from "../components/shared/FriendlyIntelligenceUI";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+  SuggestedActionsRow,
+} from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
@@ -21,6 +25,7 @@ import {
   formatReviewWorkspaceFilterSummary,
   parseReviewWorkspaceHashState,
 } from "../lib/reviewWorkspace/workspaceFilters";
+import { buildReadinessVerdict, getFasciaStatusLabel } from "../lib/presentation/readinessVerdicts";
 
 const REVIEW_WORKSPACE_VIEW_STORAGE_KEY = "vaultedshield_review_workspace_views_v1";
 
@@ -33,17 +38,6 @@ function actionStyle(primary = false) {
     color: primary ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 700,
-  };
-}
-
-function surfaceCardStyle(extra = {}) {
-  return {
-    padding: "24px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid rgba(15, 23, 42, 0.08)",
-    boxShadow: "0 18px 36px rgba(15, 23, 42, 0.06)",
-    ...extra,
   };
 }
 
@@ -587,22 +581,34 @@ export default function ReviewWorkspacePage({ onNavigate }) {
   );
   const topVisibleCluster = visibleIssueClusters[0] || null;
   const workspaceVerdict = useMemo(() => {
+    let rawVerdict;
+
     if (activeQueueItems.length === 0 && resolvedQueueItems.length > 0) {
-      return {
+      rawVerdict = {
         label: "Stable",
         summary: "Most of the current household review work has already been handled, and completed reviews are still being remembered.",
       };
-    }
-    if (activeQueueItems.length <= 2) {
-      return {
+    } else if (activeQueueItems.length <= 2) {
+      rawVerdict = {
         label: "Watch",
         summary: "A small set of household items still needs attention, but the workspace is controlled and progress is visible.",
       };
+    } else {
+      rawVerdict = {
+        label: "Needs Review",
+        summary: "There is still meaningful follow-up work in motion, so the fastest win is to clear the top workstream before exploring everything else.",
+      };
     }
-    return {
-      label: "Needs Review",
-      summary: "There is still meaningful follow-up work in motion, so the fastest win is to clear the top workstream before exploring everything else.",
-    };
+
+    return buildReadinessVerdict({
+      ...rawVerdict,
+      headlines: {
+        strong: "Quiet and in control",
+        stable: "Good progress!",
+        watch: "Worth watching",
+        needsReview: "Needs attention",
+      },
+    });
   }, [activeQueueItems.length, resolvedQueueItems.length]);
   const reviewWorkspaceWelcomeGuide = useMemo(() => {
     const recentWinCount = workflowResolutionMemory.recentlyResolved.length;
@@ -672,7 +678,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             : "The active queue is quiet, so this workspace can start with progress memory rather than urgency.",
         metric: topVisibleCluster ? `${topVisibleCluster.count} in top workstream` : "Queue under control",
         tone: activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good",
-        statusLabel: activeQueueItems.length > 0 ? "Needs Review" : "Calm Right Now",
+        statusLabel: getFasciaStatusLabel("attention", { active: activeQueueItems.length > 0 }),
         actionLabel: activeQueueItems.length > 0 ? "Open Active Work" : "See Progress",
         actionKey: activeQueueItems.length > 0 ? "active-work" : "completed-progress",
       },
@@ -686,7 +692,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             : "Completed reviews stay held out of active priority until new evidence reopens them.",
         metric: scoreLift > 0 ? `+${scoreLift} readiness lift` : "Progress still tracked",
         tone: "good",
-        statusLabel: "Recently Improved",
+        statusLabel: getFasciaStatusLabel("progress", { improved: true }),
         actionLabel: "See Completed Progress",
         actionKey: "completed-progress",
       },
@@ -700,7 +706,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             : "The current queue is not mainly waiting on documents right now.",
         metric: `${metrics.find((item) => item.label === "Follow Up")?.value || 0} follow-up item${Number(metrics.find((item) => item.label === "Follow Up")?.value || 0) === 1 ? "" : "s"}`,
         tone: pendingDocsCount > 0 ? "warning" : "neutral",
-        statusLabel: pendingDocsCount > 0 ? "Missing Information" : "Well Supported",
+        statusLabel: getFasciaStatusLabel("evidence", { missing: pendingDocsCount > 0 }),
         actionLabel: "Open Active Work",
         actionKey: "active-work",
       },
@@ -719,7 +725,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
               : "Open the full work list and choose the next lane that matters most.",
         metric: assistantFilterState.filters ? "Filtered view active" : "Workspace-wide view",
         tone: "info",
-        statusLabel: "Guided Focus",
+        statusLabel: getFasciaStatusLabel("focus"),
         actionLabel: assistantFilterState.filters ? "Clear Filters" : "Open Workspace",
         actionKey: assistantFilterState.filters ? "clear-filters" : "active-work",
       },
@@ -751,120 +757,41 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         padding: "8px 0 32px",
       }}
     >
-      <section
-        style={surfaceCardStyle({
-          padding: "30px",
-          display: "grid",
-          gap: "24px",
-        })}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "24px",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ display: "grid", gap: "12px" }}>
-            <div
-              style={{
-                width: "fit-content",
-                padding: "7px 12px",
-                borderRadius: "999px",
-                background: "rgba(219, 234, 254, 0.9)",
-                color: "#1d4ed8",
-                fontSize: "12px",
-                fontWeight: 800,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              Household Operations
-            </div>
-            <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a" }}>Review Workspace</div>
-            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: "#0f172a" }}>
-              {reviewWorkspaceWelcomeGuide.title}
-            </div>
-            <div style={{ color: "#334155", lineHeight: "1.8", maxWidth: "42rem" }}>{reviewWorkspaceWelcomeGuide.summary}</div>
-            <div style={{ color: "#64748b", lineHeight: "1.75", maxWidth: "44rem" }}>{reviewWorkspaceWelcomeGuide.transition}</div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory")}
-                style={actionStyle(true)}
-              >
-                {activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
-              </button>
-              <button type="button" onClick={handleRefreshSnapshot} style={actionStyle(false)}>
-                Refresh Status
-              </button>
-              <button type="button" onClick={() => onNavigate?.("/dashboard")} style={actionStyle(false)}>
-                View Dashboard
-              </button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "24px 20px",
-              borderRadius: "24px",
-              background: "linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)",
-              border: "1px solid rgba(191, 219, 254, 0.85)",
-              display: "grid",
-              gap: "10px",
-              justifyItems: "center",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-              Current Status
-            </div>
-            <div style={{ fontSize: "40px", fontWeight: 800, lineHeight: "1", color: "#0f172a" }}>{activeQueueItems.length}</div>
-            <div style={{ color: "#475569", fontWeight: 700 }}>
-              active review item{activeQueueItems.length === 1 ? "" : "s"}
-            </div>
-            <div
-              style={{
-                padding: "7px 12px",
-                borderRadius: "999px",
-                background: activeQueueItems.length > 2 ? "#fee2e2" : activeQueueItems.length > 0 ? "#fef3c7" : "#dcfce7",
-                color: activeQueueItems.length > 2 ? "#991b1b" : activeQueueItems.length > 0 ? "#92400e" : "#166534",
-                fontSize: "12px",
-                fontWeight: 800,
-              }}
-            >
-              {workspaceVerdict.label}
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "18px 18px 16px",
-              borderRadius: "18px",
-              background: "#f8fafc",
-              border: "1px solid rgba(226, 232, 240, 0.92)",
-              display: "grid",
-              gap: "10px",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-              At A Glance
-            </div>
-            {[
-              { label: "Active work", value: activeQueueItems.length },
-              { label: "Completed reviews", value: resolvedQueueItems.length },
-              { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
-              { label: "Best focus", value: topVisibleCluster?.summaryLabels?.[1] || "Progress memory" },
-            ].map((item) => (
-              <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center" }}>
-                <div style={{ color: "#64748b", fontSize: "14px" }}>{item.label}</div>
-                <div style={{ color: "#0f172a", fontWeight: 800, textAlign: "right" }}>{item.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <FriendlyPageHero
+        eyebrow="Household Operations"
+        sectionTitle="Review Workspace"
+        headline={reviewWorkspaceWelcomeGuide.title}
+        summary={reviewWorkspaceWelcomeGuide.summary}
+        transition={reviewWorkspaceWelcomeGuide.transition}
+        actions={[
+          {
+            label: activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress",
+            onClick: () => scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory"),
+            kind: "primary",
+          },
+          {
+            label: "Refresh Status",
+            onClick: handleRefreshSnapshot,
+            kind: "secondary",
+          },
+          {
+            label: "View Dashboard",
+            onClick: () => onNavigate?.("/dashboard"),
+            kind: "secondary",
+          },
+        ]}
+        score={activeQueueItems.length}
+        scoreTone={activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good"}
+        scoreSubtitle="active"
+        asideHeadline={workspaceVerdict.headline}
+        asideSummary={workflowSummary.summary}
+        glanceItems={[
+          { label: "Active work", value: activeQueueItems.length },
+          { label: "Completed reviews", value: resolvedQueueItems.length },
+          { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
+          { label: "Best focus", value: topVisibleCluster?.summaryLabels?.[1] || "Progress memory" },
+        ]}
+      />
 
       <section style={{ display: "grid", gap: "10px" }}>
         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>

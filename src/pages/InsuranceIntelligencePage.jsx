@@ -9,7 +9,7 @@ import PortfolioAIChatBox from "../components/policy/PortfolioAIChatBox";
 import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCard";
 import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
-import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
+import { FriendlyActionTile, ScoreRing, friendlySurfaceCardStyle } from "../components/shared/FriendlyIntelligenceUI";
 import { useEffect } from "react";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import buildInsurancePageFascia from "../lib/intelligence/fascia/buildInsurancePageFascia";
@@ -18,6 +18,13 @@ import { getPolicyDetailRoute, getPolicyEntryLabel, isIulShowcasePolicy } from "
 import { buildPolicySignals } from "../lib/policySignals/buildPolicySignals";
 import { buildPortfolioActionFeed } from "../lib/policySignals/buildPortfolioActionFeed";
 import { buildPortfolioSignals } from "../lib/policySignals/buildPortfolioSignals";
+import {
+  buildReadinessVerdict,
+  getFasciaStatusLabel,
+  getReadinessPalette,
+  getReadinessToneFromScore,
+  getStatusPresentation,
+} from "../lib/presentation/readinessVerdicts";
 import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilters";
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
@@ -69,13 +76,6 @@ function displayNullable(value) {
 
 function pluralize(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function getStatusTone(status) {
-  if (status === "Strong") return { color: "#166534", background: "rgba(34, 197, 94, 0.12)" };
-  if (status === "Moderate") return { color: "#92400e", background: "rgba(245, 158, 11, 0.14)" };
-  if (status === "Weak") return { color: "#9f1239", background: "rgba(244, 63, 94, 0.12)" };
-  return { color: "#991b1b", background: "rgba(239, 68, 68, 0.14)" };
 }
 
 function getGapTone(hasGap, confidence = 0) {
@@ -279,16 +279,6 @@ function PortfolioReportView({ report, onPrint, isCompact = false }) {
   );
 }
 
-function surfaceCardStyle(extra = {}) {
-  return {
-    background: "#ffffff",
-    borderRadius: "24px",
-    border: "1px solid rgba(15, 23, 42, 0.08)",
-    boxShadow: "0 14px 36px rgba(15, 23, 42, 0.06)",
-    ...extra,
-  };
-}
-
 function normalizeScore(value, fallback = 0) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return fallback;
   return Math.max(0, Math.min(100, Math.round(Number(value))));
@@ -301,81 +291,6 @@ function insuranceStatusScore(status = "", fallback = 52) {
   if (["partial", "incomplete", "needs review"].includes(normalized)) return 58;
   if (["at risk", "weak"].includes(normalized)) return 38;
   return fallback;
-}
-
-function insuranceTonePalette(tone = "info") {
-  if (tone === "good") return { accent: "#22c55e", soft: "rgba(34, 197, 94, 0.14)", text: "#166534" };
-  if (tone === "warning") return { accent: "#f59e0b", soft: "rgba(245, 158, 11, 0.14)", text: "#92400e" };
-  if (tone === "alert") return { accent: "#ef4444", soft: "rgba(239, 68, 68, 0.14)", text: "#991b1b" };
-  return { accent: "#3b82f6", soft: "rgba(59, 130, 246, 0.14)", text: "#1d4ed8" };
-}
-
-function insuranceToneFromScore(score = 0) {
-  if (score >= 82) return "good";
-  if (score >= 64) return "info";
-  if (score >= 50) return "warning";
-  return "alert";
-}
-
-function ScoreRing({ value = 0, size = "md", tone = "info", subtitle = "of 100", iconLabel = "" }) {
-  const palette = insuranceTonePalette(tone);
-  const normalized = normalizeScore(value);
-  const sizes = {
-    lg: { diameter: 152, stroke: 12, number: "42px", badge: "34px", subtitle: "12px" },
-    md: { diameter: 98, stroke: 9, number: "28px", badge: "28px", subtitle: "11px" },
-    sm: { diameter: 74, stroke: 7, number: "20px", badge: "24px", subtitle: "10px" },
-  };
-  const ring = sizes[size] || sizes.md;
-
-  return (
-    <div
-      style={{
-        width: `${ring.diameter}px`,
-        height: `${ring.diameter}px`,
-        borderRadius: "999px",
-        background: `conic-gradient(${palette.accent} ${normalized * 3.6}deg, #e2e8f0 ${normalized * 3.6}deg 360deg)`,
-        display: "grid",
-        placeItems: "center",
-        padding: `${ring.stroke}px`,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          borderRadius: "999px",
-          background: "#ffffff",
-          display: "grid",
-          placeItems: "center",
-          textAlign: "center",
-          gap: "2px",
-          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
-        }}
-      >
-        {iconLabel ? (
-          <div
-            style={{
-              width: ring.badge,
-              height: ring.badge,
-              borderRadius: "999px",
-              display: "grid",
-              placeItems: "center",
-              background: palette.soft,
-              color: palette.text,
-              fontSize: size === "lg" ? "11px" : "10px",
-              fontWeight: 800,
-              letterSpacing: "0.08em",
-            }}
-          >
-            {iconLabel}
-          </div>
-        ) : null}
-        <div style={{ fontSize: ring.number, fontWeight: 800, lineHeight: 1, color: "#0f172a" }}>{normalized}</div>
-        <div style={{ fontSize: ring.subtitle, color: "#64748b", fontWeight: 700 }}>{subtitle}</div>
-      </div>
-    </div>
-  );
 }
 
 export default function InsuranceIntelligencePage({ onNavigate }) {
@@ -909,6 +824,23 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       summaryLoading,
     ]
   );
+  const insuranceVerdict = useMemo(
+    () =>
+      buildReadinessVerdict({
+        label: rankedPolicies.length === 0 ? "Watch" : insurancePageFascia.status || "Watch",
+        summary:
+          rankedPolicies.length === 0
+            ? "No insurance story is visible yet because there are no readable policy records on the page."
+            : insurancePageFascia.meaning,
+        headlines: {
+          strong: "Looks strong",
+          stable: "Good progress!",
+          watch: "Worth watching",
+          needsReview: "Needs attention",
+        },
+      }),
+    [insurancePageFascia.meaning, insurancePageFascia.status, rankedPolicies.length]
+  );
   const plainEnglishGuide = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
     const trustBuilder =
@@ -922,21 +854,18 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               ? `${pluralize(policiesWithIssues, "policy")} still have missing fields, weak charge visibility, or stale statement support, which limits confidence.`
               : "The current read is fairly trustworthy because the visible policies have good statement and charge support.";
 
-    const plainSummary =
-      rankedPolicies.length === 0
-        ? "No insurance story is visible yet because there are no readable policy records on the page."
-        : insurancePageFascia.meaning;
+    const plainSummary = insuranceVerdict.summary;
 
     const everydayVerdict =
       rankedPolicies.length === 0
         ? "Nothing to judge yet"
-        : insurancePageFascia.status === "Strong"
+        : insuranceVerdict.label === "Strong"
           ? "The visible insurance picture looks solid"
-          : insurancePageFascia.status === "Stable"
+          : insuranceVerdict.label === "Stable"
             ? "The visible insurance picture looks mostly okay"
-            : insurancePageFascia.status === "Partial"
-              ? "There is enough to start reading, but not enough to fully trust the picture"
-              : insurancePageFascia.status === "At Risk"
+            : insuranceVerdict.label === "Watch"
+              ? "There is enough to start reading, but key parts still need a closer look"
+              : insuranceVerdict.label === "Needs Review"
                 ? "Something in this insurance set needs attention soon"
                 : "The insurance picture is still developing";
 
@@ -1006,6 +935,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     };
   }, [
     insurancePageFascia,
+    insuranceVerdict,
     policiesWithIssues,
     portfolioBrief.priority_policies,
     protectionSummary,
@@ -1016,19 +946,12 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const insuranceFasciaCards = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
     const topPolicyRoute = topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload";
-    const statusTone =
-      insurancePageFascia.status === "Strong" || insurancePageFascia.status === "Stable"
-        ? "good"
-        : insurancePageFascia.status === "At Risk"
-          ? "alert"
-          : insurancePageFascia.status === "Partial"
-            ? "warning"
-            : "info";
+    const statusTone = insuranceVerdict.tone;
 
     return [
       {
         label: "Insurance Status",
-        value: plainEnglishGuide.cards[0]?.value || insurancePageFascia.status || "Developing",
+        value: plainEnglishGuide.cards[0]?.value || insuranceVerdict.label,
         detail: plainEnglishGuide.cards[0]?.detail || plainEnglishGuide.summary,
         tone: statusTone,
       },
@@ -1066,8 +989,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       },
     ];
   }, [
-    insurancePageFascia.status,
     insuranceReviewWorkspaceRoute,
+    insuranceVerdict,
     missingStatementPolicies.length,
     onNavigate,
     plainEnglishGuide.cards,
@@ -1081,11 +1004,11 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       {
         key: "insurance-status",
         kicker: "Portfolio Status",
-        title: insuranceFasciaCards[0]?.value || insurancePageFascia.status || "Developing",
+        title: insuranceFasciaCards[0]?.value || insuranceVerdict.label,
         detail: insuranceFasciaCards[0]?.detail || plainEnglishGuide.summary,
         metric: `${rankedPolicies.length} polic${rankedPolicies.length === 1 ? "y" : "ies"}`,
         tone: insuranceFasciaCards[0]?.tone || "info",
-        statusLabel: "Simple Read",
+        statusLabel: getFasciaStatusLabel("simpleRead"),
       },
       {
         key: "insurance-attention",
@@ -1094,7 +1017,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         detail: insuranceFasciaCards[1]?.detail || "Open the guided insurance review path first.",
         metric: `${policiesWithIssues} flagged polic${policiesWithIssues === 1 ? "y" : "ies"}`,
         tone: insuranceFasciaCards[1]?.tone || "warning",
-        statusLabel: policiesWithIssues > 0 ? "Needs Review" : "Calm Right Now",
+        statusLabel: getFasciaStatusLabel("attention", { active: policiesWithIssues > 0 }),
         actionLabel: insuranceFasciaCards[1]?.actionLabel,
         onAction: insuranceFasciaCards[1]?.onAction,
       },
@@ -1105,7 +1028,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         detail: insuranceFasciaCards[2]?.detail || "Fresh statements strengthen the read.",
         metric: `${missingStatementPolicies.length} statement gap${missingStatementPolicies.length === 1 ? "" : "s"}`,
         tone: insuranceFasciaCards[2]?.tone || "good",
-        statusLabel: missingStatementPolicies.length > 0 ? "Missing Information" : "Well Supported",
+        statusLabel: getFasciaStatusLabel("evidence", { missing: missingStatementPolicies.length > 0 }),
         actionLabel: insuranceFasciaCards[2]?.actionLabel,
         onAction: insuranceFasciaCards[2]?.onAction,
       },
@@ -1116,14 +1039,14 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         detail: insuranceFasciaCards[3]?.detail || "Start with the clearest next insurance move.",
         metric: topPriorityPolicy?.ranking?.status || "Next move ready",
         tone: insuranceFasciaCards[3]?.tone || "info",
-        statusLabel: "Guided Action",
+        statusLabel: getFasciaStatusLabel("nextStep"),
         actionLabel: insuranceFasciaCards[3]?.actionLabel,
         onAction: insuranceFasciaCards[3]?.onAction,
       },
     ],
     [
       insuranceFasciaCards,
-      insurancePageFascia.status,
+      insuranceVerdict.label,
       missingStatementPolicies.length,
       plainEnglishGuide.summary,
       policiesWithIssues,
@@ -1155,7 +1078,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         score: portfolioReadinessScore,
         status: insurancePortfolioStatus,
         helper: rankedPolicies.length === 0 ? "Waiting for the first readable policy." : `${pluralize(rankedPolicies.length, "policy")} in the current insurance set.`,
-        tone: insuranceToneFromScore(portfolioReadinessScore),
+        tone: getReadinessToneFromScore(portfolioReadinessScore),
         iconLabel: "PF",
       },
       {
@@ -1164,7 +1087,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         score: protectionConfidenceScore,
         status: protectionSummary.gapDetected ? "Needs Review" : protectionConfidenceScore >= 70 ? "Good" : "Partial",
         helper: protectionSummary.gapDetected ? "Coverage may be incomplete." : "Household coverage view from visible records.",
-        tone: protectionSummary.gapDetected ? "alert" : insuranceToneFromScore(protectionConfidenceScore),
+        tone: protectionSummary.gapDetected ? "alert" : getReadinessToneFromScore(protectionConfidenceScore),
         iconLabel: "PR",
       },
       {
@@ -1173,7 +1096,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         score: statementSupportScore,
         status: resolvedStatementCount === rankedPolicies.length && rankedPolicies.length > 0 ? "Current" : missingStatementPolicies.length > 0 ? "Missing Items" : "Building",
         helper: rankedPolicies.length === 0 ? "No statements resolved yet." : `${resolvedStatementCount}/${rankedPolicies.length} policies have a visible latest statement.`,
-        tone: missingStatementPolicies.length > 0 ? "warning" : insuranceToneFromScore(statementSupportScore),
+        tone: missingStatementPolicies.length > 0 ? "warning" : getReadinessToneFromScore(statementSupportScore),
         iconLabel: "ST",
       },
       {
@@ -1182,7 +1105,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         score: chargeSupportScore,
         status: weakestConfidencePolicy ? "Needs Review" : strongChargeSupportCount === rankedPolicies.length && rankedPolicies.length > 0 ? "Strong" : "Building",
         helper: rankedPolicies.length === 0 ? "No charge visibility yet." : `${strongChargeSupportCount}/${rankedPolicies.length} policies show stronger charge support.`,
-        tone: weakestConfidencePolicy ? "warning" : insuranceToneFromScore(chargeSupportScore),
+        tone: weakestConfidencePolicy ? "warning" : getReadinessToneFromScore(chargeSupportScore),
         iconLabel: "CH",
       },
       {
@@ -1565,7 +1488,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       }}
     >
       <section
-        style={surfaceCardStyle({
+        style={friendlySurfaceCardStyle({
           padding: isMobile ? "24px 20px" : isTablet ? "28px 24px" : "34px 30px",
           display: "grid",
           gap: "24px",
@@ -1617,13 +1540,13 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           </div>
 
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <ScoreRing value={portfolioReadinessScore} size="lg" tone={insuranceToneFromScore(portfolioReadinessScore)} subtitle="of 100" iconLabel="IN" />
+            <ScoreRing value={portfolioReadinessScore} size="lg" tone={insuranceVerdict.tone} subtitle="of 100" iconLabel="IN" />
           </div>
 
           <div style={{ display: "grid", gap: "16px" }}>
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: insurancePageFascia.status === "At Risk" ? "#b91c1c" : "#16a34a" }}>
-                {insurancePageFascia.status === "At Risk" ? "Needs attention" : rankedPolicies.length > 1 ? "Good progress!" : "Good start"}
+              <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: "1.05", letterSpacing: "-0.04em", color: insuranceVerdict.accent }}>
+                {rankedPolicies.length === 0 ? "Good start" : insuranceVerdict.headline}
               </div>
               <div style={{ color: "#475569", lineHeight: "1.75" }}>{plainEnglishGuide.cards[2]?.detail || insuranceAdvisorBrief.narrative}</div>
             </div>
@@ -1683,7 +1606,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             style={{
-              ...surfaceCardStyle({
+                ...friendlySurfaceCardStyle({
                 padding: "22px 18px 20px",
                 display: "grid",
                 gap: "12px",
@@ -1703,8 +1626,8 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                 style={{
                   padding: "6px 10px",
                   borderRadius: "999px",
-                  background: insuranceTonePalette(item.tone).soft,
-                  color: insuranceTonePalette(item.tone).text,
+                  background: getReadinessPalette(item.tone).soft,
+                  color: getReadinessPalette(item.tone).text,
                   fontSize: "12px",
                   fontWeight: 800,
                 }}
@@ -1756,7 +1679,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         }}
       >
         <div
-          style={surfaceCardStyle({
+          style={friendlySurfaceCardStyle({
             padding: isMobile ? "22px 20px" : "24px 24px 26px",
             display: "grid",
             gap: "18px",
@@ -1814,7 +1737,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         </div>
 
         <div
-          style={surfaceCardStyle({
+          style={friendlySurfaceCardStyle({
             padding: isMobile ? "22px 20px" : "24px 24px 26px",
             display: "grid",
             gap: "18px",
@@ -1860,7 +1783,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         }}
       >
         <div
-          style={surfaceCardStyle({
+          style={friendlySurfaceCardStyle({
             padding: isMobile ? "22px 20px" : "24px 24px 26px",
             display: "grid",
             gap: "18px",
@@ -1899,7 +1822,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         </div>
 
         <div
-          style={surfaceCardStyle({
+          style={friendlySurfaceCardStyle({
             padding: isMobile ? "22px 20px" : "24px 24px 26px",
             display: "grid",
             gap: "16px",
@@ -1966,7 +1889,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
       <section
         ref={technicalAnalysisRef}
-        style={surfaceCardStyle({
+        style={friendlySurfaceCardStyle({
           padding: isMobile ? "22px 20px" : "24px 26px",
           display: "grid",
           gap: "10px",
@@ -2508,7 +2431,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         <div style={{ display: "grid", gap: "12px" }}>
           {rankedPolicies.length > 0 ? (
             rankedPolicies.map((policy, index) => {
-              const tone = getStatusTone(policy.ranking.status);
+              const tone = getStatusPresentation(policy.ranking.status, "warning");
               const isExpanded = expandedPolicyId === policy.policy_id;
               const highlight = rankingHighlights.find((item) => item.policyId === policy.policy_id) || null;
               return (
