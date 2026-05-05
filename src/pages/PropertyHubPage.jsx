@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getPropertyType,
@@ -80,6 +81,14 @@ export default function PropertyHubPage({ onNavigate }) {
     const result = await listProperties(targetHouseholdId);
     setProperties(result.data || []);
     setLoadError(result.error?.message || "");
+  }
+
+  function scrollToPropertyCommand() {
+    propertyCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToCreateProperty() {
+    createPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const summaryItems = useMemo(() => {
@@ -189,37 +198,89 @@ export default function PropertyHubPage({ onNavigate }) {
     setCreating(false);
   }
 
+  const propertyHeroScore = Math.round(
+    properties.length > 0
+      ? Math.min(84, 40 + properties.length * 10 + Number(propertyHubCommand.metrics.assetLinked || 0) * 6)
+      : 34
+  );
+  const propertyHeroTone =
+    propertyHeroScore >= 80 ? "good" : propertyHeroScore >= 60 ? "info" : propertyHeroScore >= 45 ? "warning" : "alert";
+  const propertyHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Assets"
-        title="Property Hub"
-        description="Live property registry for household real estate records, tax and title intake, and future linkage to mortgage, homeowners, and property intelligence."
-        actions={
-          <button
-            onClick={() => refreshPropertyRecords()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Property Data
-          </button>
-        }
-      />
-
-      <SummaryPanel items={summaryItems} />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={propertyPlainLanguageGuide.title}
+        sectionTitle="Property Hub"
+        headline={propertyPlainLanguageGuide.title}
         summary={propertyPlainLanguageGuide.summary}
         transition={propertyPlainLanguageGuide.transition}
-        quickFacts={propertyPlainLanguageGuide.quickFacts}
-        cards={propertyPlainLanguageGuide.cards}
-        primaryActionLabel={properties.length > 0 ? "Add Another Property" : "Create First Property"}
-        onPrimaryAction={() => createPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel="Open Property Command"
-        onSecondaryAction={() => propertyCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: properties.length > 0 ? "Add Another Property" : "Create First Property",
+            onClick: scrollToCreateProperty,
+            kind: "primary",
+          },
+          {
+            label: "Open Property Command",
+            onClick: scrollToPropertyCommand,
+          },
+          {
+            label: "Refresh Property Data",
+            onClick: () => refreshPropertyRecords(),
+          },
+        ]}
+        score={propertyHeroScore}
+        scoreTone={propertyHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="property"
+        asideHeadline={properties.length > 0 ? "Property picture is taking shape" : "Start the property picture"}
+        asideSummary={propertyHubCommand.headline}
+        glanceEyebrow="At A Glance"
+        glanceItems={propertyHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Property Status"
+          title={properties.length > 0 ? propertyHubCommand.headline : "Start with the first real property"}
+          detail={propertyPlainLanguageGuide.cards[0]?.detail || "This page should make the household property picture readable before it feels technical."}
+          metric={`${properties.length} propert${properties.length === 1 ? "y" : "ies"}`}
+          tone={propertyHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Properties"
+          onAction={scrollToPropertyCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={propertyPlainLanguageGuide.cards[1]?.value || "Create the primary property first"}
+          detail={propertyPlainLanguageGuide.cards[1]?.detail || "The next property move should make the stack easier to trust."}
+          metric={`${propertyHubCommand.metrics.attention || 0} active prompt${propertyHubCommand.metrics.attention === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={properties.length > 0 ? "Open Command" : "Create Property"}
+          onAction={properties.length > 0 ? scrollToPropertyCommand : scrollToCreateProperty}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={propertyPlainLanguageGuide.cards[2]?.value || "Technical depth stays underneath"}
+          detail={propertyPlainLanguageGuide.cards[2]?.detail || "Valuation and linkage depth can come after the first clean read."}
+          metric={`${propertyHubCommand.metrics.assetLinked || 0} linked asset${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Open Records"
+          onAction={scrollToCreateProperty}
+        />
+      </div>
 
       <div ref={propertyCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard

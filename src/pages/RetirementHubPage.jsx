@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getRetirementType,
@@ -258,6 +259,14 @@ export default function RetirementHubPage({ onNavigate }) {
     setLoadError(result.error?.message || "");
   }
 
+  function scrollToRetirementCommand() {
+    retirementCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToCreateAccount() {
+    createAccountRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function handleCreateAccount(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.retirement_type_key) return;
@@ -288,73 +297,96 @@ export default function RetirementHubPage({ onNavigate }) {
     setCreating(false);
   }
 
+  const retirementHeroScore = Math.round(
+    Number.isFinite(Number(readinessSnapshot?.readinessScore))
+      ? Number(readinessSnapshot.readinessScore)
+      : accounts.length > 0
+        ? Math.min(82, 42 + accounts.length * 8)
+        : 36
+  );
+  const retirementHeroTone =
+    retirementHeroScore >= 80 ? "good" : retirementHeroScore >= 60 ? "info" : retirementHeroScore >= 45 ? "warning" : "alert";
+  const retirementHeroGlanceItems = [
+    { label: "Accounts", value: accounts.length },
+    { label: "Employer Plans", value: summaryItems[1]?.value ?? 0 },
+    { label: "IRAs", value: summaryItems[2]?.value ?? 0 },
+    { label: "Goal Status", value: readinessSnapshot?.readinessStatus || "Not saved yet" },
+  ];
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Retirement"
-        title="Retirement Hub"
-        description="Start with the retirement accounts you know today. VaultedShield will give you the plain-language picture first, then the deeper planning analysis underneath."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => onNavigate?.("/household-goals")}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                borderRadius: "10px",
-                padding: "10px 14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Open Goals Dashboard
-            </button>
-            <button
-              onClick={() => onNavigate?.("/retirement/upload")}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                borderRadius: "10px",
-                padding: "10px 14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Retirement Upload Preview
-            </button>
-            <button
-              onClick={() => refreshAccounts()}
-              style={{
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                borderRadius: "10px",
-                padding: "10px 14px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Refresh Retirement Data
-            </button>
-          </div>
-        }
-      />
-
-      <SummaryPanel items={summaryItems} />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={retirementPlainLanguageGuide.title}
+        sectionTitle="Retirement Hub"
+        headline={retirementPlainLanguageGuide.title}
         summary={retirementPlainLanguageGuide.summary}
         transition={retirementPlainLanguageGuide.transition}
-        quickFacts={retirementPlainLanguageGuide.quickFacts}
-        cards={retirementPlainLanguageGuide.cards}
-        primaryActionLabel={accounts.length > 0 ? "Add Another Account" : "Create First Account"}
-        onPrimaryAction={() => createAccountRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel="Open Retirement Command"
-        onSecondaryAction={() => retirementCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        compact={isTablet}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: accounts.length > 0 ? "Add Another Account" : "Create First Account",
+            onClick: scrollToCreateAccount,
+            kind: "primary",
+          },
+          {
+            label: "Open Goals Dashboard",
+            onClick: () => onNavigate?.("/household-goals"),
+          },
+          {
+            label: "Refresh Retirement Data",
+            onClick: () => refreshAccounts(),
+          },
+        ]}
+        score={retirementHeroScore}
+        scoreTone={retirementHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="retirement"
+        asideHeadline={readinessSnapshot ? `${readinessSnapshot.readinessStatus}` : "Start the retirement picture"}
+        asideSummary={
+          readinessSnapshot?.explanation ||
+          "VaultedShield turns account records and saved goals into a household retirement read before you go deeper."
+        }
+        glanceEyebrow="At A Glance"
+        glanceItems={retirementHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Household Status"
+          title={readinessSnapshot?.readinessStatus || (accounts.length > 0 ? "Retirement picture is building" : "Retirement picture not started")}
+          detail={retirementPlainLanguageGuide.cards[0]?.detail || retirementHubCommand.headline}
+          metric={`${accounts.length} account${accounts.length === 1 ? "" : "s"}`}
+          tone={retirementHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Accounts"
+          onAction={scrollToRetirementCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={retirementPlainLanguageGuide.cards[1]?.value || "Add a retirement goal next"}
+          detail={retirementPlainLanguageGuide.cards[1]?.detail || "The next action should make the retirement story feel more complete."}
+          metric={`${retirementHubCommand.metrics.attention || 0} active prompt${retirementHubCommand.metrics.attention === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={accounts.length > 0 ? "Open Command" : "Create Account"}
+          onAction={accounts.length > 0 ? scrollToRetirementCommand : scrollToCreateAccount}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={retirementPlainLanguageGuide.cards[2]?.value || "Advanced planning math can come later"}
+          detail={retirementPlainLanguageGuide.cards[2]?.detail || "The deeper account math is still here when you need it."}
+          metric={`${starterInsightCounts.rolloverCandidates} rollover candidate${starterInsightCounts.rolloverCandidates === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Open Goals"
+          onAction={() => onNavigate?.("/household-goals")}
+        />
+      </div>
 
       <div ref={retirementCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard

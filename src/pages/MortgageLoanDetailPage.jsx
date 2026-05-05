@@ -1,14 +1,15 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
-import PageHeader from "../components/layout/PageHeader";
 import MortgageAIChat from "../components/mortgage/MortgageAIChat";
 import MortgageLinkedContextCard from "../components/mortgage/MortgageLinkedContextCard";
-import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   buildLinkedPropertyStackCompleteness,
   dedupeLinkedContextRows,
@@ -126,7 +127,6 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
   const [bundle, setBundle] = useState(null);
   const [assetBundle, setAssetBundle] = useState(null);
   const [propertyLinks, setPropertyLinks] = useState([]);
-  const [showFasciaExplanation, setShowFasciaExplanation] = useState(false);
   const [linkedPropertyAssetLinks, setLinkedPropertyAssetLinks] = useState([]);
   const [availableProperties, setAvailableProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -339,20 +339,6 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
       propertyLinks,
     ]
   );
-  const mortgagePageFasciaDisplay = useMemo(() => {
-    if (!mortgagePageFascia) return null;
-
-    return {
-      ...mortgagePageFascia,
-      tertiaryAction: mortgagePageFascia.tertiaryAction
-        ? {
-            ...mortgagePageFascia.tertiaryAction,
-            label: showFasciaExplanation ? "Hide explanation" : "Why am I seeing this?",
-          }
-        : null,
-    };
-  }, [mortgagePageFascia, showFasciaExplanation]);
-
   const mortgagePlainEnglishGuide = useMemo(() => {
     const documentCount = bundle?.mortgageDocuments?.length || 0;
     const snapshotCount = bundle?.mortgageSnapshots?.length || 0;
@@ -483,16 +469,6 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     propertyLinks.length,
   ]);
 
-  const summaryItems = useMemo(() => {
-    if (!mortgageLoan) return [];
-    return [
-      { label: "Loan Status", value: mortgageLoan.current_status || "unknown", helper: mortgageLoanType?.display_name || "Mortgage" },
-      { label: "Documents", value: bundle?.mortgageDocuments?.length || 0, helper: "Mortgage-specific document records" },
-      { label: "Snapshots", value: bundle?.mortgageSnapshots?.length || 0, helper: "Normalized mortgage records" },
-      { label: "Analytics", value: bundle?.mortgageAnalytics?.length || 0, helper: "Future mortgage review outputs" },
-      { label: "Review Status", value: mortgageReview.readinessStatus || "unknown", helper: mortgageReview.metrics?.documentSupport || "limited support" },
-    ];
-  }, [bundle, mortgageLoan, mortgageLoanType, mortgageReview]);
   const propertyAssetIds = useMemo(
     () => propertyLinks.map((link) => link.properties?.assets?.id).filter(Boolean),
     [propertyLinks]
@@ -546,11 +522,6 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
 
   function handleMortgageFasciaAction(action) {
     if (!action) return;
-    if (action.kind === "toggle_explanation") {
-      setShowFasciaExplanation((current) => !current);
-      return;
-    }
-
     if (!action.target) return;
     handleMortgageAction({ target: action.target });
   }
@@ -697,223 +668,153 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
     setRemovingLinkId("");
   }
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Assets"
-        title={mortgageLoan?.loan_name || linkedAsset?.asset_name || "Mortgage Loan Detail"}
-        description="Understand this mortgage at a glance, then open the supporting records and details only when you need them."
-        actions={
-          <button onClick={() => onNavigate("/mortgage")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
-            Back to Mortgage Hub
-          </button>
-        }
-      />
+  function scrollToMortgageTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
+  const mortgageHeroGlanceItems = [
+    { label: "Loan Status", value: mortgageLoan?.current_status || "Unknown" },
+    { label: "Linked Properties", value: propertyLinks.length || "None yet" },
+    { label: "Documents", value: bundle?.mortgageDocuments?.length || 0 },
+    { label: "Snapshots", value: bundle?.mortgageSnapshots?.length || 0 },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
       <MortgageDetailRecoveryBoundary>
         {loading ? (
-          <SectionCard><div style={{ color: "#64748b" }}>Loading mortgage loan bundle...</div></SectionCard>
+          <CalmEmptyState
+            title="Loading mortgage detail"
+            description="VaultedShield is pulling together the loan, linked property context, and supporting mortgage records."
+            icon="Home"
+            tone="info"
+          />
         ) : !mortgageLoan ? (
-          <EmptyState title="Mortgage loan not found" description={loadError || "This mortgage detail page could not load a matching loan record."} />
+          <CalmEmptyState
+            title="Mortgage loan not found"
+            description={loadError || "This mortgage detail page could not load a matching loan record."}
+            icon="Missing"
+            tone="warning"
+            actionLabel="Back To Mortgage Hub"
+            onAction={() => onNavigate("/mortgage")}
+          />
         ) : (
           <>
-          {bundleWarnings.length > 0 ? (
-            <SectionCard
-              title="Partial visibility"
-              subtitle="The core mortgage record loaded, but some supporting mortgage context is still unavailable. VaultedShield is showing the verified data that could be read safely."
-            >
-              <div style={{ display: "grid", gap: "8px" }}>
-                {bundleWarnings.map((warning) => (
-                  <div
-                    key={warning.area}
-                    style={{
-                      padding: "12px 14px",
-                      borderRadius: "12px",
-                      background: "#fff7ed",
-                      border: "1px solid #fdba74",
-                      color: "#9a3412",
-                      lineHeight: "1.6",
-                    }}
-                  >
-                    {warning.message}
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-          ) : null}
-          <SummaryPanel items={summaryItems} />
-          <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <StatusBadge label={mortgageLoanType?.display_name || mortgageLoan.mortgage_loan_type_key} tone="info" />
-            <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-            <StatusBadge
-              label={`Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`}
-              tone={linkedStackCompleteness.tone}
-            />
-          </div>
-
-          <div style={{ marginTop: "24px" }}>
-            <IntelligenceFasciaCard fascia={mortgagePageFasciaDisplay} onAction={handleMortgageFasciaAction} isMobile={isTablet} />
-            <InsightExplanationPanel
-              isOpen={showFasciaExplanation}
-              explanation={mortgagePageFascia?.explanation}
-              onToggle={() => setShowFasciaExplanation(false)}
-              onAction={handleMortgageFasciaAction}
-              isMobile={isTablet}
-            />
-          </div>
-
-          <section
-            style={{
-              marginTop: "24px",
-              display: "grid",
-              gap: "20px",
-              padding: isTablet ? "24px 18px" : "30px 32px",
-              borderRadius: "28px",
-              background:
-                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
-              border: "1px solid rgba(251, 146, 60, 0.18)",
-              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
-                gap: "18px",
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isTablet ? "2px 2px 0" : "4px 4px 0" }}>
-                <div
-                  style={{
-                    width: "fit-content",
-                    padding: "7px 11px",
-                    borderRadius: "999px",
-                    background: "rgba(255,255,255,0.82)",
-                    border: "1px solid rgba(251, 146, 60, 0.18)",
-                    boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)",
-                    fontSize: "11px",
-                    color: "#c2410c",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.12em",
-                    fontWeight: 800,
-                  }}
-                >
-                  {mortgagePlainEnglishGuide.eyebrow}
-                </div>
-                <div style={{ fontSize: isTablet ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
-                  {mortgagePlainEnglishGuide.title}
-                </div>
-                <div style={{ fontSize: "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
-                  {mortgagePlainEnglishGuide.summary}
-                </div>
-                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{mortgagePlainEnglishGuide.transition}</div>
-              </div>
+            <div style={{ display: "grid", gap: "20px" }}>
+              <FriendlyPageHero
+                eyebrow="Assets"
+                sectionTitle={mortgageLoan.loan_name || linkedAsset?.asset_name || "Mortgage Loan Detail"}
+                headline={mortgagePlainEnglishGuide.title}
+                summary={mortgagePlainEnglishGuide.summary}
+                transition={mortgagePlainEnglishGuide.transition}
+                actions={[
+                  {
+                    label: "Back To Mortgage Hub",
+                    onClick: () => onNavigate("/mortgage"),
+                  },
+                  {
+                    label: mortgagePageFascia?.primaryAction?.label || "Open Review Workspace",
+                    onClick: () =>
+                      mortgagePageFascia?.primaryAction
+                        ? handleMortgageFasciaAction(mortgagePageFascia.primaryAction)
+                        : onNavigate(mortgageReviewWorkspaceRoute),
+                  },
+                  {
+                    label: "See Supporting Details",
+                    onClick: scrollToMortgageTechnicalAnalysis,
+                  },
+                  {
+                    label: "Upload Mortgage Files",
+                    onClick: () => fileInputRef.current?.click(),
+                    kind: "primary",
+                  },
+                ]}
+                score={Math.max(0, Math.min(100, Math.round(linkedStackCompleteness.score || 0)))}
+                scoreTone={linkedStackCompleteness.tone || "info"}
+                scoreSubtitle="stack score"
+                scoreIconLabel="mortgage"
+                asideHeadline={mortgagePlainEnglishGuide.cards[0]?.value || "Mortgage picture is forming"}
+                asideSummary={mortgageCommandCenter.headline}
+                glanceItems={mortgageHeroGlanceItems}
+              />
 
               <div
                 style={{
-                  padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
-                  borderRadius: "24px",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
-                  border: "1px solid rgba(148, 163, 184, 0.16)",
                   display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: "14px",
-                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span
-                    style={{
-                      width: "10px",
-                      height: "10px",
-                      borderRadius: "999px",
-                      background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
-                      boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
-                    }}
-                  />
-                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    Quick Read
-                  </div>
-                </div>
-                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
-                  {mortgagePlainEnglishGuide.quickFacts.map((item) => (
-                    <li
-                      key={item}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "16px minmax(0, 1fr)",
-                        gap: "10px",
-                        alignItems: "start",
-                        padding: "10px 12px",
-                        borderRadius: "14px",
-                        background: "rgba(255,255,255,0.78)",
-                        border: "1px solid rgba(226,232,240,0.9)",
-                        lineHeight: "1.65",
-                      }}
-                    >
-                      <span
+                <FriendlyActionTile
+                  kicker="Simple Read"
+                  title={mortgagePlainEnglishGuide.cards[0]?.value || "Read the loan status first"}
+                  detail={mortgagePlainEnglishGuide.cards[0]?.detail || mortgageCommandCenter.headline}
+                  metric={`Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`}
+                  tone={linkedStackCompleteness.tone || "info"}
+                  statusLabel="Simple Read"
+                  actionLabel="See Supporting Details"
+                  onAction={scrollToMortgageTechnicalAnalysis}
+                />
+                <FriendlyActionTile
+                  kicker="Best First Step"
+                  title={mortgagePlainEnglishGuide.cards[1]?.value || "Open the review workspace"}
+                  detail={mortgagePlainEnglishGuide.cards[1]?.detail || mortgageCommandCenter.headline}
+                  metric={`${propertyLinks.length} linked propert${propertyLinks.length === 1 ? "y" : "ies"}`}
+                  tone="warning"
+                  statusLabel="Guided Focus"
+                  actionLabel={mortgagePageFascia?.primaryAction?.label || "Open Review Workspace"}
+                  onAction={() =>
+                    mortgagePageFascia?.primaryAction
+                      ? handleMortgageFasciaAction(mortgagePageFascia.primaryAction)
+                      : onNavigate(mortgageReviewWorkspaceRoute)
+                  }
+                />
+                <FriendlyActionTile
+                  kicker="Evidence Support"
+                  title={mortgagePlainEnglishGuide.cards[2]?.value || "Confidence is still forming"}
+                  detail={mortgagePlainEnglishGuide.cards[2]?.detail || "Support improves as documents and property records connect."}
+                  metric={`${bundle?.mortgageDocuments?.length || 0} document${bundle?.mortgageDocuments?.length === 1 ? "" : "s"}`}
+                  tone={bundleWarnings.length > 0 ? "warning" : "good"}
+                  statusLabel={bundleWarnings.length > 0 ? "Missing Information" : "Well Supported"}
+                  actionLabel="Upload Files"
+                  onAction={() => fileInputRef.current?.click()}
+                />
+              </div>
+
+              {bundleWarnings.length > 0 ? (
+                <SectionCard
+                  title="Partial visibility"
+                  subtitle="The core mortgage record loaded, but some supporting mortgage context is still unavailable. VaultedShield is showing the verified data that could be read safely."
+                >
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    {bundleWarnings.map((warning) => (
+                      <div
+                        key={warning.area}
                         style={{
-                          width: "8px",
-                          height: "8px",
-                          marginTop: "8px",
-                          borderRadius: "999px",
-                          background: "#0f172a",
+                          padding: "12px 14px",
+                          borderRadius: "12px",
+                          background: "#fff7ed",
+                          border: "1px solid #fdba74",
+                          color: "#9a3412",
+                          lineHeight: "1.6",
                         }}
-                      />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  {mortgagePageFascia?.primaryAction ? (
-                    <button
-                      type="button"
-                      onClick={() => handleMortgageFasciaAction(mortgagePageFascia.primaryAction)}
-                      style={{ padding: "11px 16px", borderRadius: "999px", border: "none", background: "#0f172a", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}
-                    >
-                      {mortgagePageFascia.primaryAction.label}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    style={{ padding: "11px 16px", borderRadius: "999px", border: "1px solid rgba(15, 23, 42, 0.12)", background: "#ffffff", color: "#0f172a", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}
-                  >
-                    See Supporting Details
-                  </button>
-                </div>
+                      >
+                        {warning.message}
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              ) : null}
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <StatusBadge label={mortgageLoanType?.display_name || mortgageLoan.mortgage_loan_type_key} tone="info" />
+                <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+                <StatusBadge
+                  label={`Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`}
+                  tone={linkedStackCompleteness.tone}
+                />
               </div>
             </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                gap: "14px",
-              }}
-            >
-              {mortgagePlainEnglishGuide.cards.map((card) => (
-                <div
-                  key={card.label}
-                  style={{
-                    padding: isTablet ? "18px 18px 20px" : "20px 20px 22px",
-                    borderRadius: "22px",
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%)",
-                    border: "1px solid rgba(148, 163, 184, 0.16)",
-                    display: "grid",
-                    gap: "10px",
-                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.05)",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    {card.label}
-                  </div>
-                  <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>{card.value}</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>{card.detail}</div>
-                </div>
-              ))}
-            </div>
-          </section>
 
           <section
             style={{

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
-import PageHeader from "../components/layout/PageHeader";
 import PropertyAIChat from "../components/property/PropertyAIChat";
-import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
-import IntelligenceFasciaCard from "../components/shared/IntelligenceFasciaCard";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import PropertyActionFeedCard from "../components/property/PropertyActionFeedCard";
 import PropertyLinkedContextCard from "../components/property/PropertyLinkedContextCard";
 import PropertySignalsSummaryCard from "../components/property/PropertySignalsSummaryCard";
@@ -79,16 +79,6 @@ function actionButtonStyle(primary = false) {
     color: primary ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 700,
-  };
-}
-
-function reportActionButtonStyle(active = false, primary = false) {
-  if (primary) return actionButtonStyle(true);
-  return {
-    ...actionButtonStyle(false),
-    border: active ? "1px solid #93c5fd" : "1px solid #cbd5e1",
-    background: active ? "#eff6ff" : "#ffffff",
-    color: active ? "#1d4ed8" : "#0f172a",
   };
 }
 
@@ -398,7 +388,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   const [valuationError, setValuationError] = useState("");
   const [valuationSuccess, setValuationSuccess] = useState("");
   const [showPropertyReport, setShowPropertyReport] = useState(false);
-  const [showFasciaExplanation, setShowFasciaExplanation] = useState(false);
   const [reviewWorkflowState, setReviewWorkflowState] = useState({});
   const platformScope = useMemo(
     () => ({
@@ -698,19 +687,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
       propertyStackAnalytics,
     ]
   );
-  const propertyPageFasciaDisplay = useMemo(() => {
-    if (!propertyPageFascia) return null;
-
-    return {
-      ...propertyPageFascia,
-      tertiaryAction: propertyPageFascia.tertiaryAction
-        ? {
-            ...propertyPageFascia.tertiaryAction,
-            label: showFasciaExplanation ? "Hide explanation" : "Why am I seeing this?",
-          }
-        : null,
-    };
-  }, [propertyPageFascia, showFasciaExplanation]);
   const propertyPlainEnglishGuide = useMemo(() => {
     const everydayVerdict =
       propertyPageFascia?.status === "Strong"
@@ -1363,6 +1339,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     }
   }
 
+  function scrollToPropertyTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function handlePrintPropertyReport() {
     setShowPropertyReport(true);
     if (typeof window !== "undefined") {
@@ -1381,167 +1361,103 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
 
   function handlePropertyFasciaAction(action) {
     if (!action) return;
-    if (action.kind === "toggle_explanation") {
-      setShowFasciaExplanation((current) => !current);
-      return;
-    }
-
     if (!action.target) return;
     handlePropertyAction({ target: action.target });
   }
 
-  return (
-    <div style={{ width: "100%", minWidth: 0, overflowX: "clip" }}>
-      <PageHeader
-        eyebrow="Assets"
-        title={property?.property_name || linkedAsset?.asset_name || "Property Detail"}
-        description="See the property story first, then open the linked records, values, and stack details when you want more depth."
-        actions={
-          <button onClick={() => onNavigate("/property")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
-            Back to Property Hub
-          </button>
-        }
-      />
+  const propertyHeroGlanceItems = summaryItems.slice(0, 4).map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+  const propertyHeroScore = Math.round(
+    Number.isFinite(Number(propertyStackAnalytics?.completeness_score))
+      ? Number(propertyStackAnalytics?.completeness_score)
+      : Number.isFinite(Number(latestPropertyValuation?.confidence_score))
+        ? Number(latestPropertyValuation?.confidence_score) * 100
+        : 54
+  );
+  const propertyHeroTone =
+    propertyPageFascia?.status === "Strong"
+      ? "good"
+      : propertyPageFascia?.status === "Stable"
+        ? "info"
+        : propertyPageFascia?.status === "At Risk"
+          ? "alert"
+          : "warning";
 
+  return (
+    <div style={{ width: "100%", minWidth: 0, overflowX: "clip", display: "grid", gap: "24px" }}>
       {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading property bundle...</div></SectionCard>
+        <CalmEmptyState
+          title="Loading property detail"
+          description="VaultedShield is assembling the property, valuation, and linkage records into one readable stack."
+          icon="Home"
+          tone="info"
+        />
       ) : !property ? (
-        <EmptyState title="Property not found" description={loadError || "This property detail page could not load a matching property record."} />
+        <CalmEmptyState
+          title="Property not found"
+          description={loadError || "This property detail page could not load a matching property record."}
+          icon="Missing"
+          tone="warning"
+        />
       ) : (
         <>
-          <SummaryPanel items={summaryItems} />
-          <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <StatusBadge label={propertyType?.display_name || property.property_type_key} tone="info" />
-            <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-          </div>
-          <div style={{ marginTop: "18px", ...actionStackStyle }}>
-            <button
-              type="button"
-              onClick={() => setShowPropertyReport((current) => !current)}
-              style={{ ...reportActionButtonStyle(showPropertyReport, false), ...(actionButtonLayoutStyle || {}) }}
-            >
-              {showPropertyReport ? "Hide Property Report" : "Open Property Report"}
-            </button>
-            <button type="button" onClick={handlePrintPropertyReport} style={{ ...reportActionButtonStyle(false, true), ...(actionButtonLayoutStyle || {}) }}>
-              Print Report
-            </button>
-          </div>
+          <FriendlyPageHero
+            eyebrow={propertyPlainEnglishGuide.eyebrow}
+            sectionTitle={property?.property_name || linkedAsset?.asset_name || "Property Detail"}
+            headline={propertyPlainEnglishGuide.title}
+            summary={propertyPlainEnglishGuide.summary}
+            transition={propertyPlainEnglishGuide.transition}
+            actions={[
+              { label: "Back To Property Hub", onClick: () => onNavigate?.("/property") },
+              {
+                label: showPropertyReport ? "Hide Property Report" : "Open Property Report",
+                onClick: () => setShowPropertyReport((current) => !current),
+              },
+              { label: "Print Report", onClick: handlePrintPropertyReport },
+            ]}
+            score={propertyHeroScore}
+            scoreTone={propertyHeroTone}
+            scoreSubtitle="readiness"
+            scoreIconLabel="property"
+            asideHeadline={propertyActionTiles[0]?.title || "Property story still forming"}
+            asideSummary={propertyActionTiles[0]?.detail || propertyPlainEnglishGuide.summary}
+            glanceEyebrow="At A Glance"
+            glanceItems={propertyHeroGlanceItems}
+          />
 
-          <div style={{ marginTop: "24px" }}>
-            <IntelligenceFasciaCard fascia={propertyPageFasciaDisplay} onAction={handlePropertyFasciaAction} isMobile={isMobile} />
-            <InsightExplanationPanel
-              isOpen={showFasciaExplanation}
-              explanation={propertyPageFascia?.explanation}
-              onToggle={() => setShowFasciaExplanation(false)}
-              onAction={handlePropertyFasciaAction}
-              isMobile={isMobile}
-            />
-          </div>
-
-          <section
+          <div
             style={{
-              marginTop: "24px",
               display: "grid",
-              gap: "20px",
-              padding: isMobile ? "24px 18px" : "30px 32px",
-              borderRadius: "28px",
-              background:
-                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 30%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 34%), linear-gradient(135deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 58%, rgba(240,249,255,0.96) 100%)",
-              border: "1px solid rgba(251, 146, 60, 0.18)",
-              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+              gap: "14px",
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
-                gap: "18px",
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: "12px", minWidth: 0, padding: isMobile ? "2px 2px 0" : "4px 4px 0" }}>
-                <div style={{ width: "fit-content", padding: "7px 11px", borderRadius: "999px", background: "rgba(255,255,255,0.82)", border: "1px solid rgba(251, 146, 60, 0.18)", boxShadow: "0 8px 20px rgba(251, 146, 60, 0.08)", fontSize: "11px", color: "#c2410c", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-                  {propertyPlainEnglishGuide.eyebrow}
-                </div>
-                <div style={{ fontSize: isMobile ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
-                  {propertyPlainEnglishGuide.title}
-                </div>
-                <div style={{ fontSize: isMobile ? "18px" : "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
-                  {propertyPlainEnglishGuide.summary}
-                </div>
-                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{propertyPlainEnglishGuide.transition}</div>
-              </div>
-
-              <div
-                style={{
-                  padding: isMobile ? "18px 18px 20px" : "20px 20px 22px",
-                  borderRadius: "24px",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.94) 100%)",
-                  border: "1px solid rgba(148, 163, 184, 0.16)",
-                  display: "grid",
-                  gap: "14px",
-                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.06)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ width: "10px", height: "10px", borderRadius: "999px", background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)", boxShadow: "0 0 0 5px rgba(249,115,22,0.12)" }} />
-                  <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                    Quick Read
-                  </div>
-                </div>
-                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
-                  {propertyPlainEnglishGuide.quickFacts.map((item) => (
-                    <li key={item} style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", gap: "10px", alignItems: "start", padding: "10px 12px", borderRadius: "14px", background: "rgba(255,255,255,0.78)", border: "1px solid rgba(226,232,240,0.9)", lineHeight: "1.65" }}>
-                      <span style={{ width: "8px", height: "8px", marginTop: "8px", borderRadius: "999px", background: "#0f172a" }} />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  {propertyPageFascia?.primaryAction ? (
-                    <button type="button" onClick={() => handlePropertyFasciaAction(propertyPageFascia.primaryAction)} style={{ ...actionButtonStyle(true), ...(actionButtonLayoutStyle || {}), borderRadius: "999px", padding: "11px 16px", boxShadow: "0 12px 24px rgba(15, 23, 42, 0.18)" }}>
-                      {propertyPageFascia.primaryAction.label}
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ ...actionButtonStyle(false), ...(actionButtonLayoutStyle || {}), borderRadius: "999px", padding: "11px 16px", boxShadow: "0 10px 22px rgba(148, 163, 184, 0.12)" }}>
-                    See Supporting Details
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                gap: "14px",
-              }}
-            >
-              {propertyActionTiles.map((tile) => (
-                <FriendlyActionTile
-                  key={tile.key}
-                  kicker={tile.kicker}
-                  title={tile.title}
-                  detail={tile.detail}
-                  metric={tile.metric}
-                  tone={tile.tone}
-                  statusLabel={tile.statusLabel}
-                  actionLabel={tile.actionLabel}
-                  onAction={() => {
-                    if (tile.actionKey === "next-step") {
-                      if (propertyPageFascia?.primaryAction) {
-                        handlePropertyFasciaAction(propertyPageFascia.primaryAction);
-                        return;
-                      }
-                      onNavigate?.(propertyReviewWorkspaceRoute);
+            {propertyActionTiles.map((tile) => (
+              <FriendlyActionTile
+                key={tile.key}
+                kicker={tile.kicker}
+                title={tile.title}
+                detail={tile.detail}
+                metric={tile.metric}
+                tone={tile.tone}
+                statusLabel={tile.statusLabel}
+                actionLabel={tile.actionLabel}
+                onAction={() => {
+                  if (tile.actionKey === "next-step") {
+                    if (propertyPageFascia?.primaryAction) {
+                      handlePropertyFasciaAction(propertyPageFascia.primaryAction);
                       return;
                     }
-                    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                />
-              ))}
-            </div>
-          </section>
+                    onNavigate?.(propertyReviewWorkspaceRoute);
+                    return;
+                  }
+                  scrollToPropertyTechnicalAnalysis();
+                }}
+              />
+            ))}
+          </div>
 
           <section
             style={{

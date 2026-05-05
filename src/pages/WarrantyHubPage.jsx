@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeWarrantyModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getWarrantyType,
@@ -173,37 +174,88 @@ export default function WarrantyHubPage({ onNavigate }) {
     setCreating(false);
   }
 
+  const warrantyHeroScore = Math.round(
+    warranties.length > 0
+      ? Math.min(86, 42 + warranties.length * 8 + Number(warrantyRead.metrics.active || 0) * 4)
+      : 30
+  );
+  const warrantyHeroTone =
+    warrantyHeroScore >= 80 ? "good" : warrantyHeroScore >= 60 ? "info" : warrantyHeroScore >= 44 ? "warning" : "alert";
+  const warrantyHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Assets"
-        title="Warranty Hub"
-        description="Live warranty and service-contract registry for item continuity, contract intake, expiration tracking, and future warranty parsing."
-        actions={
-          <button
-            onClick={() => refreshWarranties()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Warranty Data
-          </button>
-        }
-      />
-
-      <SummaryPanel items={summaryItems} />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={warrantyPlainLanguageGuide.title}
+        sectionTitle="Warranty Hub"
+        headline={warrantyPlainLanguageGuide.title}
         summary={warrantyPlainLanguageGuide.summary}
         transition={warrantyPlainLanguageGuide.transition}
-        quickFacts={warrantyPlainLanguageGuide.quickFacts}
-        cards={warrantyPlainLanguageGuide.cards}
-        primaryActionLabel={warranties.length > 0 ? "Add Another Warranty" : "Create First Warranty"}
-        onPrimaryAction={() => createWarrantyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel={warranties.length > 0 ? "See Warranty Readiness" : "See Starter Guidance"}
-        onSecondaryAction={() => warrantyReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: warranties.length > 0 ? "Add Another Warranty" : "Create First Warranty",
+            onClick: () => createWarrantyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "See Warranty Readiness",
+            onClick: () => warrantyReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Refresh Warranty Data",
+            onClick: () => refreshWarranties(),
+          },
+        ]}
+        score={warrantyHeroScore}
+        scoreTone={warrantyHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="warranty"
+        asideHeadline={warranties.length > 0 ? "Small protections are taking shape" : "Start with the first useful contract"}
+        asideSummary={warrantyRead.headline}
+        glanceItems={warrantyHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={warrantyPlainLanguageGuide.cards[0]?.value || "Read the warranty picture first"}
+          detail={warrantyPlainLanguageGuide.cards[0]?.detail || warrantyRead.headline}
+          metric={`${warranties.length} contract${warranties.length === 1 ? "" : "s"}`}
+          tone={warrantyHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Warranty Readiness"
+          onAction={() => warrantyReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={warrantyPlainLanguageGuide.cards[1]?.value || "Create the first meaningful warranty"}
+          detail={warrantyPlainLanguageGuide.cards[1]?.detail || "The first useful contract matters more than perfect completeness."}
+          metric={`${warrantyRead.metrics.expiringSoon || 0} expiring soon`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={warranties.length > 0 ? "Add Warranty" : "Create Warranty"}
+          onAction={() => createWarrantyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={warrantyPlainLanguageGuide.cards[2]?.value || "Technical detail stays underneath"}
+          detail={warrantyPlainLanguageGuide.cards[2]?.detail || "You do not need every receipt before this module becomes useful."}
+          metric={`${warrantyRead.metrics.missingExpiration || 0} missing date${warrantyRead.metrics.missingExpiration === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Refresh Data"
+          onAction={() => refreshWarranties()}
+        />
+      </div>
 
       <div ref={warrantyReadinessRef} style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Coverage Readiness">

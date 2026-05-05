@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeHomeownersModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { buildHomeownersHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import {
@@ -81,6 +82,14 @@ export default function HomeownersHubPage({ onNavigate }) {
     setLoadError(result.error?.message || "");
   }
 
+  function scrollToHomeownersCommand() {
+    homeownersCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToCreatePolicy() {
+    createPolicyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const summaryItems = useMemo(() => {
     const activeCount = policies.filter((policy) => policy.policy_status === "active").length;
     const policyTypeCount = policies.reduce((accumulator, policy) => {
@@ -147,6 +156,18 @@ export default function HomeownersHubPage({ onNavigate }) {
     };
   }, [homeownersHubCommand, policies.length]);
 
+  const homeownersHeroScore = Math.round(
+    policies.length > 0
+      ? Math.min(84, 40 + policies.length * 10 + Number(homeownersHubCommand.metrics.active || 0) * 6)
+      : 34
+  );
+  const homeownersHeroTone =
+    homeownersHeroScore >= 80 ? "good" : homeownersHeroScore >= 60 ? "info" : homeownersHeroScore >= 45 ? "warning" : "alert";
+  const homeownersHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   async function handleCreatePolicy(event) {
     event.preventDefault();
     if (!householdState.context.householdId || !form.homeowners_policy_type_key) return;
@@ -177,36 +198,76 @@ export default function HomeownersHubPage({ onNavigate }) {
   }
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Insurance"
-        title="Homeowners Hub"
-        description="Live homeowners registry for policy shells, declarations intake, renewals, and future property continuity intelligence."
-        actions={
-          <button
-            onClick={() => refreshPolicies()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Homeowners Data
-          </button>
-        }
-      />
-
-      <SummaryPanel items={summaryItems} />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={homeownersPlainLanguageGuide.title}
+        sectionTitle="Homeowners Hub"
+        headline={homeownersPlainLanguageGuide.title}
         summary={homeownersPlainLanguageGuide.summary}
         transition={homeownersPlainLanguageGuide.transition}
-        quickFacts={homeownersPlainLanguageGuide.quickFacts}
-        cards={homeownersPlainLanguageGuide.cards}
-        primaryActionLabel={policies.length > 0 ? "Add Another Policy" : "Create First Policy"}
-        onPrimaryAction={() => createPolicyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel="Open Homeowners Command"
-        onSecondaryAction={() => homeownersCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: policies.length > 0 ? "Add Another Policy" : "Create First Policy",
+            onClick: scrollToCreatePolicy,
+            kind: "primary",
+          },
+          {
+            label: "Open Homeowners Command",
+            onClick: scrollToHomeownersCommand,
+          },
+          {
+            label: "Refresh Homeowners Data",
+            onClick: () => refreshPolicies(),
+          },
+        ]}
+        score={homeownersHeroScore}
+        scoreTone={homeownersHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="home"
+        asideHeadline={policies.length > 0 ? "Property protection is taking shape" : "Start the protection picture"}
+        asideSummary={homeownersHubCommand.headline}
+        glanceEyebrow="At A Glance"
+        glanceItems={homeownersHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Protection Status"
+          title={policies.length > 0 ? homeownersHubCommand.headline : "Start with the first homeowners policy"}
+          detail={homeownersPlainLanguageGuide.cards[0]?.detail || "This page should make the property-protection picture easier to trust."}
+          metric={`${policies.length} polic${policies.length === 1 ? "y" : "ies"}`}
+          tone={homeownersHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Command"
+          onAction={scrollToHomeownersCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={homeownersPlainLanguageGuide.cards[1]?.value || "Create the main homeowners policy"}
+          detail={homeownersPlainLanguageGuide.cards[1]?.detail || "The clearest next move is the first protection move."}
+          metric={`${homeownersHubCommand.metrics.attention || 0} active prompt${homeownersHubCommand.metrics.attention === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={policies.length > 0 ? "Open Command" : "Create Policy"}
+          onAction={policies.length > 0 ? scrollToHomeownersCommand : scrollToCreatePolicy}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={homeownersPlainLanguageGuide.cards[2]?.value || "Technical coverage detail can come later"}
+          detail={homeownersPlainLanguageGuide.cards[2]?.detail || "The deeper coverage work stays available after the first clean read."}
+          metric={`${homeownersHubCommand.metrics.active || 0} active polic${homeownersHubCommand.metrics.active === 1 ? "y" : "ies"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Policies"
+          onAction={scrollToCreatePolicy}
+        />
+      </div>
 
       <div ref={homeownersCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard

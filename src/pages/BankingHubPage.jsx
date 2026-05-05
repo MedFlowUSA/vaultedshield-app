@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import { summarizeBankingModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { buildBankingHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
@@ -131,60 +132,103 @@ export default function BankingHubPage({ onNavigate }) {
     };
   }, [bankingAssets.length, bankingCommand, readiness]);
 
+  function scrollToBankingCommand() {
+    bankingCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToBankingRecords() {
+    bankingRecordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const bankingHeroScore = Math.round(
+    readiness.status === "Ready"
+      ? 84
+      : readiness.status === "Building"
+        ? 62
+        : bankingAssets.length > 0
+          ? 48
+          : 34
+  );
+  const bankingHeroTone =
+    bankingHeroScore >= 80 ? "good" : bankingHeroScore >= 60 ? "info" : bankingHeroScore >= 45 ? "warning" : "alert";
+  const bankingHeroGlanceItems = [
+    { label: "Status", value: readiness.status },
+    { label: "Banking Assets", value: readiness.metrics.bankingAssets },
+    { label: "Emergency Portals", value: readiness.metrics.emergencyPortals },
+    { label: "Missing Recovery", value: readiness.metrics.missingRecovery },
+  ];
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Banking and Cash"
-        title="Banking Hub"
-        description="Household liquidity continuity, institution access, and emergency-recovery readiness."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/portals")}
-              style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-            >
-              Review Portals
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/contacts")}
-              style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-            >
-              Review Contacts
-            </button>
-          </div>
-        }
-      />
-
-      <SummaryPanel
-        items={[
-          { label: "Status", value: readiness.status, helper: "High-level banking continuity read" },
-          { label: "Banking Assets", value: readiness.metrics.bankingAssets, helper: "Cash and liquidity records in view" },
-          { label: "Emergency Portals", value: readiness.metrics.emergencyPortals, helper: "Relevant access points for emergencies" },
-          { label: "Institution Contacts", value: readiness.metrics.institutionContacts, helper: "Banks and advisor support contacts" },
-          { label: "Missing Recovery", value: readiness.metrics.missingRecovery, helper: "Emergency portals still missing recovery hints" },
-        ]}
-      />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={bankingPlainLanguageGuide.title}
+        sectionTitle="Banking Hub"
+        headline={bankingPlainLanguageGuide.title}
         summary={bankingPlainLanguageGuide.summary}
         transition={bankingPlainLanguageGuide.transition}
-        quickFacts={bankingPlainLanguageGuide.quickFacts}
-        cards={bankingPlainLanguageGuide.cards}
-        primaryActionLabel="Review Portals"
-        onPrimaryAction={() => onNavigate?.("/portals")}
-        secondaryActionLabel={bankingAssets.length > 0 ? "See Banking Records" : "Open Banking Command"}
-        onSecondaryAction={() =>
-          (bankingAssets.length > 0 ? bankingRecordsRef.current : bankingCommandRef.current)?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          })
-        }
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: "Review Portals",
+            onClick: () => onNavigate?.("/portals"),
+            kind: "primary",
+          },
+          {
+            label: "Review Contacts",
+            onClick: () => onNavigate?.("/contacts"),
+          },
+          {
+            label: bankingAssets.length > 0 ? "See Banking Records" : "Open Banking Command",
+            onClick: bankingAssets.length > 0 ? scrollToBankingRecords : scrollToBankingCommand,
+          },
+        ]}
+        score={bankingHeroScore}
+        scoreTone={bankingHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="banking"
+        asideHeadline={readiness.status}
+        asideSummary={readiness.headline}
+        glanceEyebrow="At A Glance"
+        glanceItems={bankingHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Cash Access"
+          title={bankingPlainLanguageGuide.cards[0]?.value || "Household cash access is still building"}
+          detail={bankingPlainLanguageGuide.cards[0]?.detail || readiness.headline}
+          metric={`${bankingAssets.length} visible record${bankingAssets.length === 1 ? "" : "s"}`}
+          tone={bankingHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Command"
+          onAction={scrollToBankingCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={bankingPlainLanguageGuide.cards[1]?.value || "Review portals and contacts"}
+          detail={bankingPlainLanguageGuide.cards[1]?.detail || "The best early banking wins come from access and recovery clarity."}
+          metric={`${bankingCommand.metrics.attention || 0} active prompt${bankingCommand.metrics.attention === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Review Portals"
+          onAction={() => onNavigate?.("/portals")}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={bankingPlainLanguageGuide.cards[2]?.value || "Perfect categorization can come later"}
+          detail={bankingPlainLanguageGuide.cards[2]?.detail || "The goal is to make cash continuity understandable first."}
+          metric={`${readiness.metrics.institutionContacts || 0} support contact${readiness.metrics.institutionContacts === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Records"
+          onAction={scrollToBankingRecords}
+        />
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Liquidity Continuity Read">

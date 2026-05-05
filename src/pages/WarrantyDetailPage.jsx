@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   getWarrantyDocumentClass,
   getWarrantyProvider,
@@ -205,15 +207,6 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
   ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
-  const summaryItems = useMemo(() => {
-    if (!warranty) return [];
-    return [
-      { label: "Contract Status", value: warranty.contract_status || "unknown", helper: warrantyType?.display_name || "Warranty" },
-      { label: "Documents", value: bundle?.warrantyDocuments?.length || 0, helper: "Warranty-specific document records" },
-      { label: "Snapshots", value: bundle?.warrantySnapshots?.length || 0, helper: "Normalized warranty records" },
-      { label: "Analytics", value: bundle?.warrantyAnalytics?.length || 0, helper: "Future warranty review outputs" },
-    ];
-  }, [bundle, warranty, warrantyType]);
   const plainLanguageGuide = useMemo(() => {
     const documentCount = bundle?.warrantyDocuments?.length || 0;
     const snapshotCount = bundle?.warrantySnapshots?.length || 0;
@@ -350,94 +343,117 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     setUploading(false);
   }
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Assets"
-        title={warranty?.contract_name || linkedAsset?.asset_name || "Warranty Detail"}
-        description="Live warranty bundle view backed by contracts, documents, snapshots, analytics, and linked platform assets."
-        actions={
-          <button onClick={() => onNavigate("/warranties")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
-            Back to Warranty Hub
-          </button>
-        }
-      />
+  function scrollToWarrantyTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
+  const warrantyHeroGlanceItems = [
+    { label: "Contract Status", value: warranty?.contract_status || "Unknown" },
+    { label: "Documents", value: bundle?.warrantyDocuments?.length || 0 },
+    { label: "Snapshots", value: bundle?.warrantySnapshots?.length || 0 },
+    { label: "Analytics", value: bundle?.warrantyAnalytics?.length || 0 },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
       {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading warranty bundle...</div></SectionCard>
+        <CalmEmptyState
+          title="Loading warranty detail"
+          description="VaultedShield is pulling together the contract, documents, and supporting warranty evidence."
+          icon="Docs"
+          tone="info"
+        />
       ) : !warranty ? (
-        <EmptyState title="Warranty not found" description={loadError || "This warranty detail page could not load a matching contract record."} />
+        <CalmEmptyState
+          title="Warranty not found"
+          description={loadError || "This warranty detail page could not load a matching contract record."}
+          icon="Missing"
+          tone="warning"
+          actionLabel="Back To Warranty Hub"
+          onAction={() => onNavigate("/warranties")}
+        />
       ) : (
         <>
-          <SummaryPanel items={summaryItems} />
-          <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <StatusBadge label={warrantyType?.display_name || warranty.warranty_type_key} tone="info" />
-            <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-          </div>
+          <div style={{ display: "grid", gap: "20px" }}>
+            <FriendlyPageHero
+              eyebrow="Assets"
+              sectionTitle={warranty.contract_name || linkedAsset?.asset_name || "Warranty Detail"}
+              headline={plainLanguageGuide.title}
+              summary={plainLanguageGuide.summary}
+              transition={plainLanguageGuide.transition}
+              actions={[
+                {
+                  label: "Back To Warranty Hub",
+                  onClick: () => onNavigate("/warranties"),
+                },
+                {
+                  label: "Open Review Workspace",
+                  onClick: () => onNavigate(warrantyReviewWorkspaceRoute),
+                },
+                {
+                  label: "See Supporting Details",
+                  onClick: scrollToWarrantyTechnicalAnalysis,
+                },
+                {
+                  label: "Upload Contract Files",
+                  onClick: () => fileInputRef.current?.click(),
+                  kind: "primary",
+                },
+              ]}
+              score={Math.min(100, Math.max(0, 42 + (bundle?.warrantyDocuments?.length || 0) * 8 + (bundle?.warrantySnapshots?.length || 0) * 6))}
+              scoreTone={warrantyCommandCenter.metrics.critical > 0 ? "alert" : warrantyCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+              scoreSubtitle="support score"
+              scoreIconLabel="warranty"
+              asideHeadline={plainLanguageGuide.cards[0]?.value || "Warranty picture is forming"}
+              asideSummary={warrantyCommandCenter.headline}
+              glanceItems={warrantyHeroGlanceItems}
+            />
 
-          <PlainLanguageBridge
-            compact
-            title={plainLanguageGuide.title}
-            summary={plainLanguageGuide.summary}
-            transition={plainLanguageGuide.transition}
-            quickFacts={plainLanguageGuide.quickFacts}
-            cards={plainLanguageGuide.cards}
-            primaryActionLabel="Open Review Workspace"
-            onPrimaryAction={() => onNavigate?.(warrantyReviewWorkspaceRoute)}
-            secondaryActionLabel="Step Into The Deeper Breakdown"
-            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            guideTitle="Read this warranty page in layers"
-            guideDescription="You can understand this warranty without starting in operations mode. Read the short answer first, take the first move, and only use the deeper proof when you want the reasoning behind it."
-            guideSteps={[
-              {
-                label: "Step 1",
-                title: "Start with the simple answer",
-                detail: "Use the plain-English summary above to understand whether this warranty looks supported, thin, or risky before reading the deeper detail.",
-              },
-              {
-                label: "Step 2",
-                title: "Take the first continuity move",
-                detail: topWarrantyReviewItem?.summary || "Focus on the top warranty blocker first so the most important service or coverage gap is easier to clear.",
-              },
-              {
-                label: "Step 3",
-                title: "Use the deeper layer as proof",
-                detail: "The darker section below explains the evidence: blockers, linked records, documents, snapshots, analytics, and workflow detail.",
-              },
-            ]}
-            translatedTerms={[
-              {
-                term: "Confidence",
-                meaning: bundle?.warrantyDocuments?.length
-                  ? "Confidence means how much contract evidence the page has to support its current read of the warranty."
-                  : "Confidence is limited right now because the page does not have enough warranty evidence yet.",
-              },
-              {
-                term: "Snapshot",
-                meaning: "A snapshot is the normalized version of a contract record, so the page can read warranty facts in a structured way.",
-              },
-              {
-                term: "Linked Records",
-                meaning: "Linked records are the connected household records that help this warranty make sense in the broader asset and service picture.",
-              },
-              {
-                term: "Review Workspace",
-                meaning: "Review Workspace is the shared place to track and assign follow-up when a warranty issue needs more than a quick page read.",
-              },
-            ]}
-            depthTitle="Use the deeper breakdown as supporting proof"
-            depthDescription="The darker section below is where the system shows the analyst evidence behind the simpler warranty story."
-            depthPrimaryActionLabel="Start With Warranty Command"
-            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            depthSecondaryActionLabel="Open Review Workspace"
-            onDepthSecondaryAction={() => onNavigate?.(warrantyReviewWorkspaceRoute)}
-            analysisRef={technicalAnalysisRef}
-            analysisEyebrow="Deeper Review Starts Here"
-            analysisTitle="Technical breakdown: warranty blockers, linked records, documents, snapshots, analytics, and workflow"
-            analysisDescription="Everything below this point is the proof layer. It explains the live warranty blockers, linked records, documents, snapshots, analytics, and the workflow behind the simpler read above."
-          />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              <FriendlyActionTile
+                kicker="Simple Read"
+                title={plainLanguageGuide.cards[0]?.value || "Read the contract status first"}
+                detail={plainLanguageGuide.cards[0]?.detail || warrantyCommandCenter.headline}
+                metric={`${bundle?.warrantyDocuments?.length || 0} document${bundle?.warrantyDocuments?.length === 1 ? "" : "s"}`}
+                tone={warrantyCommandCenter.metrics.critical > 0 ? "alert" : warrantyCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+                statusLabel="Simple Read"
+                actionLabel="See Supporting Details"
+                onAction={scrollToWarrantyTechnicalAnalysis}
+              />
+              <FriendlyActionTile
+                kicker="Best First Step"
+                title={plainLanguageGuide.cards[1]?.value || "Open the review workspace"}
+                detail={plainLanguageGuide.cards[1]?.detail || topWarrantyReviewItem?.summary || "Take the next warranty step."}
+                metric={`${warrantyReviewQueueItems.length} review item${warrantyReviewQueueItems.length === 1 ? "" : "s"}`}
+                tone="warning"
+                statusLabel="Guided Focus"
+                actionLabel="Open Review Workspace"
+                onAction={() => onNavigate(warrantyReviewWorkspaceRoute)}
+              />
+              <FriendlyActionTile
+                kicker="Evidence Support"
+                title={plainLanguageGuide.cards[2]?.value || "Confidence is still forming"}
+                detail={plainLanguageGuide.cards[2]?.detail || "The read strengthens as contract evidence becomes more visible."}
+                metric={`${bundle?.warrantySnapshots?.length || 0} snapshot${bundle?.warrantySnapshots?.length === 1 ? "" : "s"}`}
+                tone={bundle?.warrantyDocuments?.length ? "good" : "warning"}
+                statusLabel={bundle?.warrantyDocuments?.length ? "Well Supported" : "Missing Information"}
+                actionLabel="Upload Files"
+                onAction={() => fileInputRef.current?.click()}
+              />
+            </div>
 
-          <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <StatusBadge label={warrantyType?.display_name || warranty.warranty_type_key} tone="info" />
+              <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+            </div>
+
+            <div ref={technicalAnalysisRef}>
             <SectionCard
               title="Warranty Command"
               subtitle="The strongest warranty blockers, why they matter, and what to do next on this contract."
@@ -790,6 +806,8 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                 </div>
               </div>
             </SectionCard>
+          </div>
+
           </div>
 
           {shouldShowDevDiagnostics() ? (

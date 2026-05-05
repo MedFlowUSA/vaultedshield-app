@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import PolicyAIChat from "../components/policy/PolicyAIChat";
 import PolicySignalsSummaryCard from "../components/policy/PolicySignalsSummaryCard";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import { FriendlyActionTile } from "../components/shared/FriendlyIntelligenceUI";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import { IulReaderPanel } from "../features/iul-reader/IulReaderPanel.jsx";
 import { buildIulReaderModel } from "../features/iul-reader/readerModel.js";
 import {
@@ -271,16 +274,6 @@ function buildIssueGroups(row, ranking) {
   }
 
   return groups;
-}
-
-function reportActionButtonStyle(active = false, primary = false) {
-  if (primary) return actionButtonStyle(true);
-  return {
-    ...actionButtonStyle(false),
-    border: active ? "1px solid #93c5fd" : "1px solid #cbd5e1",
-    background: active ? "#eff6ff" : "#ffffff",
-    color: active ? "#1d4ed8" : "#0f172a",
-  };
 }
 
 function clampScore(value) {
@@ -759,6 +752,10 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     }
   }
 
+  function scrollToPolicyTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function getGeneralLifeScorecardSection(cardTitle) {
     const normalized = String(cardTitle || "").toLowerCase();
     if (normalized.includes("continuity")) return "charge_summary";
@@ -1039,7 +1036,6 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     bundle.policy?.policy_number_masked ||
     "Policy Detail";
   const snapshotCarrier = comparisonRow?.carrier || bundle.policy?.carrier_name || "Carrier unavailable";
-  const snapshotDescription = `${snapshotCarrier} | In-force policy intelligence with live statement interpretation, charge visibility, and evidence support.`;
   const iulDecisionBanner = iulReader?.verdict?.decisionBanner || null;
   const iulRevealTone = getRevealPanelTone(iulDecisionBanner?.status);
 
@@ -1409,69 +1405,66 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     },
   ];
 
-  const pageHeader = (
-    <PageHeader
-      eyebrow={isIulConsoleMode ? "Flagship IUL Review Console" : "In-Force Policy Intelligence"}
-      title={isIulConsoleMode ? `IUL Review Console${snapshotTitle ? `: ${snapshotTitle}` : ""}` : snapshotTitle}
-      description={
-        isIulConsoleMode
-          ? "VaultedShield's standalone in-force IUL review experience. Start with the policy verdict, move into pressure drivers, and then verify the read through illustration support, charges, funding, and chronology."
-          : snapshotDescription
-      }
-      actions={
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-            {isIulConsoleMode ? "Back To Insurance" : "Back"}
-          </button>
-          <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionButtonStyle(false)}>
-            {isIulConsoleMode ? "Compare In Insurance Hub" : "Compare"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowReviewReport((current) => !current)}
-            style={reportActionButtonStyle(showReviewReport, false)}
-          >
-            {showReviewReport ? "Hide Review Report" : "Open Review Report"}
-          </button>
-          <button type="button" onClick={handlePrintReport} style={reportActionButtonStyle(false, true)}>
-            Print Report
-          </button>
-          <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={actionButtonStyle(true)}>
-            {isIulConsoleMode ? "Upload Supporting Policy Files" : "Upload"}
-          </button>
-        </div>
-      }
-    />
-  );
+  const policyHeroActions = [
+    {
+      label: isIulConsoleMode ? "Back To Insurance" : "Back To Insurance",
+      onClick: () => onNavigate?.("/insurance"),
+    },
+    {
+      label: showReviewReport ? "Hide Review Report" : "Open Review Report",
+      onClick: () => setShowReviewReport((current) => !current),
+    },
+    {
+      label: "Print Report",
+      onClick: handlePrintReport,
+    },
+    {
+      label: isIulConsoleMode ? "Upload Supporting Policy Files" : "Upload Files",
+      onClick: () => onNavigate?.("/insurance/life/upload"),
+      kind: "primary",
+    },
+  ];
+  const policyHeroGlanceItems = [
+    { label: "Policy Type", value: snapshotTitle || "Policy detail" },
+    { label: "Current Read", value: ranking?.status || generalLifeScorecard?.overallTone || "Developing" },
+    {
+      label: "Latest Statement",
+      value: comparisonRow?.latest_statement_date ? formatDate(comparisonRow.latest_statement_date) : "Not visible yet",
+    },
+    {
+      label: "Evidence Support",
+      value: comparisonRow?.coi_confidence ? formatDisplayValue(comparisonRow.coi_confidence) : "Still forming",
+    },
+  ];
 
   if (loading) {
     return (
-      <div>
-        {pageHeader}
-        <SectionCard>
-          <div style={{ color: "#64748b" }}>Loading policy detail...</div>
-        </SectionCard>
+      <div style={{ display: "grid", gap: "24px" }}>
+        <CalmEmptyState
+          title="Loading policy detail"
+          description="VaultedShield is pulling the policy, statement, and evidence bundle into one readable view."
+          icon="Policy"
+          tone="info"
+        />
       </div>
     );
   }
 
   if (!bundle.policy && !comparisonRow) {
     return (
-      <div>
-        {pageHeader}
-        <EmptyState
+      <div style={{ display: "grid", gap: "24px" }}>
+        <CalmEmptyState
           title="Policy not found"
-          description={
-            loadError || "This vaulted policy could not be loaded from the insurance intelligence workspace."
-          }
+          description={loadError || "This vaulted policy could not be loaded from the insurance intelligence workspace."}
+          icon="Missing"
+          tone="warning"
         />
       </div>
     );
   }
 
   return (
-    <div>
-      {pageHeader}
+    <div style={{ display: "grid", gap: "24px" }}>
       <div style={{ display: "grid", gap: "20px" }}>
           {isIulConsoleMode ? (
             <section
@@ -1505,136 +1498,32 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
             />
           ) : null}
 
-          <section
+          <FriendlyPageHero
+            eyebrow={isIulConsoleMode ? "Flagship IUL Review Console" : policyPlainEnglishGuide.eyebrow}
+            sectionTitle={isIulConsoleMode ? `IUL Review Console${snapshotTitle ? `: ${snapshotTitle}` : ""}` : snapshotTitle}
+            headline={policyPlainEnglishGuide.title}
+            summary={policyPlainEnglishGuide.summary}
+            transition={policyPlainEnglishGuide.transition}
+            actions={policyHeroActions}
+            score={generalLifeScorecard?.overallScore ?? clampScore((ranking?.score ?? 5) * 10)}
+            scoreTone={generalLifeScorecard?.overallTone || "info"}
+            scoreSubtitle="readiness"
+            scoreIconLabel={ranking?.status || "policy"}
+            asideHeadline={policyActionTiles[0]?.title || "Policy read is still forming"}
+            asideSummary={policyActionTiles[0]?.detail || policyInterpretation.bottom_line_summary}
+            glanceEyebrow="At A Glance"
+            glanceItems={policyHeroGlanceItems}
+          />
+
+          <div
             style={{
               display: "grid",
-              gap: "20px",
-              padding: isTablet ? "24px 18px" : "30px 32px",
-              borderRadius: "28px",
-              background:
-                "radial-gradient(circle at top left, rgba(251,146,60,0.18) 0%, rgba(251,146,60,0) 34%), radial-gradient(circle at top right, rgba(56,189,248,0.14) 0%, rgba(56,189,248,0) 36%), linear-gradient(145deg, rgba(255,247,237,0.98) 0%, rgba(255,255,255,1) 54%, rgba(239,246,255,0.96) 100%)",
-              border: "1px solid rgba(251, 146, 60, 0.22)",
-              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+              gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+              gap: "14px",
             }}
           >
             <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
-                gap: "18px",
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "fit-content",
-                    padding: "7px 12px",
-                    borderRadius: "999px",
-                    background: "rgba(255,255,255,0.78)",
-                    border: "1px solid rgba(251,146,60,0.24)",
-                    boxShadow: "0 10px 24px rgba(251,146,60,0.12)",
-                    fontSize: "11px",
-                    color: "#c2410c",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.12em",
-                    fontWeight: 800,
-                  }}
-                >
-                  {policyPlainEnglishGuide.eyebrow}
-                </div>
-                <div style={{ fontSize: isTablet ? "26px" : "34px", fontWeight: 800, color: "#0f172a", lineHeight: "1.08", letterSpacing: "-0.04em" }}>
-                  {policyPlainEnglishGuide.title}
-                </div>
-                <div style={{ fontSize: isTablet ? "18px" : "20px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45", maxWidth: "42rem" }}>
-                  {policyPlainEnglishGuide.summary}
-                </div>
-                <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "46rem" }}>{policyPlainEnglishGuide.transition}</div>
-              </div>
-
-              <div
-                style={{
-                  padding: isTablet ? "18px 18px" : "22px 22px",
-                  borderRadius: "24px",
-                  background: "rgba(255,255,255,0.86)",
-                  border: "1px solid rgba(255,255,255,0.72)",
-                  display: "grid",
-                  gap: "14px",
-                  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-                  backdropFilter: "blur(10px)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: "9px",
-                      height: "9px",
-                      borderRadius: "999px",
-                      background: "linear-gradient(135deg, #f97316 0%, #fb7185 100%)",
-                      boxShadow: "0 0 0 5px rgba(249,115,22,0.12)",
-                      flexShrink: 0,
-                    }}
-                  />
-                  Quick Read
-                </div>
-                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "10px", color: "#334155" }}>
-                  {policyPlainEnglishGuide.quickFacts.map((item) => (
-                    <li
-                      key={item}
-                      style={{
-                        lineHeight: "1.7",
-                        padding: "10px 12px",
-                        borderRadius: "14px",
-                        background: "rgba(248,250,252,0.92)",
-                        border: "1px solid rgba(226,232,240,0.95)",
-                      }}
-                    >
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const firstSection = quickReviewSections[0]?.section;
-                      if (firstSection) scrollToPolicySection(firstSection);
-                    }}
-                    style={{
-                      ...actionButtonStyle(true),
-                      borderRadius: "999px",
-                      boxShadow: "0 14px 28px rgba(249,115,22,0.24)",
-                    }}
-                  >
-                    Start Review
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    style={{
-                      ...actionButtonStyle(false),
-                      borderRadius: "999px",
-                      background: "rgba(255,255,255,0.88)",
-                      border: "1px solid rgba(148,163,184,0.22)",
-                      boxShadow: "0 12px 24px rgba(15,23,42,0.08)",
-                    }}
-                  >
-                    Step Into The Deeper Breakdown
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                gap: "14px",
-              }}
+              style={{ display: "contents" }}
             >
               {policyActionTiles.map((tile) => (
                 <FriendlyActionTile
@@ -1651,12 +1540,12 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                       scrollToPolicySection(firstQuickReviewSection);
                       return;
                     }
-                    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    scrollToPolicyTechnicalAnalysis();
                   }}
                 />
               ))}
             </div>
-          </section>
+          </div>
 
           <section
             style={{

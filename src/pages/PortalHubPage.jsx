@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import { summarizePortalModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { buildPortalHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
@@ -39,6 +41,7 @@ function getPortalTone(accessStatus) {
 
 export default function PortalHubPage({ onNavigate }) {
   const { isTablet } = useResponsiveLayout();
+  const portalCommandRef = useRef(null);
   const householdState = usePlatformHousehold();
   const [bundle, setBundle] = useState({
     household: null,
@@ -114,66 +117,121 @@ export default function PortalHubPage({ onNavigate }) {
       }),
     [bundle, portalRead]
   );
+  const portalHeroScore = Math.round(
+    Math.max(
+      28,
+      Math.min(
+        92,
+        42 +
+          Number(bundle.readiness.linkedPortalCount || 0) * 8 +
+          Number(bundle.readiness.emergencyRelevantCount || 0) * 4 -
+          Number(bundle.readiness.missingRecoveryCount || 0) * 5
+      )
+    )
+  );
+  const portalHeroTone =
+    portalHeroScore >= 80 ? "good" : portalHeroScore >= 62 ? "info" : portalHeroScore >= 45 ? "warning" : "alert";
+  const portalHeroGlanceItems = [
+    {
+      label: "Household",
+      value:
+        bundle.household?.household_name ||
+        householdState.household?.household_name ||
+        "Working household",
+    },
+    { label: "Portals", value: bundle.readiness.portalCount },
+    { label: "Linked Assets", value: bundle.readiness.linkedPortalCount },
+    { label: "Missing Recovery", value: bundle.readiness.missingRecoveryCount },
+  ];
   const topSplitLayout = isTablet ? "1fr" : "1.3fr 1fr";
   const metricsLayout = isTablet ? "1fr" : "1fr 1fr";
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Portal Hub"
-        title="Household Access Continuity"
-        description="Reusable portal profiles for household-wide continuity, emergency access mapping, and multi-asset linking."
-        actions={
-          <button
-            onClick={() => onNavigate("/assets")}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            View Assets
-          </button>
-        }
-      />
+  function scrollToPortalCommand() {
+    portalCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
-      <SummaryPanel
-        items={[
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
+        eyebrow="Portal Hub"
+        sectionTitle="Household Access Continuity"
+        headline="Start with the access picture, then open the technical continuity proof."
+        summary="This page should make it obvious which portals are active, which recovery paths are weak, and which critical assets still need usable access."
+        transition="The deeper sections below still hold the detailed portal list, filters, and continuity logic. The top layer is here to make the first read feel calm."
+        actions={[
           {
-            label: "Household",
-            value:
-              bundle.household?.household_name ||
-              householdState.household?.household_name ||
-              "Working household",
-            helper: "Current portal continuity context",
-          },
-          { label: "Portals", value: bundle.readiness.portalCount, helper: "Household portal profiles" },
-          { label: "Linked Assets", value: bundle.readiness.linkedPortalCount, helper: "Portal-to-asset links" },
-          {
-            label: "Emergency Relevant",
-            value: bundle.readiness.emergencyRelevantCount,
-            helper: "Marked for continuity",
+            label: "Open Portal Command",
+            onClick: scrollToPortalCommand,
+            kind: "primary",
           },
           {
-            label: "Missing Recovery",
-            value: bundle.readiness.missingRecoveryCount,
-            helper: "Recovery hints still missing",
+            label: "Show Missing Recovery",
+            onClick: () => setActiveFilter("missing_verification"),
           },
           {
-            label: "Critical Assets Without Portals",
-            value: bundle.readiness.criticalAssetsWithoutLinkedPortals.length,
-            helper: "Insurance, banking, retirement, estate, property",
-          },
-          {
-            label: "Continuity Status",
-            value: portalRead.status,
-            helper: "High-level household access-readiness view",
+            label: "View Assets",
+            onClick: () => onNavigate("/assets"),
           },
         ]}
+        score={portalHeroScore}
+        scoreTone={portalHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="access"
+        asideHeadline={portalRead.status || "Access picture is forming"}
+        asideSummary={portalCommand.headline}
+        glanceItems={portalHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={portalCommand.headline}
+          detail="Start with the household access picture before looking at individual portal records."
+          metric={`${bundle.readiness.portalCount} portal${bundle.readiness.portalCount === 1 ? "" : "s"}`}
+          tone={portalHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Portal Command"
+          onAction={scrollToPortalCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={
+            bundle.readiness.missingRecoveryCount > 0
+              ? "Strengthen recovery paths first"
+              : "Check emergency-relevant portals"
+          }
+          detail={
+            bundle.readiness.missingRecoveryCount > 0
+              ? "Missing recovery details create the biggest continuity risk when access matters most."
+              : "Emergency-relevant portals should be the first set you trust."
+          }
+          metric={`${bundle.readiness.missingRecoveryCount} missing`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Filter Portals"
+          onAction={() => setActiveFilter("missing_verification")}
+        />
+        <FriendlyActionTile
+          kicker="Coverage Gap"
+          title={
+            bundle.readiness.criticalAssetsWithoutLinkedPortals.length > 0
+              ? "Some critical assets still lack linked portals"
+              : "Critical assets are linked to portal access"
+          }
+          detail="Portal-to-asset links keep access continuity connected to the broader household system."
+          metric={`${bundle.readiness.criticalAssetsWithoutLinkedPortals.length} open gap${bundle.readiness.criticalAssetsWithoutLinkedPortals.length === 1 ? "" : "s"}`}
+          tone={bundle.readiness.criticalAssetsWithoutLinkedPortals.length > 0 ? "warning" : "good"}
+          statusLabel={bundle.readiness.criticalAssetsWithoutLinkedPortals.length > 0 ? "Needs Review" : "Well Supported"}
+          actionLabel="View Assets"
+          onAction={() => onNavigate("/assets")}
+        />
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topSplitLayout, gap: "18px" }}>
         <SectionCard title="Portal Continuity Summary">
@@ -221,7 +279,7 @@ export default function PortalHubPage({ onNavigate }) {
         </SectionCard>
       </div>
 
-      <div style={{ marginTop: "24px" }}>
+      <div ref={portalCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
           title="Portal Command Center"
           subtitle="The strongest current access, recovery, and verification blockers across the household portal layer."

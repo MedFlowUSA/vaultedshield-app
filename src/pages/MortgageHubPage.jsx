@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   buildMortgageReviewSignals,
   getMortgageLoanType,
@@ -85,6 +86,14 @@ export default function MortgageHubPage({ onNavigate }) {
     setLoadError(result.error?.message || "");
   }
 
+  function scrollToMortgageCommand() {
+    mortgageCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToCreateMortgage() {
+    createLoanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const summaryItems = useMemo(() => {
     const activeCount = mortgageLoans.filter((loan) =>
       ["active", "current"].includes(loan.current_status)
@@ -158,6 +167,18 @@ export default function MortgageHubPage({ onNavigate }) {
     };
   }, [mortgageHubCommand, mortgageLoans.length]);
 
+  const mortgageHeroScore = Math.round(
+    mortgageLoans.length > 0
+      ? Math.min(86, 42 + mortgageLoans.length * 9 + Number(mortgageHubCommand.metrics.active || 0) * 5)
+      : 34
+  );
+  const mortgageHeroTone =
+    mortgageHeroScore >= 80 ? "good" : mortgageHeroScore >= 60 ? "info" : mortgageHeroScore >= 45 ? "warning" : "alert";
+  const mortgageHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   async function handleCreateMortgageLoan(event) {
     event.preventDefault();
     if (creating) return;
@@ -207,36 +228,76 @@ export default function MortgageHubPage({ onNavigate }) {
   }
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Assets"
-        title="Mortgage Hub"
-        description="Start with the loans you know today. VaultedShield will turn them into a clearer mortgage picture before you ever need the deeper debt analysis."
-        actions={
-          <button
-            onClick={() => refreshMortgageLoans()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Mortgage Data
-          </button>
-        }
-      />
-
-      <SummaryPanel items={summaryItems} />
-
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={mortgagePlainLanguageGuide.title}
+        sectionTitle="Mortgage Hub"
+        headline={mortgagePlainLanguageGuide.title}
         summary={mortgagePlainLanguageGuide.summary}
         transition={mortgagePlainLanguageGuide.transition}
-        quickFacts={mortgagePlainLanguageGuide.quickFacts}
-        cards={mortgagePlainLanguageGuide.cards}
-        primaryActionLabel={mortgageLoans.length > 0 ? "Add Another Mortgage" : "Create First Mortgage"}
-        onPrimaryAction={() => createLoanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel="Open Mortgage Command"
-        onSecondaryAction={() => mortgageCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: mortgageLoans.length > 0 ? "Add Another Mortgage" : "Create First Mortgage",
+            onClick: scrollToCreateMortgage,
+            kind: "primary",
+          },
+          {
+            label: "Open Mortgage Command",
+            onClick: scrollToMortgageCommand,
+          },
+          {
+            label: "Refresh Mortgage Data",
+            onClick: () => refreshMortgageLoans(),
+          },
+        ]}
+        score={mortgageHeroScore}
+        scoreTone={mortgageHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="mortgage"
+        asideHeadline={mortgageLoans.length > 0 ? "Financing picture is taking shape" : "Start the financing picture"}
+        asideSummary={mortgageHubCommand.headline}
+        glanceEyebrow="At A Glance"
+        glanceItems={mortgageHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Debt Status"
+          title={mortgageLoans.length > 0 ? mortgageHubCommand.headline : "Start with the first home loan"}
+          detail={mortgagePlainLanguageGuide.cards[0]?.detail || "This page should make the household debt picture easier to understand."}
+          metric={`${mortgageLoans.length} loan${mortgageLoans.length === 1 ? "" : "s"}`}
+          tone={mortgageHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Command"
+          onAction={scrollToMortgageCommand}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={mortgagePlainLanguageGuide.cards[1]?.value || "Create the main home loan first"}
+          detail={mortgagePlainLanguageGuide.cards[1]?.detail || "The clearest next move is the first financing move."}
+          metric={`${mortgageHubCommand.metrics.attention || 0} active prompt${mortgageHubCommand.metrics.attention === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={mortgageLoans.length > 0 ? "Open Command" : "Create Mortgage"}
+          onAction={mortgageLoans.length > 0 ? scrollToMortgageCommand : scrollToCreateMortgage}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={mortgagePlainLanguageGuide.cards[2]?.value || "Deep payoff modeling can come later"}
+          detail={mortgagePlainLanguageGuide.cards[2]?.detail || "The deeper debt analysis stays available after the first clean read."}
+          metric={`${mortgageHubCommand.metrics.active || 0} active loan${mortgageHubCommand.metrics.active === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Loans"
+          onAction={scrollToCreateMortgage}
+        />
+      </div>
 
       <div ref={mortgageCommandRef} style={{ marginTop: "24px" }}>
         <SectionCard
