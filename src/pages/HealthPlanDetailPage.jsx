@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   getHealthCarrier,
   getHealthDocumentClass,
@@ -207,15 +209,6 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
   ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
-  const summaryItems = useMemo(() => {
-    if (!healthPlan) return [];
-    return [
-      { label: "Plan Status", value: healthPlan.plan_status || "unknown", helper: healthPlanType?.display_name || "Health" },
-      { label: "Documents", value: bundle?.healthDocuments?.length || 0, helper: "Health-specific document records" },
-      { label: "Snapshots", value: bundle?.healthSnapshots?.length || 0, helper: "Normalized health records" },
-      { label: "Analytics", value: bundle?.healthAnalytics?.length || 0, helper: "Future health review outputs" },
-    ];
-  }, [bundle, healthPlan, healthPlanType]);
   const plainLanguageGuide = useMemo(() => {
     const documentCount = bundle?.healthDocuments?.length || 0;
     const snapshotCount = bundle?.healthSnapshots?.length || 0;
@@ -352,92 +345,116 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
     setUploading(false);
   }
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Insurance"
-        title={healthPlan?.plan_name || linkedAsset?.asset_name || "Health Plan Detail"}
-        description="Live health plan bundle view backed by health plans, documents, snapshots, analytics, and linked platform assets."
-        actions={
-          <button onClick={() => onNavigate("/insurance/health")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
-            Back to Health Hub
-          </button>
-        }
-      />
+  function scrollToHealthTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
+  const healthHeroGlanceItems = [
+    { label: "Plan Status", value: healthPlan?.plan_status || "Unknown" },
+    { label: "Documents", value: bundle?.healthDocuments?.length || 0 },
+    { label: "Snapshots", value: bundle?.healthSnapshots?.length || 0 },
+    { label: "Analytics", value: bundle?.healthAnalytics?.length || 0 },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
       {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading health plan bundle...</div></SectionCard>
+        <CalmEmptyState
+          title="Loading health plan detail"
+          description="VaultedShield is pulling together the plan, benefits documents, and supporting coverage evidence."
+          icon="Health"
+          tone="info"
+        />
       ) : !healthPlan ? (
-        <EmptyState title="Health plan not found" description={loadError || "This health plan detail page could not load a matching plan record."} />
+        <CalmEmptyState
+          title="Health plan not found"
+          description={loadError || "This health plan detail page could not load a matching plan record."}
+          icon="Missing"
+          tone="warning"
+          actionLabel="Back To Health Hub"
+          onAction={() => onNavigate("/insurance/health")}
+        />
       ) : (
         <>
-          <SummaryPanel items={summaryItems} />
-          <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <StatusBadge label={healthPlanType?.display_name || healthPlan.health_plan_type_key} tone="info" />
-            <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-          </div>
+          <div style={{ display: "grid", gap: "20px" }}>
+            <FriendlyPageHero
+              eyebrow="Insurance"
+              sectionTitle={healthPlan.plan_name || linkedAsset?.asset_name || "Health Plan Detail"}
+              headline={plainLanguageGuide.title}
+              summary={plainLanguageGuide.summary}
+              transition={plainLanguageGuide.transition}
+              actions={[
+                {
+                  label: "Back To Health Hub",
+                  onClick: () => onNavigate("/insurance/health"),
+                },
+                {
+                  label: "Open Review Workspace",
+                  onClick: () => onNavigate(healthReviewWorkspaceRoute),
+                },
+                {
+                  label: "See Supporting Details",
+                  onClick: scrollToHealthTechnicalAnalysis,
+                },
+                {
+                  label: "Upload Plan Files",
+                  onClick: () => fileInputRef.current?.click(),
+                  kind: "primary",
+                },
+              ]}
+              score={Math.min(100, Math.max(0, 42 + (bundle?.healthDocuments?.length || 0) * 8 + (bundle?.healthSnapshots?.length || 0) * 6))}
+              scoreTone={healthCommandCenter.metrics.critical > 0 ? "alert" : healthCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+              scoreSubtitle="support score"
+              scoreIconLabel="health"
+              asideHeadline={plainLanguageGuide.cards[0]?.value || "Health picture is forming"}
+              asideSummary={healthCommandCenter.headline}
+              glanceItems={healthHeroGlanceItems}
+            />
 
-          <PlainLanguageBridge
-            compact
-            title={plainLanguageGuide.title}
-            summary={plainLanguageGuide.summary}
-            transition={plainLanguageGuide.transition}
-            quickFacts={plainLanguageGuide.quickFacts}
-            cards={plainLanguageGuide.cards}
-            primaryActionLabel="Open Review Workspace"
-            onPrimaryAction={() => onNavigate?.(healthReviewWorkspaceRoute)}
-            secondaryActionLabel="Step Into The Deeper Breakdown"
-            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            guideTitle="Read this health-plan page in layers"
-            guideDescription="You do not need the full plan diagnostics to understand what matters. Start with the simple answer, take the first action, and only open the deeper proof when you want the details."
-            guideSteps={[
-              {
-                label: "Step 1",
-                title: "Read the plain answer first",
-                detail: "Use the plain-English summary above to understand whether this health plan looks supported, thin, or risky before reading analyst detail.",
-              },
-              {
-                label: "Step 2",
-                title: "Check the first coverage move",
-                detail: topHealthReviewItem?.summary || "Focus on the top health-plan blocker first so the biggest access or continuity issue is easier to fix.",
-              },
-              {
-                label: "Step 3",
-                title: "Use the deeper review as proof",
-                detail: "The darker layer exists to show the evidence: blockers, documents, snapshots, analytics, and workflow detail.",
-              },
-            ]}
-            translatedTerms={[
-              {
-                term: "Confidence",
-                meaning: bundle?.healthDocuments?.length
-                  ? "Confidence means how much supporting plan evidence the page has to justify its current read."
-                  : "Confidence is limited right now because there are not enough health-plan records attached yet.",
-              },
-              {
-                term: "Snapshot",
-                meaning: "A snapshot is the normalized version of a plan record, so the page can read coverage and continuity facts in a structured way.",
-              },
-              {
-                term: "Plan Records",
-                meaning: "Plan records are the documents, snapshots, and analytics that make it easier to verify what the health plan is actually doing.",
-              },
-              {
-                term: "Review Workspace",
-                meaning: "Review Workspace is the shared place to track and assign follow-up when a health-plan issue needs more than a quick page read.",
-              },
-            ]}
-            depthTitle="Use the deeper breakdown as supporting proof"
-            depthDescription="The darker section below is there to explain why this health plan was scored this way, not to make the first read more intimidating."
-            depthPrimaryActionLabel="Start With Health Command"
-            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            depthSecondaryActionLabel="Open Review Workspace"
-            onDepthSecondaryAction={() => onNavigate?.(healthReviewWorkspaceRoute)}
-            analysisRef={technicalAnalysisRef}
-            analysisEyebrow="Deeper Review Starts Here"
-            analysisTitle="Technical breakdown: health-plan blockers, documents, snapshots, analytics, and workflow"
-            analysisDescription="Everything below this point is the proof layer. It explains the live health-plan blockers, documents, snapshots, analytics, and the workflow behind the simpler read above."
-          />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              <FriendlyActionTile
+                kicker="Simple Read"
+                title={plainLanguageGuide.cards[0]?.value || "Read the plan status first"}
+                detail={plainLanguageGuide.cards[0]?.detail || healthCommandCenter.headline}
+                metric={`${bundle?.healthDocuments?.length || 0} document${bundle?.healthDocuments?.length === 1 ? "" : "s"}`}
+                tone={healthCommandCenter.metrics.critical > 0 ? "alert" : healthCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+                statusLabel="Simple Read"
+                actionLabel="See Supporting Details"
+                onAction={scrollToHealthTechnicalAnalysis}
+              />
+              <FriendlyActionTile
+                kicker="Best First Step"
+                title={plainLanguageGuide.cards[1]?.value || "Open the review workspace"}
+                detail={plainLanguageGuide.cards[1]?.detail || topHealthReviewItem?.summary || "Take the next health-plan step."}
+                metric={`${healthReviewQueueItems.length} review item${healthReviewQueueItems.length === 1 ? "" : "s"}`}
+                tone="warning"
+                statusLabel="Guided Focus"
+                actionLabel="Open Review Workspace"
+                onAction={() => onNavigate(healthReviewWorkspaceRoute)}
+              />
+              <FriendlyActionTile
+                kicker="Evidence Support"
+                title={plainLanguageGuide.cards[2]?.value || "Confidence is still forming"}
+                detail={plainLanguageGuide.cards[2]?.detail || "The read strengthens as benefits documents and evidence become more visible."}
+                metric={`${bundle?.healthSnapshots?.length || 0} snapshot${bundle?.healthSnapshots?.length === 1 ? "" : "s"}`}
+                tone={bundle?.healthDocuments?.length ? "good" : "warning"}
+                statusLabel={bundle?.healthDocuments?.length ? "Well Supported" : "Missing Information"}
+                actionLabel="Upload Files"
+                onAction={() => fileInputRef.current?.click()}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <StatusBadge label={healthPlanType?.display_name || healthPlan.health_plan_type_key} tone="info" />
+              <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+            </div>
+          </div>
 
           <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
             <SectionCard

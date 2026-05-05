@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  CalmEmptyState,
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   getAutoCarrier,
   getAutoDocumentClass,
@@ -207,15 +209,6 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
   ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
 
-  const summaryItems = useMemo(() => {
-    if (!autoPolicy) return [];
-    return [
-      { label: "Policy Status", value: autoPolicy.policy_status || "unknown", helper: autoPolicyType?.display_name || "Auto" },
-      { label: "Documents", value: bundle?.autoDocuments?.length || 0, helper: "Auto-specific document records" },
-      { label: "Snapshots", value: bundle?.autoSnapshots?.length || 0, helper: "Normalized auto records" },
-      { label: "Analytics", value: bundle?.autoAnalytics?.length || 0, helper: "Future auto review outputs" },
-    ];
-  }, [bundle, autoPolicy, autoPolicyType]);
   const plainLanguageGuide = useMemo(() => {
     const documentCount = bundle?.autoDocuments?.length || 0;
     const snapshotCount = bundle?.autoSnapshots?.length || 0;
@@ -352,92 +345,116 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
     setUploading(false);
   }
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Insurance"
-        title={autoPolicy?.policy_name || linkedAsset?.asset_name || "Auto Policy Detail"}
-        description="Live auto policy bundle view backed by auto policies, documents, snapshots, analytics, and linked platform assets."
-        actions={
-          <button onClick={() => onNavigate("/insurance/auto")} style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}>
-            Back to Auto Hub
-          </button>
-        }
-      />
+  function scrollToAutoTechnicalAnalysis() {
+    technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
+  const autoHeroGlanceItems = [
+    { label: "Policy Status", value: autoPolicy?.policy_status || "Unknown" },
+    { label: "Documents", value: bundle?.autoDocuments?.length || 0 },
+    { label: "Snapshots", value: bundle?.autoSnapshots?.length || 0 },
+    { label: "Analytics", value: bundle?.autoAnalytics?.length || 0 },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
       {loading ? (
-        <SectionCard><div style={{ color: "#64748b" }}>Loading auto policy bundle...</div></SectionCard>
+        <CalmEmptyState
+          title="Loading auto policy detail"
+          description="VaultedShield is pulling together the policy, declarations, and supporting auto evidence."
+          icon="Car"
+          tone="info"
+        />
       ) : !autoPolicy ? (
-        <EmptyState title="Auto policy not found" description={loadError || "This auto policy detail page could not load a matching policy record."} />
+        <CalmEmptyState
+          title="Auto policy not found"
+          description={loadError || "This auto policy detail page could not load a matching policy record."}
+          icon="Missing"
+          tone="warning"
+          actionLabel="Back To Auto Hub"
+          onAction={() => onNavigate("/insurance/auto")}
+        />
       ) : (
         <>
-          <SummaryPanel items={summaryItems} />
-          <div style={{ marginTop: "18px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <StatusBadge label={autoPolicyType?.display_name || autoPolicy.auto_policy_type_key} tone="info" />
-            <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-          </div>
+          <div style={{ display: "grid", gap: "20px" }}>
+            <FriendlyPageHero
+              eyebrow="Insurance"
+              sectionTitle={autoPolicy.policy_name || linkedAsset?.asset_name || "Auto Policy Detail"}
+              headline={plainLanguageGuide.title}
+              summary={plainLanguageGuide.summary}
+              transition={plainLanguageGuide.transition}
+              actions={[
+                {
+                  label: "Back To Auto Hub",
+                  onClick: () => onNavigate("/insurance/auto"),
+                },
+                {
+                  label: "Open Review Workspace",
+                  onClick: () => onNavigate(autoReviewWorkspaceRoute),
+                },
+                {
+                  label: "See Supporting Details",
+                  onClick: scrollToAutoTechnicalAnalysis,
+                },
+                {
+                  label: "Upload Policy Files",
+                  onClick: () => fileInputRef.current?.click(),
+                  kind: "primary",
+                },
+              ]}
+              score={Math.min(100, Math.max(0, 42 + (bundle?.autoDocuments?.length || 0) * 8 + (bundle?.autoSnapshots?.length || 0) * 6))}
+              scoreTone={autoCommandCenter.metrics.critical > 0 ? "alert" : autoCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+              scoreSubtitle="support score"
+              scoreIconLabel="auto"
+              asideHeadline={plainLanguageGuide.cards[0]?.value || "Auto picture is forming"}
+              asideSummary={autoCommandCenter.headline}
+              glanceItems={autoHeroGlanceItems}
+            />
 
-          <PlainLanguageBridge
-            compact
-            title={plainLanguageGuide.title}
-            summary={plainLanguageGuide.summary}
-            transition={plainLanguageGuide.transition}
-            quickFacts={plainLanguageGuide.quickFacts}
-            cards={plainLanguageGuide.cards}
-            primaryActionLabel="Open Review Workspace"
-            onPrimaryAction={() => onNavigate?.(autoReviewWorkspaceRoute)}
-            secondaryActionLabel="Step Into The Deeper Breakdown"
-            onSecondaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            guideTitle="Read this auto page in layers"
-            guideDescription="You can understand this auto policy without starting in analyst mode. Read the simple answer first, take the first move, and only open the deeper proof when you want the details behind it."
-            guideSteps={[
-              {
-                label: "Step 1",
-                title: "Start with the policy story",
-                detail: "Use the plain-English summary above to understand whether this auto policy looks supported, thin, or risky before reading diagnostics.",
-              },
-              {
-                label: "Step 2",
-                title: "Take the first coverage move",
-                detail: topAutoReviewItem?.summary || "Focus on the top auto blocker first so the biggest exposure is clearer and easier to fix.",
-              },
-              {
-                label: "Step 3",
-                title: "Use the deeper layer as proof",
-                detail: "The darker sections below explain the evidence: blockers, linked records, documents, snapshots, analytics, and workflow detail.",
-              },
-            ]}
-            translatedTerms={[
-              {
-                term: "Confidence",
-                meaning: bundle?.autoDocuments?.length
-                  ? "Confidence means how much policy evidence the page has to support its current read of the auto coverage."
-                  : "Confidence is limited right now because the page does not have enough auto-policy evidence yet.",
-              },
-              {
-                term: "Snapshot",
-                meaning: "A snapshot is the normalized version of a policy record or declaration page, so the page can read auto coverage facts in a structured way.",
-              },
-              {
-                term: "Linked Records",
-                meaning: "Linked records are the other connected household records that help this policy make sense as part of a bigger protection picture.",
-              },
-              {
-                term: "Review Workspace",
-                meaning: "Review Workspace is the shared place to track and assign follow-up when an auto issue needs more than a quick page read.",
-              },
-            ]}
-            depthTitle="Use the deeper breakdown as supporting proof"
-            depthDescription="The darker section below is where the system shows the analyst evidence behind the simpler auto policy story."
-            depthPrimaryActionLabel="Start With Auto Command"
-            onDepthPrimaryAction={() => technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            depthSecondaryActionLabel="Open Review Workspace"
-            onDepthSecondaryAction={() => onNavigate?.(autoReviewWorkspaceRoute)}
-            analysisRef={technicalAnalysisRef}
-            analysisEyebrow="Deeper Review Starts Here"
-            analysisTitle="Technical breakdown: auto blockers, linked records, documents, snapshots, analytics, and workflow"
-            analysisDescription="Everything below this point is the proof layer. It explains the live auto blockers, linked records, documents, snapshots, analytics, and the workflow behind the simpler read above."
-          />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              <FriendlyActionTile
+                kicker="Simple Read"
+                title={plainLanguageGuide.cards[0]?.value || "Read the policy status first"}
+                detail={plainLanguageGuide.cards[0]?.detail || autoCommandCenter.headline}
+                metric={`${bundle?.autoDocuments?.length || 0} document${bundle?.autoDocuments?.length === 1 ? "" : "s"}`}
+                tone={autoCommandCenter.metrics.critical > 0 ? "alert" : autoCommandCenter.metrics.warning > 0 ? "warning" : "good"}
+                statusLabel="Simple Read"
+                actionLabel="See Supporting Details"
+                onAction={scrollToAutoTechnicalAnalysis}
+              />
+              <FriendlyActionTile
+                kicker="Best First Step"
+                title={plainLanguageGuide.cards[1]?.value || "Open the review workspace"}
+                detail={plainLanguageGuide.cards[1]?.detail || topAutoReviewItem?.summary || "Take the next auto step."}
+                metric={`${autoReviewQueueItems.length} review item${autoReviewQueueItems.length === 1 ? "" : "s"}`}
+                tone="warning"
+                statusLabel="Guided Focus"
+                actionLabel="Open Review Workspace"
+                onAction={() => onNavigate(autoReviewWorkspaceRoute)}
+              />
+              <FriendlyActionTile
+                kicker="Evidence Support"
+                title={plainLanguageGuide.cards[2]?.value || "Confidence is still forming"}
+                detail={plainLanguageGuide.cards[2]?.detail || "The read strengthens as declarations and evidence become more visible."}
+                metric={`${bundle?.autoSnapshots?.length || 0} snapshot${bundle?.autoSnapshots?.length === 1 ? "" : "s"}`}
+                tone={bundle?.autoDocuments?.length ? "good" : "warning"}
+                statusLabel={bundle?.autoDocuments?.length ? "Well Supported" : "Missing Information"}
+                actionLabel="Upload Files"
+                onAction={() => fileInputRef.current?.click()}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <StatusBadge label={autoPolicyType?.display_name || autoPolicy.auto_policy_type_key} tone="info" />
+              <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
+            </div>
+          </div>
 
           <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
             <SectionCard

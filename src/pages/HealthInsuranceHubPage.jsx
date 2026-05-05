@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeHealthModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getHealthPlanType,
@@ -40,6 +42,8 @@ function getStatusTone(status) {
 
 export default function HealthInsuranceHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const healthReadinessRef = useRef(null);
+  const createHealthRef = useRef(null);
   const [healthPlans, setHealthPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -125,25 +129,90 @@ export default function HealthInsuranceHubPage({ onNavigate }) {
     setCreating(false);
   }
 
+  const healthHeroScore = Math.round(
+    healthPlans.length > 0
+      ? Math.min(86, 40 + healthPlans.length * 8 + Number(healthRead.metrics.active || 0) * 4)
+      : 28
+  );
+  const healthHeroTone =
+    healthHeroScore >= 80 ? "good" : healthHeroScore >= 60 ? "info" : healthHeroScore >= 44 ? "warning" : "alert";
+  const healthHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Insurance"
-        title="Health Insurance Hub"
-        description="Live health plan registry for coverage shells, benefits intake, member continuity, and future health-plan parsing."
-        actions={
-          <button
-            onClick={() => refreshHealthPlans()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Health Data
-          </button>
-        }
+        sectionTitle="Health Insurance Hub"
+        headline="Start with the plan picture, then open the deeper benefits detail."
+        summary={healthRead.headline}
+        transition="This top layer should make the health module feel readable first. Documents, snapshots, and deeper coverage review still sit underneath."
+        actions={[
+          {
+            label: healthPlans.length > 0 ? "Add Another Health Plan" : "Create First Health Plan",
+            onClick: () => createHealthRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "See Plan Readiness",
+            onClick: () => healthReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Refresh Health Data",
+            onClick: () => refreshHealthPlans(),
+          },
+        ]}
+        score={healthHeroScore}
+        scoreTone={healthHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="health"
+        asideHeadline={healthPlans.length > 0 ? "Benefits picture is taking shape" : "Start with the first plan"}
+        asideSummary={healthRead.notes[0] || "A few clean plan records make the rest of the module much easier to trust."}
+        glanceItems={healthHeroGlanceItems}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={healthRead.status === "Ready" ? "Benefits picture looks usable" : "Benefits picture is still building"}
+          detail={healthRead.headline}
+          metric={`${healthPlans.length} plan${healthPlans.length === 1 ? "" : "s"}`}
+          tone={healthHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Plan Readiness"
+          onAction={() => healthReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={healthPlans.length > 0 ? "Fill the next obvious plan gap" : "Create the first health plan"}
+          detail={healthRead.notes[0] || "The first useful plan record matters more than perfect completeness."}
+          metric={`${healthRead.metrics.renewalPending || 0} renewal prompt${healthRead.metrics.renewalPending === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={healthPlans.length > 0 ? "Create Plan" : "Get Started"}
+          onAction={() => createHealthRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Detailed benefits parsing can come later"
+          detail="Once the plan shell exists, benefits documents and deeper review can layer in without making the first read harder."
+          metric={`${healthRead.metrics.missingSubscriber || 0} missing subscriber${healthRead.metrics.missingSubscriber === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Refresh Data"
+          onAction={() => refreshHealthPlans()}
+        />
+      </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+      <div ref={healthReadinessRef} style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Benefits Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -221,7 +290,7 @@ export default function HealthInsuranceHubPage({ onNavigate }) {
           )}
         </SectionCard>
 
-        <div style={{ display: "grid", gap: "18px" }}>
+        <div ref={createHealthRef} style={{ display: "grid", gap: "18px" }}>
           <SectionCard title="Create Health Plan" subtitle="Start with the core plan record, then add documents and deeper review detail over time.">
             <form onSubmit={handleCreateHealthPlan} style={{ display: "grid", gap: "12px" }}>
               <select value={form.health_plan_type_key} onChange={(event) => setForm((current) => ({ ...current, health_plan_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>

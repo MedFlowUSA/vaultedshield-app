@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
-import PlainLanguageBridge from "../components/shared/PlainLanguageBridge";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeAssetsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { createAsset, listAssets } from "../lib/supabase/platformData";
@@ -185,42 +186,90 @@ export default function AssetsHomePage({ onNavigate }) {
     };
   }, [assetRead, assets.length, householdState.household?.household_name]);
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Assets"
-        title="Household Asset Map"
-        description="Start with the core things this household owns or relies on. The deeper analysis can come after the basic map feels right."
-      />
-      <SummaryPanel
-        items={[
-          { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Tracked Assets", value: assets.length, helper: "Visible household asset records" },
-          { label: "Insurance Assets", value: assets.filter((item) => item.asset_category === "insurance").length, helper: "Policies and insurance-linked records" },
-          { label: "Active Assets", value: assets.filter((item) => item.status === "active").length, helper: "Current active records" },
-          { label: "Readiness", value: assetRead.status, helper: "How usable the household asset map looks right now" },
-        ]}
-      />
+  const assetHeroScore = Math.round(
+    assets.length > 0
+      ? Math.min(88, 38 + assets.length * 4 + Number(assetRead.metrics.categories || 0) * 6)
+      : 26
+  );
+  const assetHeroTone =
+    assetHeroScore >= 80 ? "good" : assetHeroScore >= 60 ? "info" : assetHeroScore >= 44 ? "warning" : "alert";
+  const assetHeroGlanceItems = [
+    { label: "Working Household", value: householdState.household?.household_name || "Loading" },
+    { label: "Tracked Assets", value: assets.length },
+    { label: "Insurance Assets", value: assets.filter((item) => item.asset_category === "insurance").length },
+    { label: "Active Assets", value: assets.filter((item) => item.status === "active").length },
+  ];
 
-      <PlainLanguageBridge
-        eyebrow="Start Here"
-        title={assetPlainLanguageGuide.title}
+  return (
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
+        eyebrow="Assets"
+        sectionTitle="Household Asset Map"
+        headline={assetPlainLanguageGuide.title}
         summary={assetPlainLanguageGuide.summary}
         transition={assetPlainLanguageGuide.transition}
-        quickFacts={assetPlainLanguageGuide.quickFacts}
-        cards={assetPlainLanguageGuide.cards}
-        primaryActionLabel={assets.length > 0 ? "Add Another Asset" : "Add First Asset"}
-        onPrimaryAction={() => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        secondaryActionLabel={assets.length > 0 ? "See Asset Registry" : "See Readiness Snapshot"}
-        onSecondaryAction={() =>
-          (assets.length > 0 ? assetRegistryRef.current : assetReadinessRef.current)?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          })
-        }
-        compact={isTablet}
-        showAnalysisDivider={false}
+        actions={[
+          {
+            label: assets.length > 0 ? "Add Another Asset" : "Add First Asset",
+            onClick: () => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: assets.length > 0 ? "See Asset Registry" : "See Readiness Snapshot",
+            onClick: () =>
+              (assets.length > 0 ? assetRegistryRef.current : assetReadinessRef.current)?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              }),
+          },
+        ]}
+        score={assetHeroScore}
+        scoreTone={assetHeroTone}
+        scoreSubtitle="map score"
+        scoreIconLabel="assets"
+        asideHeadline={assets.length > 0 ? "Household map is taking shape" : "Start with a few anchor records"}
+        asideSummary={assetRead.headline}
+        glanceItems={assetHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={assetPlainLanguageGuide.cards[0]?.value || "Read the household map first"}
+          detail={assetPlainLanguageGuide.cards[0]?.detail || assetRead.headline}
+          metric={`${assets.length} asset${assets.length === 1 ? "" : "s"}`}
+          tone={assetHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Readiness"
+          onAction={() => assetReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={assetPlainLanguageGuide.cards[1]?.value || "Start with the first anchor record"}
+          detail={assetPlainLanguageGuide.cards[1]?.detail || "A few good records are enough to make the platform much easier to trust."}
+          metric={`${assetRead.metrics.categories || 0} categor${assetRead.metrics.categories === 1 ? "y" : "ies"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={assets.length > 0 ? "Add Asset" : "Get Started"}
+          onAction={() => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title={assetPlainLanguageGuide.cards[2]?.value || "Edge-case detail can come later"}
+          detail={assetPlainLanguageGuide.cards[2]?.detail || "The point is to create a usable household map first."}
+          metric={`${assetRead.metrics.missingInstitution || 0} missing institution${assetRead.metrics.missingInstitution === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Open Registry"
+          onAction={() => assetRegistryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <div ref={assetReadinessRef} style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topRailLayout, gap: "18px" }}>
         <SectionCard title="Asset Map Readiness">

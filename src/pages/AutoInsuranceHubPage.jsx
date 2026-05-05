@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeAutoInsuranceModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import {
   getAutoPolicyType,
@@ -39,6 +41,8 @@ function getStatusTone(status) {
 
 export default function AutoInsuranceHubPage({ onNavigate }) {
   const householdState = usePlatformHousehold();
+  const autoReadinessRef = useRef(null);
+  const createAutoRef = useRef(null);
   const [autoPolicies, setAutoPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -125,25 +129,90 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
     setCreating(false);
   }
 
+  const autoHeroScore = Math.round(
+    autoPolicies.length > 0
+      ? Math.min(86, 40 + autoPolicies.length * 8 + Number(autoRead.metrics.active || 0) * 4)
+      : 28
+  );
+  const autoHeroTone =
+    autoHeroScore >= 80 ? "good" : autoHeroScore >= 60 ? "info" : autoHeroScore >= 44 ? "warning" : "alert";
+  const autoHeroGlanceItems = summaryItems.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Insurance"
-        title="Auto Insurance Hub"
-        description="Live auto policy registry for declarations intake, vehicle continuity, and future coverage parsing."
-        actions={
-          <button
-            onClick={() => refreshAutoPolicies()}
-            style={{ border: "1px solid #cbd5e1", background: "#ffffff", borderRadius: "10px", padding: "10px 14px", fontWeight: 700, cursor: "pointer" }}
-          >
-            Refresh Auto Data
-          </button>
-        }
+        sectionTitle="Auto Insurance Hub"
+        headline="Start with the vehicle protection picture, then open the deeper policy detail."
+        summary={autoRead.headline}
+        transition="This top layer should make the auto module readable in seconds. Declarations, snapshots, and deeper coverage analysis still sit underneath."
+        actions={[
+          {
+            label: autoPolicies.length > 0 ? "Add Another Auto Policy" : "Create First Auto Policy",
+            onClick: () => createAutoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "See Auto Readiness",
+            onClick: () => autoReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Refresh Auto Data",
+            onClick: () => refreshAutoPolicies(),
+          },
+        ]}
+        score={autoHeroScore}
+        scoreTone={autoHeroTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="auto"
+        asideHeadline={autoPolicies.length > 0 ? "Auto coverage is taking shape" : "Start with the first vehicle policy"}
+        asideSummary={autoRead.notes[0] || "A few clean policy records make the rest of the module much easier to trust."}
+        glanceItems={autoHeroGlanceItems}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={autoRead.status === "Ready" ? "Auto picture looks usable" : "Auto picture is still building"}
+          detail={autoRead.headline}
+          metric={`${autoPolicies.length} polic${autoPolicies.length === 1 ? "y" : "ies"}`}
+          tone={autoHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Auto Readiness"
+          onAction={() => autoReadinessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={autoPolicies.length > 0 ? "Fill the next obvious coverage gap" : "Create the first auto policy"}
+          detail={autoRead.notes[0] || "The first useful policy record matters more than perfect completeness."}
+          metric={`${autoRead.metrics.renewalPending || 0} renewal prompt${autoRead.metrics.renewalPending === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={autoPolicies.length > 0 ? "Create Policy" : "Get Started"}
+          onAction={() => createAutoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Detailed parsing can come later"
+          detail="Once the policy shell exists, declarations and deeper review can layer in without making the first read harder."
+          metric={`${autoRead.metrics.missingNamedInsured || 0} missing driver${autoRead.metrics.missingNamedInsured === 1 ? "" : "s"}`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Refresh Data"
+          onAction={() => refreshAutoPolicies()}
+        />
+      </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
+      <div ref={autoReadinessRef} style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
         <SectionCard title="Coverage Readiness">
           <div style={{ display: "grid", gap: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
@@ -221,7 +290,7 @@ export default function AutoInsuranceHubPage({ onNavigate }) {
           )}
         </SectionCard>
 
-        <div style={{ display: "grid", gap: "18px" }}>
+        <div ref={createAutoRef} style={{ display: "grid", gap: "18px" }}>
           <SectionCard title="Create Auto Policy" subtitle="Start with the core policy record, then deepen the file with documents and review details.">
             <form onSubmit={handleCreateAutoPolicy} style={{ display: "grid", gap: "12px" }}>
               <select value={form.auto_policy_type_key} onChange={(event) => setForm((current) => ({ ...current, auto_policy_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
