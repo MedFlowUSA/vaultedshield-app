@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -90,29 +93,93 @@ export default function GuidanceCenterPage({ onNavigate }) {
     ],
     [counts?.assetCount, intelligenceBundle?.assets?.length, savedPolicies?.length]
   );
-  const headerActions = (
-    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-      <button type="button" onClick={() => onNavigate?.("/dashboard")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-        Open Dashboard
-      </button>
-      <button type="button" onClick={() => onNavigate?.("/upload-center")} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-        Open Upload Center
-      </button>
-      <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}>
-        Open Insurance Hub
-      </button>
-    </div>
-  );
   const contextMetricColumns = isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
+  const guidanceHeroScore = Math.round(
+    Math.max(
+      28,
+      Math.min(
+        92,
+        onboardingProgressPercent > 0
+          ? onboardingProgressPercent
+          : 24 +
+            (counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0) * 4 +
+            (savedPolicies?.length || 0) * 6 +
+            (intelligenceBundle?.documents?.length ?? 0)
+      )
+    )
+  );
+  const guidanceHeroTone =
+    guidanceHeroScore >= 80 ? "good" : guidanceHeroScore >= 60 ? "info" : guidanceHeroScore >= 44 ? "warning" : "alert";
+  const guidanceHeroGlanceItems = summaryItems.slice(0, 4).map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+  const householdRecordCount =
+    (counts?.assetCount ?? intelligenceBundle?.assets?.length ?? 0) + (savedPolicies?.length || 0);
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="Guidance Center"
-        title="How To Use VaultedShield"
-        description="Use this page to understand where to start, what each major feature is for, and how the app is meant to be used as a household operating system."
-        actions={headerActions}
+        sectionTitle="How To Use VaultedShield"
+        headline={onboardingMission.headline}
+        summary={onboardingMission.explanation}
+        transition="This top layer should answer where to start, what the best next move is, and which page to open first. The deeper walkthroughs, FAQs, and examples stay below."
+        actions={[
+          { label: "Open Dashboard", onClick: () => onNavigate?.("/dashboard") },
+          { label: "Open Upload Center", onClick: () => onNavigate?.("/upload-center") },
+          { label: "Open Insurance Hub", onClick: () => onNavigate?.("/insurance"), kind: "primary" },
+        ]}
+        score={guidanceHeroScore}
+        scoreTone={guidanceHeroTone}
+        scoreSubtitle="guided score"
+        scoreIconLabel="guide"
+        asideHeadline={onboardingMission.stageLabel}
+        asideSummary={onboardingMission.unlockPreview}
+        glanceItems={guidanceHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={blankState.isBlank ? "Guidance is ready to orient a new household" : "Guidance reflects the current household state"}
+          detail={onboardingMission.completionSummary}
+          metric={`${onboardingProgressPercent}% mapped`}
+          tone={guidanceHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Dashboard"
+          onAction={() => onNavigate?.("/dashboard")}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={onboardingMission.nextStep ? `Open ${onboardingMission.nextStep.label}` : "Start with the guided dashboard"}
+          detail={
+            onboardingMission.nextStep?.whyItMatters ||
+            "Use one clear next step first. The rest of the guidance becomes much more obvious once a real workflow is in motion."
+          }
+          metric={`${householdRecordCount} live record${householdRecordCount === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel={onboardingMission.nextStep ? `Open ${onboardingMission.nextStep.label}` : "Open Dashboard"}
+          onAction={() => onNavigate?.(onboardingMission.nextStep?.route || "/dashboard")}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="You do not need every module on day one"
+          detail="The app is designed to deepen with the household. Start with one lane, then let the rest of the product unfold behind it."
+          metric={`${GUIDE_FEATURES.length} feature guides`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Ask Guide"
+          onAction={() => document.querySelector('[data-guidance-qa="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <SectionCard
         title="Start Here"
@@ -311,6 +378,7 @@ export default function GuidanceCenterPage({ onNavigate }) {
       ) : null}
 
       <SectionCard
+        data-guidance-qa="true"
         title="Ask VaultedShield Guide"
         subtitle="Ask practical questions about navigation, uploads, workflows, feature purpose, and where specific work should happen."
       >

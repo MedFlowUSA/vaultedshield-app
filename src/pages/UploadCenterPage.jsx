@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import DocumentTable from "../components/shared/DocumentTable";
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeUploadCenterModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { isSupabaseConfigured } from "../lib/supabase/client";
 import {
@@ -384,24 +386,82 @@ export default function UploadCenterPage() {
   const queueUploadingCount = queue.filter((item) => item.status === "uploading").length;
   const queueSavedCount = queue.filter((item) => item.status === "saved").length;
   const queueFailedCount = queue.filter((item) => item.status === "failed").length;
+  const uploadHeroScore = Math.round(
+    Math.max(
+      26,
+      Math.min(90, 34 + Number(uploadRead.metrics.assetLinkedDocuments || 0) * 5 + Number(uploadRead.metrics.savedQueue || 0) * 6 + documents.length)
+    )
+  );
+  const uploadHeroTone =
+    uploadHeroScore >= 80 ? "good" : uploadHeroScore >= 60 ? "info" : uploadHeroScore >= 44 ? "warning" : "alert";
+  const uploadHeroGlanceItems = [
+    { label: "Working Household", value: householdState.household?.household_name || "Loading" },
+    { label: "Assets Available", value: assets.length },
+    { label: "Queued Files", value: queue.length },
+    { label: "Saved Documents", value: documents.length },
+  ];
 
   return (
     <div style={{ display: "grid", gap: "24px", minWidth: 0, maxWidth: "100%", overflowX: "clip" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="Upload Center"
-        title="Unified Upload Center"
-        description="Bring household documents into VaultedShield quickly, then add deeper metadata only when it helps the review."
+        sectionTitle="Unified Upload Center"
+        headline="Bring household documents in quickly, then add deeper metadata only when it actually helps."
+        summary={uploadRead.headline}
+        transition="This top layer should make intake feel simple: what kind of document this is, whether the queue is healthy, and what to do next. The full upload workflow stays below."
+        actions={[
+          { label: "Select Files", onClick: () => fileInputRef.current?.click(), kind: "primary" },
+          nativeCameraAvailable
+            ? { label: "Use Camera", onClick: handleCameraCapture }
+            : { label: "Review Queue", onClick: () => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+        ]}
+        score={uploadHeroScore}
+        scoreTone={uploadHeroTone}
+        scoreSubtitle="intake score"
+        scoreIconLabel="upload"
+        asideHeadline={queue.length > 0 ? "Upload work is in motion" : "Start with the first useful document"}
+        asideSummary={uploadRead.notes[0] || "You can keep this simple and still strengthen the household file quickly."}
+        glanceItems={uploadHeroGlanceItems}
       />
 
-      <SummaryPanel
-        items={[
-          { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Assets Available", value: assets.length, helper: "Optional document attachment targets" },
-          { label: "Queued Files", value: queue.length, helper: "Current upload queue" },
-          { label: "Saved Documents", value: documents.length, helper: "Household documents already on file" },
-          { label: "Intake Status", value: uploadRead.status, helper: "Overall upload readiness" },
-        ]}
-      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={uploadRead.status === "Ready" ? "Intake pipeline looks usable" : "Intake pipeline is still building"}
+          detail={uploadRead.headline}
+          metric={`${queue.length} queued`}
+          tone={uploadHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Select Files"
+          onAction={() => fileInputRef.current?.click()}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={queue.length > 0 ? "Finish the current upload queue" : "Choose the document category first"}
+          detail={uploadRead.notes[0] || "A clean category choice makes the rest of the upload feel much easier."}
+          metric={`${queueReadyCount} ready`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Review Queue"
+          onAction={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Advanced metadata can come later"
+          detail="Start with the file and the closest category. VaultedShield can deepen the record after intake."
+          metric={`${queueSavedCount} saved`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Open Queue"
+          onAction={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <div
         style={{
@@ -689,7 +749,11 @@ export default function UploadCenterPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Ready For Upload" subtitle="Selected files, current status, and what will happen next.">
+        <SectionCard
+          data-upload-queue="true"
+          title="Ready For Upload"
+          subtitle="Selected files, current status, and what will happen next."
+        >
           <div
             style={{
               display: "grid",

@@ -1,7 +1,9 @@
 import { useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   ACCOUNT_DELETION_SCOPE_ITEMS,
   requiresDeletionReauth,
@@ -73,6 +75,27 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
   const authMode = accessPortal?.authMode || "local";
   const isSupabaseAccount = authMode === "supabase";
   const needsReauth = isSupabaseAccount && requiresDeletionReauth(session);
+  const accountHeroScore = Math.round(
+    Math.max(
+      34,
+      Math.min(
+        92,
+        38 +
+          (session.email ? 16 : 0) +
+          (session.householdName ? 12 : 0) +
+          (accessPortal?.currentPlan?.label ? 12 : 0) +
+          (isSupabaseAccount ? 10 : 6)
+      )
+    )
+  );
+  const accountHeroTone =
+    accountHeroScore >= 80 ? "good" : accountHeroScore >= 60 ? "info" : accountHeroScore >= 44 ? "warning" : "alert";
+  const accountHeroGlanceItems = [
+    { label: "Email", value: session.email || "Signed out" },
+    { label: "Household", value: session.householdName || "Working Household" },
+    { label: "Plan", value: accessPortal?.currentPlan?.label || "Free" },
+    { label: "Auth Mode", value: isSupabaseAccount ? "Supabase" : "Local" },
+  ];
 
   function openDeleteModal() {
     setSurfaceError("");
@@ -169,23 +192,85 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
   }
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Account"
-        title="Account Center"
-        description="Legal links, session details, and account controls that need to stay clean and review-friendly across iOS and Android."
-      />
-
-      <SummaryPanel
-        items={[
-          { label: "Email", value: session.email || "Signed out", helper: "Authenticated account email" },
-          { label: "Household", value: session.householdName || "Working Household", helper: "Current workspace name" },
-          { label: "Plan", value: accessPortal?.currentPlan?.label || "Free", helper: "Current access tier" },
-          { label: "Auth Mode", value: isSupabaseAccount ? "Supabase" : "Local", helper: "Identity provider mode" },
+        sectionTitle="Account Center"
+        headline="Keep the household account easy to understand before anyone needs deeper legal or access controls."
+        summary={
+          session.email
+            ? "Your session details, legal links, and account controls are available in one place."
+            : "This surface is ready, but the account still needs an active signed-in session to feel complete."
+        }
+        transition="This top layer keeps the account page calm: what account is active, where the legal links live, and what control matters next. The destructive actions and compliance notes stay below."
+        actions={[
+          {
+            label: "Open Privacy Policy",
+            onClick: () => onNavigate?.("/privacy-policy"),
+            kind: "primary",
+          },
+          {
+            label: "Open Terms Of Service",
+            onClick: () => onNavigate?.("/terms-of-service"),
+          },
+          {
+            label: "Sign Out",
+            onClick: handleSignOut,
+          },
         ]}
+        score={accountHeroScore}
+        scoreTone={accountHeroTone}
+        scoreSubtitle="account score"
+        scoreIconLabel="account"
+        asideHeadline={isSupabaseAccount ? "Managed account controls are active" : "Local account controls are available"}
+        asideSummary={
+          isSupabaseAccount
+            ? "Supabase-backed identity is active, so legal access and destructive controls can stay in one governed place."
+            : "This device is using the local account mode, which is useful for demo and sandbox work but lighter on identity controls."
+        }
+        glanceItems={accountHeroGlanceItems}
       />
 
-      <div style={{ marginTop: "24px", display: "grid", gap: "18px" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={session.email ? "Account looks reachable" : "Account needs sign-in context"}
+          detail="Legal links, account controls, and the active workspace details are grouped here without forcing the technical or compliance details first."
+          metric={accessPortal?.currentPlan?.label || "Free plan"}
+          tone={accountHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Privacy Policy"
+          onAction={() => onNavigate?.("/privacy-policy")}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title="Review the account control path"
+          detail="Make sure sign-out and permanent deletion are understandable before you need them in a real household handoff."
+          metric={needsReauth ? "reauth needed" : "controls ready"}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Open Controls"
+          onAction={() => document.querySelector('[data-account-controls="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Store and compliance polish can come after the core controls"
+          detail="The most important work is still making the account actions understandable and safe. Release-detail cleanup can follow."
+          metric={isSupabaseAccount ? "managed auth" : "local auth"}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Notes"
+          onAction={() => document.querySelector('[data-store-readiness="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: "18px" }}>
         <SectionCard title="Legal" subtitle="These links should remain reachable in the app and in store metadata.">
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" onClick={() => onNavigate?.("/privacy-policy")} style={actionButtonStyle()}>
@@ -200,7 +285,11 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Account Controls" subtitle="Users can request permanent deletion directly in-app without contacting support.">
+        <SectionCard
+          data-account-controls="true"
+          title="Account Controls"
+          subtitle="Users can request permanent deletion directly in-app without contacting support."
+        >
           <div style={{ display: "grid", gap: "14px" }}>
             <div
               style={{
@@ -231,7 +320,11 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Store Readiness Notes" subtitle="Highest-signal account and compliance items still open.">
+        <SectionCard
+          data-store-readiness="true"
+          title="Store Readiness Notes"
+          subtitle="Highest-signal account and compliance items still open."
+        >
           <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
             <li>Native iOS and Android project folders now exist, but signing and archive validation still need a native release pass.</li>
             <li>Camera usage text and manifest coverage are now started, but the final permission review still needs to be completed against the shipped feature set.</li>

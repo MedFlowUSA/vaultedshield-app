@@ -1,6 +1,7 @@
-export default function SectionCard({ title, subtitle, children, accent = "#e2e8f0" }) {
+export default function SectionCard({ title, subtitle, children, accent = "#e2e8f0", ...rest }) {
   return (
     <section
+      {...rest}
       style={{
         background: "#ffffff",
         border: `1px solid ${accent}`,

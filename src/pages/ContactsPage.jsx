@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import ContactCard from "../components/shared/ContactCard";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeContactsModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { createContact, listContacts } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
@@ -96,22 +98,76 @@ export default function ContactsPage() {
   const contactRead = summarizeContactsModule(contacts);
   const topRailLayout = isTablet ? "1fr" : "1.35fr 1fr";
   const contentRailLayout = isTablet ? "1fr" : "1fr 1.25fr";
+  const contactHeroScore = Math.round(
+    contacts.length > 0
+      ? Math.min(88, 34 + contacts.length * 5 + Number(contactRead.metrics.successorContacts || 0) * 8)
+      : 24
+  );
+  const contactHeroTone =
+    contactHeroScore >= 80 ? "good" : contactHeroScore >= 60 ? "info" : contactHeroScore >= 44 ? "warning" : "alert";
+  const contactHeroGlanceItems = [
+    { label: "Working Household", value: householdState.household?.household_name || "Loading" },
+    { label: "Contact Records", value: contacts.length },
+    { label: "Emergency Use", value: contacts.filter((item) => item.contact_type === "family" || item.contact_type === "executor").length },
+    { label: "Advisors", value: contactRead.metrics.advisorContacts },
+  ];
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Contacts"
-        title="Household and Advisor Contacts"
-        description="Household, advisor, trustee, executor, and institution contacts now read from the live platform directory."
+        sectionTitle="Household and Advisor Contacts"
+        headline="Make the people around the household easy to reach before an urgent moment forces the issue."
+        summary={contactRead.headline}
+        transition="This top layer should answer whether the directory feels usable. The deeper contact list and create flow stay below."
+        actions={[]}
+        score={contactHeroScore}
+        scoreTone={contactHeroTone}
+        scoreSubtitle="directory score"
+        scoreIconLabel="contacts"
+        asideHeadline={contacts.length > 0 ? "Directory is taking shape" : "Start with the first key contact"}
+        asideSummary={contactRead.notes[0] || "A few trusted contacts can make the whole household file feel more usable."}
+        glanceItems={contactHeroGlanceItems}
       />
-      <SummaryPanel
-        items={[
-          { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Contact Records", value: contacts.length, helper: "Live Supabase directory" },
-          { label: "Emergency Use", value: contacts.filter((item) => item.contact_type === "family" || item.contact_type === "executor").length, helper: "Family and successor contacts" },
-          { label: "Readiness", value: contactRead.status, helper: "Continuity strength of the current directory" },
-        ]}
-      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={contactRead.status === "Ready" ? "Directory looks usable" : "Directory is still building"}
+          detail={contactRead.headline}
+          metric={`${contacts.length} contact${contacts.length === 1 ? "" : "s"}`}
+          tone={contactHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Add Contact"
+          onAction={() => document.querySelector('input[placeholder="Full name"]')?.scrollIntoView({ behavior: "smooth", block: "center" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={contacts.length > 0 ? "Fill the next missing role" : "Add the first family or advisor contact"}
+          detail={contactRead.notes[0] || "Start with the people you would actually need in a handoff or emergency."}
+          metric={`${contactRead.metrics.missingDirectReach || 0} missing reach`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="See Directory"
+          onAction={() => document.querySelector('[data-contacts-directory="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Perfect notes can come later"
+          detail="Direct contact details matter more than fully polished metadata on the first pass."
+          metric={`${contactRead.metrics.institutionContacts || 0} institution`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Review Contacts"
+          onAction={() => document.querySelector('[data-contacts-directory="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topRailLayout, gap: "18px" }}>
         <SectionCard title="Directory Readiness">
@@ -195,7 +251,7 @@ export default function ContactsPage() {
           </form>
         </SectionCard>
 
-        <SectionCard title="Live Contact Directory" subtitle="Current working household contacts from Supabase.">
+        <SectionCard data-contacts-directory="true" title="Live Contact Directory" subtitle="Current working household contacts from Supabase.">
           {contacts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {contacts.map((contact) => (

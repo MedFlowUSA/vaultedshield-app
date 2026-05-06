@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { summarizeVaultModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { listHouseholdDocuments } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
@@ -63,23 +65,86 @@ export default function VaultPage({ onNavigate }) {
   const vaultRead = useMemo(() => summarizeVaultModule(documents), [documents]);
   const topRailLayout = isTablet ? "1fr" : "1.35fr 1fr";
   const contentRailLayout = isTablet ? "1fr" : "1.4fr 1fr";
+  const vaultHeroScore = Math.round(
+    documents.length > 0
+      ? Math.min(90, 36 + documents.length * 3 + Number(vaultRead.metrics.assetLinked || 0) * 5)
+      : 24
+  );
+  const vaultHeroTone =
+    vaultHeroScore >= 80 ? "good" : vaultHeroScore >= 60 ? "info" : vaultHeroScore >= 44 ? "warning" : "alert";
+  const vaultHeroGlanceItems = [
+    { label: "Working Household", value: householdState.household?.household_name || "Loading" },
+    { label: "Household Documents", value: documents.length },
+    { label: "Stored Records", value: documents.filter((item) => item.storage_path).length },
+    { label: "Needs Review", value: documents.filter((item) => item.processing_status === "needs_review").length },
+  ];
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Vault"
-        title="Household Vault"
-        description="Keep the household's shared documents, supporting records, and review evidence in one durable place."
-      />
-      <SummaryPanel
-        items={[
-          { label: "Working Household", value: householdState.household?.household_name || "Loading", helper: "Current platform context" },
-          { label: "Household Documents", value: documents.length, helper: "Shared records across the household" },
-          { label: "Stored Records", value: documents.filter((item) => item.storage_path).length, helper: "Documents with storage references" },
-          { label: "Needs Review", value: documents.filter((item) => item.processing_status === "needs_review").length, helper: "Document processing watchlist" },
-          { label: "Vault Status", value: vaultRead.status, helper: "High-level document continuity read" },
+        sectionTitle="Household Vault"
+        headline="Keep the household record in one durable place, then open details only when they matter."
+        summary={vaultRead.headline}
+        transition="The vault should feel calm first: what is stored, what still needs attention, and where to go next. The deeper document register remains below."
+        actions={[
+          {
+            label: "Open Upload Center",
+            onClick: () => onNavigate?.("/upload-center"),
+            kind: "primary",
+          },
+          {
+            label: "Upload Policy Files",
+            onClick: () => onNavigate?.("/insurance/life/upload"),
+          },
         ]}
+        score={vaultHeroScore}
+        scoreTone={vaultHeroTone}
+        scoreSubtitle="vault score"
+        scoreIconLabel="vault"
+        asideHeadline={documents.length > 0 ? "Household record is taking shape" : "Start with a few core documents"}
+        asideSummary={vaultRead.notes[0] || "A few shared records make the broader household picture much easier to trust."}
+        glanceItems={vaultHeroGlanceItems}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={vaultRead.status === "Ready" ? "Vault looks usable" : "Vault is still building"}
+          detail={vaultRead.headline}
+          metric={`${documents.length} doc${documents.length === 1 ? "" : "s"}`}
+          tone={vaultHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Upload Center"
+          onAction={() => onNavigate?.("/upload-center")}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={documents.length > 0 ? "Add the next missing core record" : "Upload the first household document"}
+          detail={vaultRead.notes[0] || "The first useful records matter more than perfect organization."}
+          metric={`${vaultRead.metrics.review || 0} review item${vaultRead.metrics.review === 1 ? "" : "s"}`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Upload Document"
+          onAction={() => onNavigate?.("/upload-center")}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Specialized parsing stays in module workflows"
+          detail="The vault keeps the shared record clean while deeper life-policy intelligence remains in its dedicated path."
+          metric={`${vaultRead.metrics.assetLinked || 0} asset-linked`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="Open IUL Upload"
+          onAction={() => onNavigate?.("/insurance/life/upload")}
+        />
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: topRailLayout, gap: "18px" }}>
         <SectionCard title="Vault Readiness">
