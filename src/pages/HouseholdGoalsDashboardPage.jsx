@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
-import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
+import SectionCard from "../components/shared/SectionCard";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
@@ -584,64 +586,87 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   }, [activeCollegePlan, insuranceGaps, insuranceSummary, mortgageSummary, priorityItems, propertySummary, retirementReadiness]);
 
   const cardGrid = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
+  const planningHeroScore = Math.round(
+    Math.max(
+      34,
+      Math.min(
+        90,
+        (retirementReadiness?.readinessScore || 0) * 0.4 +
+          (activeCollegePlan?.readinessScore || 0) * 0.3 +
+          (insuranceSummary?.confidence ? Number(insuranceSummary.confidence) * 100 : insuranceGaps.summary.protectionFlags.length === 0 ? 72 : 48) * 0.3
+      )
+    )
+  );
+  const planningHeroTone =
+    planningHeroScore >= 80 ? "good" : planningHeroScore >= 60 ? "info" : planningHeroScore >= 45 ? "warning" : "alert";
+  const planningHeroGlanceItems = summaryItems.slice(0, 4).map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="Household Goals"
-        title="Household Goals Dashboard"
-        description="One household planning surface for retirement readiness, college funding, property equity visibility, mortgage review, and protection signals."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/retirement")}
-              style={{
-                padding: "10px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Open Retirement Hub
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/retirement/upload")}
-              style={{
-                padding: "10px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Open Retirement Planner
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/college-planning")}
-              style={{
-                padding: "10px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Open College Planner
-            </button>
-          </div>
-        }
+        sectionTitle="Household Goals Dashboard"
+        headline="See the household planning picture in one calm view before you go deeper into any single goal."
+        summary={householdNarrative}
+        transition="This top layer should answer whether retirement, college, protection, property, and mortgage planning are roughly aligned, what is most urgent, and where to focus next. The deeper planning detail stays below."
+        actions={[
+          { label: "Open Retirement Hub", onClick: () => onNavigate?.("/retirement") },
+          { label: "Open College Planner", onClick: () => onNavigate?.("/college-planning") },
+          { label: "See Protection", onClick: () => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }), kind: "primary" },
+        ]}
+        score={planningHeroScore}
+        scoreTone={planningHeroTone}
+        scoreSubtitle="planning score"
+        scoreIconLabel="goals"
+        asideHeadline={priorityItems[0]?.title || "No urgent planning blocker"}
+        asideSummary={priorityItems[0]?.detail || "No single planning issue is currently outranking the others."}
+        glanceItems={planningHeroGlanceItems}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={priorityItems.length > 0 ? "Planning view has clear next steps" : "Planning view looks calm right now"}
+          detail={householdNarrative}
+          metric={`${priorityItems.length} priority${priorityItems.length === 1 ? "" : "ies"}`}
+          tone={planningHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Priorities"
+          onAction={() => document.querySelector('[data-household-priorities="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title={priorityItems[0]?.title || "Start with the strongest planning gap"}
+          detail={priorityItems[0]?.detail || "Retirement, college, mortgage, and protection signals all roll up here so you can choose the best next workstream."}
+          metric={priorityItems[0]?.urgency || "Watch"}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Open Priority"
+          onAction={() => onNavigate?.(priorityItems[0]?.actionPath || "/retirement")}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Detailed optimization can come later"
+          detail="Use this page to decide which planning lane deserves attention first. The deeper calculators and record-by-record reviews can follow."
+          metric={`${summaryItems.length} signals`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Protection"
+          onAction={() => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <AIInsightPanel
+        data-household-priorities="true"
         title="Household planning read"
         summary={householdNarrative}
         bullets={[
@@ -669,7 +694,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
         ]}
       />
 
-      <SectionCard title="Protection & Insurance" subtitle="A simple household protection health check based on visible policy and property data.">
+      <SectionCard
+        data-household-protection="true"
+        title="Protection & Insurance"
+        subtitle="A simple household protection health check based on visible policy and property data."
+      >
         {insuranceLoading ? (
           <div style={{ color: "#64748b" }}>Loading household protection signals...</div>
         ) : insuranceError ? (

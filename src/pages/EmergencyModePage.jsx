@@ -4,10 +4,12 @@ import ContactCard from "../components/shared/ContactCard";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
 import ExportModal from "../components/shared/ExportModal";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import NotesPanel from "../components/shared/NotesPanel";
-import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import { buildHouseholdIntelligence } from "../lib/domain/platformIntelligence";
 import { createAssetTask, getEmergencyModeBundle, updateHousehold } from "../lib/supabase/platformData";
@@ -185,29 +187,93 @@ export default function EmergencyModePage() {
   const dualLayout = isTablet ? "1fr" : "1fr 1fr";
   const documentRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
   const notesRailLayout = isTablet ? "1fr" : "1.1fr 1fr";
+  const emergencyHeroScore =
+    intelligence.emergency_readiness.score_label === "Strong"
+      ? 84
+      : intelligence.emergency_readiness.score_label === "Moderate"
+        ? 62
+        : intelligence.emergency_readiness.score_label === "Needs Attention"
+          ? 38
+          : 52;
+  const emergencyHeroTone =
+    emergencyHeroScore >= 80 ? "good" : emergencyHeroScore >= 60 ? "info" : emergencyHeroScore >= 45 ? "warning" : "alert";
+  const emergencyHeroGlanceItems = [
+    { label: "Household", value: bundle.household?.household_name || householdState.household?.household_name || "Loading" },
+    { label: "Emergency Contacts", value: bundle.emergencyContacts.length },
+    { label: "Key Documents", value: bundle.keyDocuments.length },
+    { label: "Open Tasks", value: bundle.openTasks.length },
+  ];
 
   return (
-    <div>
-      <PageHeader
+    <div style={{ display: "grid", gap: "24px" }}>
+      <FriendlyPageHero
         eyebrow="Emergency Mode"
-        title="Emergency Continuity Mode"
-        description="Live household continuity view using the current working household, contacts, assets, documents, alerts, tasks, and reports."
+        sectionTitle="Emergency Continuity Mode"
+        headline="Make the household handoff readable in an urgent moment before anyone has to dig through the full record."
+        summary={intelligence.emergency_readiness.notes[0] || "This view combines contacts, key assets, documents, portal continuity, and open work into one emergency read."}
+        transition="The top layer should answer whether the household is usable in a real handoff, what is missing, and where to focus first. The deeper emergency details stay below."
+        actions={[
+          {
+            label: "Review Emergency Notes",
+            onClick: () => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "See Key Contacts",
+            onClick: () => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+        ]}
+        score={emergencyHeroScore}
+        scoreTone={emergencyHeroTone}
+        scoreSubtitle="continuity score"
+        scoreIconLabel="urgent"
+        asideHeadline={intelligence.emergency_readiness.score_label}
+        asideSummary={intelligence.portal_continuity.notes[0] || "Portal continuity and document readiness are both part of the emergency read."}
+        glanceItems={emergencyHeroGlanceItems}
       />
 
-      <SummaryPanel
-        items={[
-          { label: "Household", value: bundle.household?.household_name || householdState.household?.household_name || "Loading", helper: "Current household context" },
-          { label: "Members", value: bundle.householdMembers.length, helper: "Household members on record" },
-          { label: "Emergency Contacts", value: bundle.emergencyContacts.length, helper: "Family and continuity contacts" },
-          { label: "Assets", value: bundle.assets.length, helper: "Tracked household assets" },
-          { label: "Documents", value: bundle.keyDocuments.length, helper: "Generic vault documents" },
-          { label: "Portals", value: bundle.portalReadiness.portalCount, helper: "Access continuity records" },
-          { label: "Open Alerts", value: bundle.openAlerts.length, helper: "Unresolved continuity flags" },
-          { label: "Open Tasks", value: bundle.openTasks.length, helper: "Pending continuity actions" },
-          { label: "Doc Readiness", value: intelligence.document_completeness.score_label, helper: "Cross-module document completeness" },
-          { label: "Portal Continuity", value: intelligence.portal_continuity.score_label, helper: "Linked access continuity status" },
-        ]}
-      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={
+            intelligence.emergency_readiness.score_label === "Strong"
+              ? "Emergency handoff looks usable"
+              : "Emergency handoff still needs support"
+          }
+          detail={intelligence.emergency_readiness.notes[0] || "This read is based on the current household contacts, records, and open continuity work."}
+          metric={intelligence.emergency_readiness.score_label}
+          tone={emergencyHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="See Contacts"
+          onAction={() => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title="Clear the biggest missing continuity blocker"
+          detail={intelligence.missing_item_prompts[0] || "Use the key contacts, documents, and portal gaps below to strengthen the emergency picture."}
+          metric={`${bundle.openTasks.length} open`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Open Notes"
+          onAction={() => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Deeper review can follow after the first handoff"
+          detail="The most important goal is making the household understandable in a stressful moment. Additional optimization can come afterward."
+          metric={`${bundle.portalReadiness.portalCount} portals`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="See Documents"
+          onAction={() => document.querySelector('[data-emergency-documents="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
         <SectionCard title="Emergency Readiness Summary">
@@ -271,7 +337,7 @@ export default function EmergencyModePage() {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
-        <SectionCard title="Key Contacts">
+        <SectionCard data-emergency-contacts="true" title="Key Contacts">
           {prioritizedContacts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {prioritizedContacts.slice(0, 8).map((contact) => (
@@ -324,7 +390,7 @@ export default function EmergencyModePage() {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
-        <SectionCard title="Key Documents">
+        <SectionCard data-emergency-documents="true" title="Key Documents">
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
           ) : (
@@ -361,7 +427,7 @@ export default function EmergencyModePage() {
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: notesRailLayout, gap: "18px" }}>
-        <SectionCard title="Emergency Notes">
+        <SectionCard data-emergency-notes="true" title="Emergency Notes">
           <div style={{ display: "grid", gap: "12px" }}>
             <textarea
               value={notes}

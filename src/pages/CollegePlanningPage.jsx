@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
 import EmptyState from "../components/shared/EmptyState";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { analyzeCollegePlanReadiness, summarizeCollegeHousehold } from "../lib/domain/college/collegeIntelligence";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
 import { loadCollegeGoalState, saveCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
@@ -158,18 +160,6 @@ export default function CollegePlanningPage({ onNavigate }) {
     setForm(nextPlan);
   }
 
-  const summaryItems = useMemo(
-    () => [
-      { label: "Active Child Plan", value: score.childLabel, helper: `${planKeys.length} saved child plan${planKeys.length === 1 ? "" : "s"}` },
-      { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings), helper: "College savings entered for this child" },
-      { label: "Monthly Contribution", value: formatCurrency(score.inputs.monthlyContribution), helper: "Current savings pace" },
-      { label: "Projected Savings", value: formatCurrency(score.projectedSavings), helper: `By age ${score.inputs.collegeStartAge}` },
-      { label: "Readiness", value: `${score.readinessScore}/100`, helper: score.readinessStatus },
-      { label: "Plan Read", value: collegeRead.planStatus, helper: `${Math.round((collegeRead.confidence || 0) * 100)}% plan confidence` },
-    ],
-    [collegeRead.confidence, collegeRead.planStatus, planKeys.length, score]
-  );
-
   const whatChangesThis = useMemo(() => {
     const items = [];
     if (score.inputs.monthlyContribution < 500) items.push("Increasing monthly contributions improves projected college savings the fastest.");
@@ -178,34 +168,84 @@ export default function CollegePlanningPage({ onNavigate }) {
     if (score.inputs.currentSavings < score.inputs.targetSavings * 0.25) items.push("Adding to current savings now can meaningfully improve the plan's starting position.");
     return items.slice(0, 4);
   }, [score]);
+  const collegeHeroTone =
+    score.readinessScore >= 80 ? "good" : score.readinessScore >= 60 ? "info" : score.readinessScore >= 45 ? "warning" : "alert";
+  const collegeHeroGlanceItems = [
+    { label: "Active Child Plan", value: score.childLabel },
+    { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings) },
+    { label: "Projected Savings", value: formatCurrency(score.projectedSavings) },
+    { label: "Readiness", value: `${score.readinessScore}/100` },
+  ];
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="College Planning"
-        title="Kids' College Planning Tracker"
-        description="Track a child's college savings goal in plain English with a simple readiness score and visible assumptions."
-        actions={
-          <button
-            type="button"
-            onClick={() => onNavigate?.("/guidance")}
-            style={{
-              padding: "10px 14px",
-              borderRadius: "10px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Back to Guidance
-          </button>
-        }
+        sectionTitle="Kids' College Planning Tracker"
+        headline="Make college planning easy to understand first, then adjust the assumptions only when they matter."
+        summary={collegeRead.headline}
+        transition="This top layer should answer whether the plan looks on track, what changes it most, and where to go next. The assumptions and detailed projection stay below."
+        actions={[
+          {
+            label: "Back To Guidance",
+            onClick: () => onNavigate?.("/guidance"),
+          },
+          {
+            label: "Edit College Goal",
+            onClick: () => document.querySelector('[data-college-goal="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+        ]}
+        score={score.readinessScore}
+        scoreTone={collegeHeroTone}
+        scoreSubtitle="readiness score"
+        scoreIconLabel="college"
+        asideHeadline={collegeRead.planStatus}
+        asideSummary={householdCollegeRead.headline || "This read reflects the currently active child plan and its visible assumptions."}
+        glanceItems={collegeHeroGlanceItems}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={score.readinessStatus === "On Track" ? "College plan looks on track" : "College plan needs review"}
+          detail={collegeRead.headline}
+          metric={`${score.readinessScore}/100`}
+          tone={collegeHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Edit Goal"
+          onAction={() => document.querySelector('[data-college-goal="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Best First Step"
+          title="Adjust the most important savings lever"
+          detail={whatChangesThis[0] || "A small change in contribution pace or time horizon can shift the college picture quickly."}
+          metric={formatCurrency(score.inputs.monthlyContribution)}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="See Readiness"
+          onAction={() => document.querySelector('[data-college-summary="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What Can Wait"
+          title="Perfect assumptions can come later"
+          detail="Start with a realistic target and contribution pace. The more detailed optimization can follow once the basic plan is visible."
+          metric={`${planKeys.length} saved`}
+          tone="info"
+          statusLabel="Building"
+          actionLabel="View Assumptions"
+          onAction={() => document.querySelector('[data-college-assumptions="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
       <SectionCard
+        data-college-goal="true"
         title="College Goal"
         subtitle="Enter a practical savings target for one child at a time. This estimate is designed for planning clarity, not certainty."
       >
@@ -276,6 +316,7 @@ export default function CollegePlanningPage({ onNavigate }) {
       </SectionCard>
 
       <SectionCard
+        data-college-summary="true"
         title="College Readiness Summary"
         subtitle="A simple first-pass estimate of how the current savings plan compares with the target."
       >
@@ -387,6 +428,7 @@ export default function CollegePlanningPage({ onNavigate }) {
           </div>
 
           <div
+            data-college-assumptions="true"
             style={{
               padding: "14px 16px",
               borderRadius: "14px",
