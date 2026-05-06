@@ -195,22 +195,50 @@ function writeEmailSendGuard(email = "", context = "signup_confirmation") {
 
 function formatEmailCooldownMessage(remainingMs = EMAIL_SEND_GUARD_WINDOW_MS) {
   const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
-  return `An email was already requested recently. Wait about ${remainingSeconds} seconds, then try again.`;
+  return `We recently sent a verification email for this address. Wait about ${remainingSeconds} seconds, then try again.`;
 }
 
-function normalizeSupabaseEmailError(error) {
+function extractRetryAfterSeconds(message = "") {
+  const normalizedMessage = String(message || "");
+  const directRetryMatch = normalizedMessage.match(/retry in\s+(\d+)\s*seconds?/i);
+  if (directRetryMatch) {
+    return Math.max(1, Number(directRetryMatch[1]) || 0);
+  }
+
+  const genericSecondsMatch = normalizedMessage.match(/(\d+)\s*seconds?/i);
+  if (genericSecondsMatch) {
+    return Math.max(1, Number(genericSecondsMatch[1]) || 0);
+  }
+
+  return null;
+}
+
+function parseSupabaseEmailError(error) {
   const message = String(error?.message || "");
   const lowerMessage = message.toLowerCase();
 
   if (
     lowerMessage.includes("email rate limit") ||
     lowerMessage.includes("rate limit exceeded") ||
-    lowerMessage.includes("over_email_send_rate_limit")
+    lowerMessage.includes("over_email_send_rate_limit") ||
+    lowerMessage.includes("email sending is too fast") ||
+    lowerMessage.includes("temporarily cooling down") ||
+    lowerMessage.includes("cooling down") ||
+    lowerMessage.includes("try again in")
   ) {
-    return "Too many email attempts were made for this address. Wait a minute, then try again.";
+    const retryAfterSeconds = extractRetryAfterSeconds(message) || 60;
+    return {
+      message: `We recently tried sending a verification email for this address. Please wait ${retryAfterSeconds} seconds and try again.`,
+      rateLimited: true,
+      retryAfterSeconds,
+    };
   }
 
-  return message || "Authentication could not be completed.";
+  return {
+    message: message || "Authentication could not be completed.",
+    rateLimited: false,
+    retryAfterSeconds: null,
+  };
 }
 
 function buildSupabaseEmailRedirectUrl() {
@@ -304,11 +332,12 @@ async function signUpWithSupabase({ householdName, email, password, tier = "free
   });
 
   if (error) {
+    const normalizedError = parseSupabaseEmailError(error);
     return {
       ok: false,
-      error: normalizeSupabaseEmailError(error),
-      rateLimited: true,
-      retryAfterSeconds: 60,
+      error: normalizedError.message,
+      rateLimited: normalizedError.rateLimited,
+      retryAfterSeconds: normalizedError.retryAfterSeconds,
     };
   }
 

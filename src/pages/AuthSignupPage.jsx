@@ -49,6 +49,9 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
       }
       if (result?.rateLimited && result?.retryAfterSeconds) {
         setRetryCountdown(result.retryAfterSeconds);
+        setSubmitError("");
+        setSubmitNote(result?.error || "");
+        return;
       }
       setSubmitError(result?.error || "Account creation could not be completed.");
     } finally {
@@ -196,10 +199,10 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                 </button>
                 {retryCountdown > 0 ? (
                   <div style={{ color: "#92400e", fontSize: "14px" }}>
-                    Email sending is temporarily cooling down. Retry in {retryCountdown} seconds.
+                    {submitNote || `We recently sent a verification email for this address. Please wait ${retryCountdown} seconds before trying again.`}
                   </div>
                 ) : null}
-                {submitNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
+                {submitNote && retryCountdown <= 0 ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
                 {submitError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
               </div>
             )}
