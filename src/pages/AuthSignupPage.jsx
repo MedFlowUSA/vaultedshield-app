@@ -51,6 +51,12 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
         setRetryCountdown(result.retryAfterSeconds);
         setSubmitError("");
         setSubmitNote(result?.error || "");
+        setPendingConfirmation({
+          email: form.email.trim(),
+          householdName: form.householdName.trim() || "Working Household",
+          tierLabel: ACCESS_TIERS[form.tier]?.label || "Free",
+        });
+        setForm((current) => ({ ...current, password: "" }));
         return;
       }
       setSubmitError(result?.error || "Account creation could not be completed.");
@@ -122,6 +128,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                 >
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>What happens next</div>
                   <div>Open the verification email, confirm your address, and then return here to sign in.</div>
+                  <div>If the email does not show up right away, check spam, junk, or promotions before retrying.</div>
                   <div>We only unlock the protected household workspace after that verification step is complete.</div>
                 </div>
 
@@ -143,7 +150,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                   </button>
                 </div>
 
-                {submitNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
+                {submitNote ? <div style={{ color: retryCountdown > 0 ? "#92400e" : "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
               </div>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>

@@ -195,7 +195,7 @@ function writeEmailSendGuard(email = "", context = "signup_confirmation") {
 
 function formatEmailCooldownMessage(remainingMs = EMAIL_SEND_GUARD_WINDOW_MS) {
   const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
-  return `We recently sent a verification email for this address. Wait about ${remainingSeconds} seconds, then try again.`;
+  return `A verification request for this address is already pending. Delivery can take a minute and may land in spam or promotions. Wait about ${remainingSeconds} seconds before trying again.`;
 }
 
 function extractRetryAfterSeconds(message = "") {
@@ -228,7 +228,7 @@ function parseSupabaseEmailError(error) {
   ) {
     const retryAfterSeconds = extractRetryAfterSeconds(message) || 60;
     return {
-      message: `We recently tried sending a verification email for this address. Please wait ${retryAfterSeconds} seconds and try again.`,
+      message: `A verification request for this address is already pending. Delivery can take a minute and may land in spam or promotions. Please wait ${retryAfterSeconds} seconds before trying again.`,
       rateLimited: true,
       retryAfterSeconds,
     };
