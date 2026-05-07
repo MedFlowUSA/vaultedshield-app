@@ -41,8 +41,7 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
     setEntering(false);
   }
 
-  const showVerificationLanding =
-    landingState.status === "verification_complete" && Boolean(accessPortal?.isAuthenticated);
+  const showVerificationLanding = landingState.status === "verification_complete";
 
   return (
     <AuthPortalLayout
@@ -77,10 +76,18 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                     VaultedShield Verification Complete
                   </div>
                   <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.25" }}>
-                    Your account is ready
+                    Thanks for verifying your account request
                   </div>
                   <div style={{ color: "#334155", lineHeight: "1.7", fontSize: "14px" }}>
-                    The email address <strong>{accessPortal?.session?.email || form.email || "for this account"}</strong> has been verified. Your protected household workspace is ready to open.
+                    {accessPortal?.session?.email || form.email ? (
+                      <>
+                        The email address <strong>{accessPortal?.session?.email || form.email}</strong> has been verified for VaultedShield. Your protected workspace is ready for sign-in.
+                      </>
+                    ) : (
+                      <>
+                        Your VaultedShield account request has been verified. Continue to sign in and open your protected workspace.
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -88,25 +95,33 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                   items={[
                     { label: "Verified Email", value: accessPortal?.session?.email || form.email || "Confirmed" },
                     { label: "Workspace", value: accessPortal?.session?.householdName || "VaultedShield Household" },
-                    { label: "Next Step", value: "Enter the platform securely" },
+                    { label: "Next Step", value: accessPortal?.isAuthenticated ? "Open the workspace" : "Sign in securely" },
                   ]}
                 />
 
                 <div style={{ display: "grid", gap: "10px" }}>
                   <button
-                    onClick={() => onNavigate(returnPath || "/insurance")}
+                    onClick={() => {
+                      if (accessPortal?.isAuthenticated) {
+                        onNavigate(returnPath || "/insurance");
+                        return;
+                      }
+                      setLandingState({ status: "idle", message: "" });
+                    }}
                     style={authActionStyle(true)}
                   >
-                    Open Workspace
+                    {accessPortal?.isAuthenticated ? "Open Workspace" : "Continue To Login"}
                   </button>
                   <button
                     onClick={() => {
-                      accessPortal?.signOut?.();
+                      if (accessPortal?.isAuthenticated) {
+                        accessPortal?.signOut?.();
+                      }
                       setLandingState({ status: "idle", message: "" });
                     }}
                     style={authActionStyle(false)}
                   >
-                    Return To Login Form
+                    {accessPortal?.isAuthenticated ? "Return To Login Form" : "Use A Different Account"}
                   </button>
                 </div>
 

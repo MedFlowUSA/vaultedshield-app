@@ -50,7 +50,7 @@ export function getAuthLandingState() {
   if (type === "signup" || type === "invite" || hasVerificationMarkers) {
     return {
       status: "verification_complete",
-      message: "Your email verification is complete. Continue into VaultedShield when you're ready.",
+      message: "Thanks for verifying your VaultedShield account request. You can sign in whenever you're ready.",
     };
   }
 
