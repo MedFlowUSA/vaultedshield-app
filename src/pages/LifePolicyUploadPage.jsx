@@ -1387,7 +1387,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     <div style={{ display: "grid", gap: "24px" }}>
       <PageHeader
         eyebrow="Life Policy Intelligence"
-        title="In-Force Policy Intake"
+        title="Life Policy Intake"
         description="Bring in the original illustration, then add annual statements so the engine can normalize the policy, interpret performance, and surface charge pressure over time."
         actions={
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>

@@ -578,7 +578,7 @@ export default function UploadCenterPage() {
             >
               <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop files here</div>
               <p style={{ marginTop: "8px", marginBottom: "14px", color: "#64748b", lineHeight: "1.6" }}>
-                Upload a {selectedCategory.label.toLowerCase()} document to the household vault. Use the dedicated Insurance {" > "} Life workflow when you want the deeper life-policy review experience.
+                Upload a {selectedCategory.label.toLowerCase()} document to the household vault. Use Insurance {" > "} Life Policy Intake only when you want deeper life-policy illustration and annual-statement analysis.
               </p>
               <input
                 ref={fileInputRef}

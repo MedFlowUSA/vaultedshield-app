@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
+import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { extractRetirementSummary } from "../lib/domain/retirement/retirementExtraction";
@@ -89,6 +88,9 @@ const DEFAULT_GOAL_FORM = {
 export default function RetirementUploadPage({ onNavigate }) {
   const { isMobile, isTablet } = useResponsiveLayout();
   const { debug } = usePlatformShellData();
+  const uploadSectionRef = useRef(null);
+  const goalSectionRef = useRef(null);
+  const readinessSectionRef = useRef(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -166,24 +168,6 @@ export default function RetirementUploadPage({ onNavigate }) {
     });
   }, [goalForm, latestStatement, plannerInputs.annualContribution, plannerInputs.currentAssets, plannerReadyForPersistence, readiness, storageScope]);
 
-  const summaryItems = useMemo(() => {
-    return [
-      { label: "Documents Processed", value: results.length, helper: "Local preview only for now" },
-      {
-        label: "Current Retirement Assets",
-        value: extractedCurrentAssets > 0 ? formatCurrency(extractedCurrentAssets) : goalForm.currentAssets ? formatCurrency(Number(goalForm.currentAssets)) : "Not detected",
-        helper: successful.length ? "Pulled from successful retirement reads" : "Manual entry supported below",
-      },
-      {
-        label: "Annual Contributions",
-        value: extractedAnnualContribution > 0 ? formatCurrency(extractedAnnualContribution) : goalForm.annualContribution ? formatCurrency(Number(goalForm.annualContribution)) : "Not detected",
-        helper: "Uses extracted contributions when visible",
-      },
-      { label: "Latest Statement Date", value: latestStatement, helper: "Most recent detected statement date" },
-      { label: "Readiness Status", value: readiness.readinessStatus, helper: `${readiness.readinessScore}/100 readiness score` },
-    ];
-  }, [extractedAnnualContribution, extractedCurrentAssets, goalForm.annualContribution, goalForm.currentAssets, latestStatement, readiness.readinessScore, readiness.readinessStatus, results.length, successful.length]);
-
   const whatChangesThis = useMemo(() => {
     const items = [];
     if ((plannerInputs.annualContribution || 0) < 15000) items.push("Increase contributions to improve projected balance growth.");
@@ -239,33 +223,102 @@ export default function RetirementUploadPage({ onNavigate }) {
     setGoalForm((current) => ({ ...current, [field]: value }));
   }
 
+  const readinessTone =
+    readiness.readinessScore >= 75
+      ? "good"
+      : readiness.readinessScore >= 58
+        ? "info"
+        : readiness.readinessScore >= 40
+          ? "warning"
+          : "alert";
+  const retirementUploadHeadline =
+    successful.length > 0
+      ? "Retirement picture is beginning to take shape"
+      : "Start with a few retirement statements first";
+  const retirementUploadSummary =
+    successful.length > 0
+      ? `${successful.length} retirement statement${successful.length === 1 ? "" : "s"} have been read, and VaultedShield is using those values to build a first planning view.`
+      : "This page is the easiest place to turn retirement PDFs into a plain-English planning read before you go deeper.";
+
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
-        eyebrow="Retirement Upload"
-        title="Retirement Document Ingestion"
-        description="Upload retirement statements, extract starter data, and see a first-pass readiness score in plain English."
-        actions={
-          <button
-            type="button"
-            onClick={() => onNavigate?.("/retirement")}
-            style={{
-              padding: "10px 14px",
-              borderRadius: "10px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Back to Retirement Hub
-          </button>
-        }
+      <FriendlyPageHero
+        eyebrow="Retirement"
+        sectionTitle="Retirement Intake"
+        headline={retirementUploadHeadline}
+        summary={retirementUploadSummary}
+        transition="Start with the PDF intake and simple planning target first. The extracted values, assumptions, and deeper retirement math remain available underneath when you want them."
+        actions={[
+          {
+            label: "Add Retirement PDFs",
+            onClick: () => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "Adjust Planning Target",
+            onClick: () => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Back To Retirement Hub",
+            onClick: () => onNavigate?.("/retirement"),
+          },
+        ]}
+        score={readiness.readinessScore}
+        scoreTone={readinessTone}
+        scoreSubtitle="readiness"
+        scoreIconLabel="retirement"
+        asideHeadline={readiness.readinessStatus}
+        asideSummary={readiness.explanation}
+        glanceEyebrow="At A Glance"
+        glanceItems={[
+          { label: "PDFs processed", value: results.length },
+          { label: "Successful reads", value: successful.length },
+          { label: "Current assets", value: extractedCurrentAssets > 0 ? formatCurrency(extractedCurrentAssets) : "Not detected" },
+          { label: "Latest statement", value: latestStatement },
+        ]}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Start Here"
+          title={successful.length > 0 ? "Add more statements if you have them" : "Upload the first retirement statements"}
+          detail="Use exported 401(k), IRA, pension, or brokerage retirement PDFs. Even a small set is enough to start a useful first read."
+          metric={`${results.length} file${results.length === 1 ? "" : "s"}`}
+          tone={successful.length > 0 ? "good" : "info"}
+          statusLabel="Simple Read"
+          actionLabel="Open Intake"
+          onAction={() => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What To Adjust"
+          title="Set the planning target in plain language"
+          detail="If the extracted values are incomplete, you can still enter your retirement age, income target, and contribution pace manually."
+          metric={`${goalForm.retirementAge || "65"} target age`}
+          tone="warning"
+          statusLabel="Guided Focus"
+          actionLabel="Open Goal Inputs"
+          onAction={() => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="What This Produces"
+          title="See a first-pass readiness result"
+          detail="VaultedShield translates the current records and assumptions into one retirement readiness read before the deeper planning details."
+          metric={`${readiness.readinessScore}/100`}
+          tone={readinessTone}
+          statusLabel="Needs Review"
+          actionLabel="See Readiness"
+          onAction={() => readinessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+      </div>
 
-      <SectionCard
+      <div ref={uploadSectionRef}>
+        <SectionCard
         title="Retirement PDF Intake"
         subtitle="Upload 401(k), IRA, pension, or brokerage retirement statements. Files are parsed locally and are not saved yet."
       >
@@ -306,9 +359,11 @@ export default function RetirementUploadPage({ onNavigate }) {
           </div>
           {error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{error}</div> : null}
         </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
 
-      <SectionCard
+      <div ref={goalSectionRef}>
+        <SectionCard
         title="Retirement Goal"
         subtitle="Enter your planning target in plain terms. This is a practical estimate, not financial advice."
       >
@@ -401,9 +456,11 @@ export default function RetirementUploadPage({ onNavigate }) {
             ))}
           </div>
         </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
 
-      <SectionCard
+      <div ref={readinessSectionRef}>
+        <SectionCard
         title="Retirement Readiness Summary"
         subtitle="A practical first-pass view of how your current savings pace compares with your target."
       >
@@ -521,11 +578,12 @@ export default function RetirementUploadPage({ onNavigate }) {
                     {item}
                   </li>
                 ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      </SectionCard>
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+      </div>
 
       <SectionCard title="Retirement Extraction Results" subtitle="Each file shows extraction status, page count, and a starter retirement summary.">
         {results.length === 0 ? (

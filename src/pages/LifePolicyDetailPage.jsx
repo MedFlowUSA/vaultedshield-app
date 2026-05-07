@@ -28,20 +28,20 @@ export default function LifePolicyDetailPage({ onNavigate }) {
     <div style={{ display: "grid", gap: "20px" }}>
       <PageHeader
         eyebrow="Life Policy Intelligence"
-        title="Life Policy Workflow Guide"
-        description="This page is the workflow guide for life-policy analysis in VaultedShield. Use it to understand where uploads, policy review, and reports fit without duplicating the main insurance workspace."
+        title="Life Policy Intake Guide"
+        description="This guide explains where life-policy intake, policy review, and reports fit so users can stay on the main insurance workflow instead of guessing between upload screens."
       />
 
       <SectionCard
         title="Start Here"
-        subtitle="Use the modern shell pages below. This guide explains the path, but the real working surfaces are Insurance Intelligence, Life Policy Upload, and Reports."
+        subtitle="Use the modern shell pages below. This guide explains the path, but the real working surfaces are Insurance Intelligence, Life Policy Intake, and Reports."
       >
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(true)}>
             Open Insurance Intelligence
           </button>
           <button type="button" onClick={() => onNavigate?.("/insurance/life/upload")} style={actionStyle(false)}>
-            Upload New Policy Documents
+            Open Life Policy Intake
           </button>
           <button type="button" onClick={() => onNavigate?.("/reports")} style={actionStyle(false)}>
             Open Reports

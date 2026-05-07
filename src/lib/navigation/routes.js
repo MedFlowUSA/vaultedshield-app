@@ -11,7 +11,7 @@ export const ROUTES = {
   householdGoals: { path: "/household-goals", title: "Household Goals", section: "Core", minimumTier: "professional" },
   vault: { path: "/vault", title: "Vault", section: "Core", minimumTier: "free" },
   uploadCenter: { path: "/upload-center", title: "Upload Center", section: "Core", minimumTier: "free" },
-  assetsHome: { path: "/assets", title: "Assets", section: "Assets", minimumTier: "free" },
+  assetsHome: { path: "/assets", title: "Asset Map", section: "Assets", minimumTier: "free" },
   assetDetail: { path: "/assets/detail", title: "Asset Detail", section: "Assets", minimumTier: "free" },
   insuranceHub: { path: "/insurance", title: "Insurance Intelligence", section: "Assets", minimumTier: "free" },
   insurancePolicyCompare: { path: "/insurance/compare", title: "Policy Comparison", section: "Assets", minimumTier: "essential" },
@@ -23,8 +23,8 @@ export const ROUTES = {
   autoPolicyDetail: { path: "/insurance/auto/detail", title: "Auto Policy Detail", section: "Assets", minimumTier: "essential" },
   healthInsuranceHub: { path: "/insurance/health", title: "Health Insurance", section: "Assets", minimumTier: "essential" },
   healthPlanDetail: { path: "/insurance/health/detail", title: "Health Plan Detail", section: "Assets", minimumTier: "essential" },
-  lifePolicyDetail: { path: "/insurance/life/policy-detail", title: "Life Policy Upload", section: "Assets", minimumTier: "free" },
-  lifePolicyUpload: { path: "/insurance/life/upload", title: "Life Policy Upload", section: "Assets", minimumTier: "free" },
+  lifePolicyDetail: { path: "/insurance/life/policy-detail", title: "Life Policy Intake", section: "Assets", minimumTier: "free" },
+  lifePolicyUpload: { path: "/insurance/life/upload", title: "Life Policy Intake", section: "Assets", minimumTier: "free" },
   bankingHub: { path: "/banking", title: "Banking", section: "Assets", minimumTier: "professional" },
   mortgageHub: { path: "/mortgage", title: "Mortgage", section: "Assets", minimumTier: "essential" },
   mortgageDetail: { path: "/mortgage/detail", title: "Mortgage Detail", section: "Assets", minimumTier: "essential" },
@@ -42,6 +42,7 @@ export const ROUTES = {
   reports: { path: "/reports", title: "Reports", section: "Action", minimumTier: "essential" },
   contacts: { path: "/contacts", title: "Contacts", section: "People", minimumTier: "professional" },
   settings: { path: "/settings", title: "Settings", section: "System", minimumTier: "professional" },
+  notFound: { path: "/not-found", title: "Page Not Found", section: "System", minimumTier: "free" },
 };
 
 export const APP_NAVIGATION = [
@@ -59,7 +60,7 @@ export const APP_NAVIGATION = [
   {
     label: "Asset Modules",
     items: [
-      { routeKey: "assetsHome", label: "Assets" },
+      { routeKey: "assetsHome", label: "Asset Map" },
       { routeKey: "insuranceHub", label: "Insurance" },
       { routeKey: "bankingHub", label: "Banking" },
       { routeKey: "mortgageHub", label: "Mortgage" },
@@ -131,7 +132,7 @@ export function getRouteByPath(pathname) {
   }
   return (
     Object.values(ROUTES).find((route) => route.path === pathname) ||
-    ROUTES.dashboard
+    ROUTES.notFound
   );
 }
 

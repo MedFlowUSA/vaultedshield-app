@@ -1421,7 +1421,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               onClick={() => onNavigate?.("/insurance/life/upload")}
               style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }}
             >
-              Open Life Policy Upload
+              Open Life Policy Intake
             </button>
             <button
               type="button"

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
+import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getVaultedPolicyStatements,
@@ -326,16 +326,6 @@ function actionButtonStyle(primary = false) {
   };
 }
 
-function reportActionButtonStyle(active = false, primary = false) {
-  if (primary) return actionButtonStyle(true);
-  return {
-    ...actionButtonStyle(false),
-    border: active ? "1px solid #93c5fd" : "1px solid #cbd5e1",
-    background: active ? "#eff6ff" : "#ffffff",
-    color: active ? "#1d4ed8" : "#0f172a",
-  };
-}
-
 function renderReportFactsGrid(items = [], columns = 3) {
   return (
     <div
@@ -580,6 +570,8 @@ function PolicyCard({ title, policy, onOpen }) {
 
 export default function PolicyComparisonPage({ policyId, comparePolicyId = "", onNavigate }) {
   const { isTablet } = useResponsiveLayout();
+  const reportSectionRef = useRef(null);
+  const comparisonSectionRef = useRef(null);
   const [statementBundles, setStatementBundles] = useState({});
   const [activeEvidenceId, setActiveEvidenceId] = useState("");
   const [showComparisonReport, setShowComparisonReport] = useState(false);
@@ -841,45 +833,103 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
     }
   }
 
+  const comparisonHeroTone = getTone(comparisonPolicy?.interpretation?.label || basePolicy?.interpretation?.label);
+  const strongerPolicyLabel = comparisonPolicy?.product || "The comparison policy";
+  const currentPolicyLabel = basePolicy?.product || "the current policy";
+  const comparisonHeroHeadline =
+    comparisonPolicy && basePolicy
+      ? `${strongerPolicyLabel} currently looks stronger`
+      : "Compare two policy reads side by side";
+  const comparisonHeroSummary =
+    comparisonPolicy && basePolicy
+      ? `${strongerPolicyLabel} currently reads ${String(comparisonPolicy.interpretation?.label || "more clearly").toLowerCase()} versus ${String(basePolicy.interpretation?.label || "the current read").toLowerCase()} for ${currentPolicyLabel}.`
+      : "This page compares statement support, charges, continuity strength, and protection confidence across two saved policy files.";
+
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <PageHeader
-        eyebrow="In-Force Policy Intelligence"
-        title="Policy Strength Comparison"
-        description="A side-by-side in-force review that shows which policy is stronger, where charges and evidence differ, and how the statement trail supports the call."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance")}
-              style={actionButtonStyle(false)}
-            >
-              Back to Policy
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowComparisonReport((current) => !current)}
-              style={reportActionButtonStyle(showComparisonReport, false)}
-            >
-              {showComparisonReport ? "Hide Comparison Report" : "Open Comparison Report"}
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintReport}
-              style={actionButtonStyle(true)}
-            >
-              Print Report
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigate?.("/insurance")}
-              style={actionButtonStyle(true)}
-            >
-              Insurance Intelligence
-            </button>
-          </div>
+      <FriendlyPageHero
+        eyebrow="Insurance Comparison"
+        sectionTitle="Policy Strength Comparison"
+        headline={comparisonHeroHeadline}
+        summary={comparisonHeroSummary}
+        transition="Start with the plain-English verdict first. The deeper charge support, statement trail, protection confidence, and report-ready comparison stay below when you want proof."
+        actions={[
+          {
+            label: policyId ? "Back To Policy" : "Back To Insurance",
+            onClick: () => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance"),
+            kind: "primary",
+          },
+          {
+            label: showComparisonReport ? "Hide Comparison Report" : "Open Comparison Report",
+            onClick: () => {
+              setShowComparisonReport((current) => !current);
+              reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            },
+          },
+          {
+            label: "Print Report",
+            onClick: handlePrintReport,
+          },
+        ]}
+        score={comparisonPolicy?.ranking?.score || basePolicy?.ranking?.score || 0}
+        scoreTone={comparisonHeroTone}
+        scoreSubtitle="strength"
+        scoreIconLabel="policy"
+        asideHeadline={comparisonAnalysis?.summary ? "Why this read happened" : "Open the evidence when ready"}
+        asideSummary={
+          comparisonAnalysis?.summary ||
+          "VaultedShield compares support quality, charge visibility, missing data pressure, and protection confidence before calling one file stronger."
         }
+        glanceEyebrow="At A Glance"
+        glanceItems={[
+          { label: "Current policy", value: basePolicy?.product || "Loading" },
+          { label: "Comparison policy", value: comparisonPolicy?.product || "Needed" },
+          { label: "Current score", value: basePolicy?.ranking?.score ? `${basePolicy.ranking.score}/100` : "--" },
+          { label: "Comparison score", value: comparisonPolicy?.ranking?.score ? `${comparisonPolicy.ranking.score}/100` : "--" },
+        ]}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Simple Read"
+          title={comparisonPolicy && basePolicy ? `${strongerPolicyLabel} is the stronger working file` : "Choose two saved policies to compare"}
+          detail="Use this when you want the fastest answer to which current policy file looks cleaner before getting into the technical proof."
+          metric={comparisonPolicy && basePolicy ? `${Math.max(0, (comparisonPolicy.ranking?.score || 0) - (basePolicy.ranking?.score || 0))} point gap` : "2 files"}
+          tone={comparisonHeroTone}
+          statusLabel="Simple Read"
+          actionLabel="Open Comparison"
+          onAction={() => comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Evidence Path"
+          title="See the report-ready proof"
+          detail="Open the structured comparison report when you want the export-style evidence bundle instead of just the headline call."
+          metric={showComparisonReport ? "Report open" : "Report hidden"}
+          tone="info"
+          statusLabel="Well Supported"
+          actionLabel={showComparisonReport ? "Hide Report" : "Open Report"}
+          onAction={() => {
+            setShowComparisonReport((current) => !current);
+            reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
+        <FriendlyActionTile
+          kicker="Best Next Step"
+          title="Go back into the policy that needs attention"
+          detail="After the side-by-side read, reopen the policy page or Insurance Intelligence to keep the deeper review moving."
+          metric={policyId ? "Policy route ready" : "Insurance route ready"}
+          tone="warning"
+          statusLabel="Guided Action"
+          actionLabel={policyId ? "Back To Policy" : "Open Insurance"}
+          onAction={() => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance")}
+        />
+      </div>
 
       {loading ? (
         <SectionCard>
@@ -898,15 +948,18 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
       ) : (
         <>
           {showComparisonReport ? (
-            <ReportView
-              title="Policy Comparison Report"
-              subtitle="A structured export-ready comparison built from the current side-by-side intelligence."
-              report={comparisonReport}
-              onPrint={handlePrintReport}
-            />
+            <div ref={reportSectionRef}>
+              <ReportView
+                title="Policy Comparison Report"
+                subtitle="A structured export-ready comparison built from the current side-by-side intelligence."
+                report={comparisonReport}
+                onPrint={handlePrintReport}
+              />
+            </div>
           ) : null}
 
-          <SectionCard
+          <div ref={comparisonSectionRef}>
+            <SectionCard
             title="Policy Health Comparison"
             subtitle="This view highlights which in-force policy currently looks stronger, where charge drag and evidence support differ, and which file needs closer attention."
           >
@@ -937,7 +990,8 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                 </ul>
               ) : null}
             </div>
-          </SectionCard>
+            </SectionCard>
+          </div>
 
           {protectionComparison ? (
             <SectionCard

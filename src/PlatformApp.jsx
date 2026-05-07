@@ -53,6 +53,7 @@ const PortalHubPage = lazy(() => import("./pages/PortalHubPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 const ContactsPage = lazy(() => import("./pages/ContactsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 const LEGACY_GLOBAL_STORAGE_KEYS = [
   "vaultedshield-results",
@@ -285,8 +286,10 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <ContactsPage />;
     case "/settings":
       return <SettingsPage />;
+    case "/not-found":
+      return <NotFoundPage onNavigate={navigate} requestedPath={pathname} />;
     default:
-      return <DashboardPage onNavigate={navigate} />;
+      return <NotFoundPage onNavigate={navigate} requestedPath={pathname} />;
   }
 }
 

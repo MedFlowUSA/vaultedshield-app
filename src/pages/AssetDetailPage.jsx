@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
-import PageHeader from "../components/layout/PageHeader";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import StatusBadge from "../components/shared/StatusBadge";
 import {
   createPortalProfile,
@@ -405,47 +403,8 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="Asset Detail"
-        title={bundle.asset?.asset_name || "Asset Detail"}
-        description="Live asset home with documents, alerts, tasks, notes, and linked portal continuity scaffolding."
-        actions={
-          <button
-            onClick={() => onNavigate("/assets")}
-            style={{
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Back to Assets
-          </button>
-        }
-      />
-
-      <SummaryPanel
-        items={[
-          { label: "Category", value: bundle.asset?.asset_category || "--", helper: bundle.asset?.asset_subcategory || "No subcategory" },
-          { label: "Institution", value: bundle.asset?.institution_name || "--", helper: "Institution context" },
-          { label: "Status", value: bundle.asset?.status || "--", helper: "Current asset status" },
-          { label: "Documents", value: bundle.documents.length, helper: "Linked asset documents" },
-          { label: "Alerts", value: bundle.alerts.length, helper: "Asset-level alerts" },
-          { label: "Tasks", value: bundle.tasks.length, helper: "Asset-level tasks" },
-          { label: "Portal Links", value: bundle.portalLinks.length, helper: "Access continuity records" },
-          {
-            label: "Recovery Gaps",
-            value: bundle.portalContinuity?.missingRecoveryCount ?? 0,
-            helper: "Linked portals missing recovery hints",
-          },
-        ]}
-      />
-
       <section
         style={{
-          marginTop: "24px",
           display: "grid",
           gap: "20px",
           padding: isTablet ? "24px 18px" : "30px 32px",

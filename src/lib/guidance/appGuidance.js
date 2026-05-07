@@ -1,7 +1,7 @@
 const GUIDE_QUESTION_STARTERS = [
   "How do I start using VaultedShield?",
   "Where do I upload policy documents?",
-  "What is the difference between Upload Center and Life Policy Upload?",
+  "What is the difference between Upload Center and Life Policy Intake?",
   "What does Insurance Intelligence do?",
   "How should I use the dashboard?",
   "Where do I find reports and continuity outputs?",
@@ -17,7 +17,7 @@ const GUIDE_QUICK_STARTS = [
     steps: [
       "Start on Dashboard to see current household status, action priorities, and missing areas.",
       "Open Upload Center for generic household documents like wills, trusts, bank statements, or supporting PDFs.",
-      "Open Insurance > Life Policy Upload when you want actual life-policy analysis rather than generic storage.",
+      "Open Insurance > Life Policy Intake when you want actual life-policy analysis rather than generic storage.",
       "Return to Insurance Intelligence after uploads to review saved policy cards, comparison rows, and focus areas.",
     ],
   },
@@ -26,7 +26,7 @@ const GUIDE_QUICK_STARTS = [
     title: "Life Policy Review Flow",
     summary: "Use this when you want actual policy intelligence, comparison, and statement-driven review.",
     route: "/insurance/life/upload",
-    ctaLabel: "Open Life Upload",
+    ctaLabel: "Open Life Intake",
     steps: [
       "Upload the initial policy illustration or baseline policy PDF first.",
       "Add annual statements separately after the baseline file so the app can build trend history and charge visibility.",
@@ -73,7 +73,7 @@ const GUIDE_FEATURES = [
   },
   {
     id: "life-policy-upload",
-    title: "Life Policy Upload",
+    title: "Life Policy Intake",
     route: "/insurance/life/upload",
     purpose: "Specialized life-policy upload flow for baseline illustrations and annual statements.",
     bestFor: "Creating or updating the data that powers policy comparison and policy detail views.",
@@ -99,14 +99,14 @@ const GUIDE_FAQS = [
     id: "start",
     question: "How should a brand new user start?",
     answer:
-      "Start with Dashboard to see what the household already has, then use Upload Center for general records and Life Policy Upload for actual insurance analysis. Do not try to fill every module on day one.",
+      "Start with Dashboard to see what the household already has, then use Upload Center for general records and Life Policy Intake for actual insurance analysis. Do not try to fill every module on day one.",
     route: "/dashboard",
   },
   {
     id: "upload-difference",
-    question: "What is the difference between Upload Center and Life Policy Upload?",
+    question: "What is the difference between Upload Center and Life Policy Intake?",
     answer:
-      "Upload Center is generic document intake for the platform vault. Life Policy Upload is the specialized workflow for baseline illustrations and annual statements that feed Insurance Intelligence and policy detail analysis.",
+      "Upload Center is generic document intake for the platform vault. Life Policy Intake is the specialized workflow for baseline illustrations and annual statements that feed Insurance Intelligence and policy detail analysis.",
     route: "/insurance/life/upload",
   },
   {
@@ -166,12 +166,12 @@ export function answerGuideQuestion(questionText = "") {
 
   if (text.includes("start") || text.includes("new user") || text.includes("begin") || text.includes("first")) {
     return buildGuideResponse(
-      "Start on Dashboard, then use Upload Center for generic records and Life Policy Upload for actual life-policy analysis. After that, use Insurance Intelligence and Reports to review what the uploads produced.",
+      "Start on Dashboard, then use Upload Center for generic records and Life Policy Intake for actual life-policy analysis. After that, use Insurance Intelligence and Reports to review what the uploads produced.",
       "/dashboard",
-      ["Dashboard", "Upload Center", "Life Policy Upload"],
+      ["Dashboard", "Upload Center", "Life Policy Intake"],
       [
         "Where do I upload policy documents?",
-        "What is the difference between Upload Center and Life Policy Upload?",
+        "What is the difference between Upload Center and Life Policy Intake?",
         "What does Insurance Intelligence do?",
       ]
     );
@@ -179,11 +179,11 @@ export function answerGuideQuestion(questionText = "") {
 
   if (text.includes("upload") || text.includes("document") || text.includes("policy file") || text.includes("statement")) {
     return buildGuideResponse(
-      "Use Upload Center for generic household records. Use Life Policy Upload when the goal is policy analysis, illustration parsing, statement history, and saved policy intelligence.",
+      "Use Upload Center for generic household records. Use Life Policy Intake when the goal is policy analysis, illustration parsing, statement history, and saved policy intelligence.",
       "/insurance/life/upload",
-      ["Upload Center", "Life Policy Upload", "Vault"],
+      ["Upload Center", "Life Policy Intake", "Vault"],
       [
-        "What is the difference between Upload Center and Life Policy Upload?",
+        "What is the difference between Upload Center and Life Policy Intake?",
         "What does Insurance Intelligence do?",
       ]
     );
@@ -193,7 +193,7 @@ export function answerGuideQuestion(questionText = "") {
     return buildGuideResponse(
       "Insurance Intelligence is the portfolio review layer. It shows saved policy cards, ranking, comparison, weak support areas, and where deeper policy review is needed.",
       "/insurance",
-      ["Insurance Intelligence", "Life Policy Upload", "Policy Detail"],
+      ["Insurance Intelligence", "Life Policy Intake", "Policy Detail"],
       [
         "Where do I upload policy documents?",
         "How should I use the dashboard?",
@@ -250,7 +250,7 @@ export function answerGuideQuestion(questionText = "") {
   }
 
   return buildGuideResponse(
-    "VaultedShield is organized around a simple pattern: Dashboard for priorities, Upload Center for generic records, Life Policy Upload for insurance analysis, Intelligence pages for review, and Reports for outputs.",
+    "VaultedShield is organized around a simple pattern: Dashboard for priorities, Upload Center for generic records, Life Policy Intake for insurance analysis, Intelligence pages for review, and Reports for outputs.",
     "/guidance",
     ["Dashboard", "Upload Center", "Insurance Intelligence", "Reports"],
     GUIDE_QUESTION_STARTERS.slice(0, 4)
