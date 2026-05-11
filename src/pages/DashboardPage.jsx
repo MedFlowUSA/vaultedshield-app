@@ -29,7 +29,7 @@ import {
   answerDemoHouseholdQuestion,
   buildDemoHouseholdPreview,
 } from "../lib/onboarding/demoHouseholdPreview";
-import { executeSmartAction, resolveSmartActionRoute } from "../lib/navigation/smartActions";
+import { executeSmartAction, inferSmartActionKeyFromText, resolveSmartActionRoute } from "../lib/navigation/smartActions";
 import {
   buildModuleReadinessOverview,
   summarizeAssetsModule,
@@ -151,12 +151,16 @@ function buildActionSignals(policyRows = [], fallbackPrompts = []) {
     }
   });
 
-  const promptSignals = fallbackPrompts.map((item, index) => ({
-    id: `fallback-prompt-${index}`,
-    label: "Open recommended review",
-    summary: item,
-    route: resolveActionSignalRoute(item),
-  }));
+  const promptSignals = fallbackPrompts.map((item, index) => {
+    const actionKey = inferSmartActionKeyFromText(item);
+    return {
+      id: `fallback-prompt-${index}`,
+      label: "Open recommended review",
+      summary: item,
+      route: resolveSmartActionRoute(actionKey) || "/dashboard",
+      action_key: actionKey,
+    };
+  });
 
   const uniqueSignals = [];
   const seen = new Set();
@@ -186,45 +190,16 @@ function buildDependencyActionSignals(dependencySignals = null) {
       id: `dependency-${flag.key}-${index}`,
       label: flag.action_label || matchedCandidate?.label || flag.title || "Open review",
       summary: flag.explanation,
-      route: flag.route || matchedCandidate?.route || resolveSmartActionRoute(actionKey) || resolveActionSignalRoute(flag.explanation),
+      route:
+        flag.route ||
+        matchedCandidate?.route ||
+        resolveSmartActionRoute(actionKey) ||
+        resolveSmartActionRoute(inferSmartActionKeyFromText(flag.explanation)) ||
+        "/dashboard",
       action_key: actionKey,
       severity: flag.severity || "moderate",
     };
   });
-}
-
-function resolveActionSignalRoute(signal = "") {
-  const text = String(signal || "").toLowerCase();
-
-  if (text.includes("homeowners") || text.includes("property") || text.includes("mortgage")) {
-    return "/property";
-  }
-  if (text.includes("retirement")) {
-    return "/retirement";
-  }
-  if (text.includes("banking") || text.includes("portal") || text.includes("access")) {
-    return text.includes("portal") || text.includes("access") ? "/portals" : "/banking";
-  }
-  if (text.includes("estate") || text.includes("trust") || text.includes("will")) {
-    return "/estate";
-  }
-  if (text.includes("health")) {
-    return "/insurance/health";
-  }
-  if (text.includes("auto")) {
-    return "/insurance/auto";
-  }
-  if (
-    text.includes("policy") ||
-    text.includes("coi") ||
-    text.includes("charge") ||
-    text.includes("statement") ||
-    text.includes("insurance")
-  ) {
-    return "/insurance";
-  }
-
-  return "/dashboard";
 }
 
 function getModuleStatus(count) {

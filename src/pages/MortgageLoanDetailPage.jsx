@@ -1147,65 +1147,6 @@ export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
                 </div>
               </div>
             </SectionCard>
-
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  The mortgage signal grid above already summarizes the current debt read. Shared follow-up belongs in Review Workspace so document gaps, property linkage issues, and payoff or refinance questions can be tracked without repeating the same snapshot twice on this page.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {bundle?.mortgageDocuments?.length || 0} document{bundle?.mortgageDocuments?.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {propertyLinks.length} linked propert{propertyLinks.length === 1 ? "y" : "ies"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
-                      {bundle?.mortgageSnapshots?.length || 0} parsed snapshot{bundle?.mortgageSnapshots?.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>{mortgageReview.headline}</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                    {mortgageReview.metrics?.documentSupport === "strong"
-                      ? "The page has enough live mortgage detail to stay focused on the current signal set here. Use Review Workspace when that work needs cross-household tracking."
-                      : "This loan still needs stronger document support or linked context. Review Workspace is the cleaner place to manage that follow-up beside the rest of the household queue."}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(mortgageReviewWorkspaceRoute)}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Open Review Workspace
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => scrollToMortgageSection("documents")}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Jump To Documents
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => scrollToMortgageSection("linked-context")}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Jump To Linked Context
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px" }}>

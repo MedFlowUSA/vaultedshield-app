@@ -813,33 +813,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     propertyPageFascia?.primaryAction?.label,
     propertyStackAnalytics?.completeness_score,
   ]);
-  const propertyStackPrompts = useMemo(() => {
-    const prompts = [];
-
-    if (linkedMortgages.length === 0) {
-      prompts.push("No linked mortgage found for this property.");
-    }
-    if (linkedHomeownersPolicies.length === 0) {
-      prompts.push("No linked homeowners policy found for this property.");
-    }
-    if (linkedMortgages.length > 1) {
-      prompts.push("Multiple mortgages are linked to this property.");
-    }
-    if (linkedHomeownersPolicies.length > 1) {
-      prompts.push("Multiple homeowners policies are linked to this property.");
-    }
-    if (linkedMortgages.length > 0 && linkedHomeownersPolicies.length > 0) {
-      prompts.push("The linked property stack appears complete.");
-    }
-    if ((assetBundle?.portalLinks?.length || 0) > 0 && linkedHomeownersPolicies.length === 0) {
-      prompts.push("This property has linked portals but no visible protection linkage yet.");
-    }
-    if (linkedHomeownersPolicies.length > 0 && linkedMortgages.length === 0) {
-      prompts.push("This property has insurance linkage but no financing linkage visible.");
-    }
-
-    return prompts;
-  }, [assetBundle?.portalLinks?.length, linkedHomeownersPolicies.length, linkedMortgages.length]);
   const propertyCommandCenter = useMemo(
     () =>
       buildPropertyCommandCenter({
@@ -2025,75 +1998,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 <button type="submit" disabled={linkingHomeowners || !selectedHomeownersPolicyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                   {linkingHomeowners ? "Linking Homeowners..." : "Link Homeowners Policy"}
                 </button>
+                {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
+                {linkError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
               </form>
             </SectionCard>
             </div>
-          </div>
-
-          <div style={{ marginTop: "24px" }}>
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  The action feed and command center already carry the on-page next move. Shared property follow-up now belongs in Review Workspace so stack gaps, document work, and linked mortgage or protection issues can be tracked together instead of repeating as a second review card here.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {propertyReviewQueueItems.length} open property workstream{propertyReviewQueueItems.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {propertyStackLinkageStatus}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topPropertyReviewItem
-                      ? topPropertyReviewItem.summary
-                      : `Current linkage status: ${propertyStackLinkageStatus}`}
-                  </div>
-                  {propertyStackPrompts?.length ? (
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                      {propertyStackPrompts[0]}
-                    </div>
-                  ) : null}
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(propertyReviewWorkspaceRoute)}
-                      style={actionButtonStyle(true)}
-                    >
-                      Open Review Workspace
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => scrollToPropertySection("property-stack-analytics")}
-                      style={actionButtonStyle(false)}
-                    >
-                      Jump To Stack Analytics
-                    </button>
-                    {topPropertyReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topPropertyReviewItem.route)}
-                        style={actionButtonStyle(false)}
-                      >
-                        Open Top Property Review
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              {linkSuccess ? <div style={{ marginTop: "12px", color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
-              {linkError ? <div style={{ marginTop: "12px", color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
-            </SectionCard>
           </div>
 
           <div
