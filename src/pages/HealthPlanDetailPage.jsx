@@ -759,56 +759,6 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
               )}
             </SectionCard>
 
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  Health Command already explains the strongest blockers on this plan. Shared follow-up belongs in Review Workspace so documents, alerts, and continuity work live with the rest of the household queue instead of repeating here.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {healthReviewQueueItems.length} open health workstream{healthReviewQueueItems.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topHealthReviewItem?.summary || healthCommandCenter.headline}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(healthReviewWorkspaceRoute)}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Open Review Workspace
-                    </button>
-                    {topHealthReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topHealthReviewItem.route)}
-                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                      >
-                        Open Top Health Review
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
           </div>
 
           {shouldShowDevDiagnostics() ? (

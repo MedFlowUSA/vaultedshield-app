@@ -984,30 +984,12 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                     gap: "12px",
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Workspace Handoff</div>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Property stack note</div>
                   <div style={{ color: "#475569", lineHeight: "1.7" }}>
                     The command center and linked context already explain this policy’s place in the property stack. Shared follow-up is cleaner in Review Workspace once the issue needs tracking or assignment.
                   </div>
                   <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
                     {topHomeownersReviewItem?.summary || `Current linkage status: ${linkageStatus}`}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(homeownersReviewWorkspaceRoute)}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Open Review Workspace
-                    </button>
-                    {topHomeownersReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topHomeownersReviewItem.route)}
-                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                      >
-                        Open Top Homeowners Review
-                      </button>
-                    ) : null}
                   </div>
                 </div>
                 {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}

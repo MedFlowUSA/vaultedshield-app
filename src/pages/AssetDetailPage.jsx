@@ -816,53 +816,6 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           )}
         </SectionCard>
 
-        <SectionCard title="Review Workspace Handoff">
-          <div style={{ display: "grid", gap: "14px" }}>
-            <div style={{ color: "#475569", lineHeight: "1.7" }}>
-              Continuity Command already explains the current blockers on this asset. Shared follow-up belongs in Review Workspace so portal, document, task, and alert gaps can be tracked without repeating the same summary in a second AI card.
-            </div>
-            <div
-              style={{
-                padding: "18px 20px",
-                borderRadius: "18px",
-                background: "#f8fafc",
-                border: "1px solid rgba(148, 163, 184, 0.18)",
-                display: "grid",
-                gap: "14px",
-              }}
-            >
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                  {reviewQueueItems.length} open asset workstream{reviewQueueItems.length === 1 ? "" : "s"}
-                </div>
-                <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                  {bundle.portalLinks.length} portal link{bundle.portalLinks.length === 1 ? "" : "s"}
-                </div>
-              </div>
-              <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                {topReviewItem?.summary || commandCenter.headline}
-              </div>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.(reviewWorkspaceRoute)}
-                  style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                >
-                  Open Review Workspace
-                </button>
-                {topReviewItem?.route ? (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate?.(topReviewItem.route)}
-                    style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                  >
-                    Open Top Asset Review
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </SectionCard>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualRailLayout, gap: "18px" }}>

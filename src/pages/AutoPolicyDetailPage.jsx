@@ -758,56 +758,6 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               )}
             </SectionCard>
 
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  Auto Command already carries the active blockers on this policy. Shared follow-up belongs in Review Workspace so document, alert, and continuity work can be tracked without repeating the same cross-household summary here.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {autoReviewQueueItems.length} open auto workstream{autoReviewQueueItems.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topAutoReviewItem?.summary || autoCommandCenter.headline}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(autoReviewWorkspaceRoute)}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Open Review Workspace
-                    </button>
-                    {topAutoReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topAutoReviewItem.route)}
-                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                      >
-                        Open Top Auto Review
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
           </div>
 
           {shouldShowDevDiagnostics() ? (

@@ -1632,49 +1632,6 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                     summary={`No persisted retirement analytics rows are stored yet, but this account currently reads ${retirementSignals.signalLevel.replace(/_/g, " ")} from the live statement, holdings, and review evidence.`}
                     bullets={(retirementSignals.reasons || []).slice(0, 4)}
                   />
-                  {topRetirementReviewItem ? (
-                    <div
-                      style={{
-                        padding: "16px 18px",
-                        borderRadius: "14px",
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        display: "grid",
-                        gap: "12px",
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>Review Workspace Handoff</div>
-                      <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                        The retirement action feed already carries the live next move on this page. Shared follow-up stays cleaner in Review Workspace once you need to track, assign, or clear the issue across the household.
-                      </div>
-                      <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>{topRetirementReviewItem.summary}</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
-                          style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                        >
-                          Open Review Workspace
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToSection("documents")}
-                          style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                        >
-                          Jump To Documents
-                        </button>
-                        {topRetirementReviewItem.route ? (
-                          <button
-                            type="button"
-                            onClick={() => onNavigate?.(topRetirementReviewItem.route)}
-                            style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                          >
-                            Open Top Retirement Review
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               )}
             </SectionCard>
@@ -1761,56 +1718,6 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
               )}
             </SectionCard>
 
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  Retirement Command and the account read already explain the active retirement issues on this page. Shared follow-up belongs in Review Workspace so document, alert, and continuity work is tracked in one place instead of restated in a second linkage card.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {retirementReviewQueueItems.length} open retirement workstream{retirementReviewQueueItems.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topRetirementReviewItem?.summary || retirementCommandCenter.headline}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
-                      style={{ padding: "10px 14px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                    >
-                      Open Review Workspace
-                    </button>
-                    {topRetirementReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topRetirementReviewItem.route)}
-                        style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 700 }}
-                      >
-                        Open Top Retirement Review
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
           </div>
 
           {shouldShowDevDiagnostics() ? (

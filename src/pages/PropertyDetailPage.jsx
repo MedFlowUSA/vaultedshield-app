@@ -2667,56 +2667,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
             </SectionCard>
             </div>
 
-            <SectionCard title="Review Workspace Handoff">
-              <div style={{ display: "grid", gap: "14px" }}>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                  Property Command and the stack analytics already explain the active property issues on this page. Shared follow-up belongs in Review Workspace so document, alert, and continuity work can be tracked once instead of repeated in a second linkage card here.
-                </div>
-                <div
-                  style={{
-                    padding: "18px 20px",
-                    borderRadius: "18px",
-                    background: "#f8fafc",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#dbeafe", color: "#1d4ed8", fontWeight: 700, fontSize: "12px" }}>
-                      {propertyReviewQueueItems.length} open property workstream{propertyReviewQueueItems.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#e2e8f0", color: "#475569", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.alerts?.length || 0} alert{assetBundle?.alerts?.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ padding: "7px 12px", borderRadius: "999px", background: "#ecfccb", color: "#3f6212", fontWeight: 700, fontSize: "12px" }}>
-                      {assetBundle?.tasks?.length || 0} task{assetBundle?.tasks?.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topPropertyReviewItem?.summary || propertyCommandCenter.headline}
-                  </div>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate?.(propertyReviewWorkspaceRoute)}
-                      style={actionButtonStyle(true)}
-                    >
-                      Open Review Workspace
-                    </button>
-                    {topPropertyReviewItem?.route ? (
-                      <button
-                        type="button"
-                        onClick={() => onNavigate?.(topPropertyReviewItem.route)}
-                        style={actionButtonStyle(false)}
-                      >
-                        Open Top Property Review
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
           </div>
 
           {shouldShowDevDiagnostics() ? (

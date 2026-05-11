@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 
@@ -23,14 +23,96 @@ export default function LifePolicyDetailPage({ onNavigate }) {
     () => [...savedPolicies].sort((left, right) => String(right.last_saved_at || "").localeCompare(String(left.last_saved_at || ""))),
     [savedPolicies]
   );
+  const heroTone = sortedPolicies.length > 0 ? "good" : loading ? "info" : "warning";
+  const heroHeadline =
+    sortedPolicies.length > 0
+      ? "Your life-policy workflow is ready to use"
+      : "Start the first life-policy intake here";
+  const heroSummary =
+    sortedPolicies.length > 0
+      ? `${sortedPolicies.length} saved life polic${sortedPolicies.length === 1 ? "y is" : "ies are"} available for review, comparison, and deeper evidence-backed analysis.`
+      : "This guide keeps life-policy intake simple: begin with the baseline policy file, add annual statements, then open the saved policy for deeper review.";
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="Life Policy Intelligence"
-        title="Life Policy Intake Guide"
-        description="This guide explains where life-policy intake, policy review, and reports fit so users can stay on the main insurance workflow instead of guessing between upload screens."
+        sectionTitle="Life Policy Intake Guide"
+        headline={heroHeadline}
+        summary={heroSummary}
+        transition="Use this as the plain-English entry point into the life-policy workflow. The specialized intake page, policy detail pages, and reports still hold the technical depth underneath."
+        actions={[
+          {
+            label: "Open Insurance Intelligence",
+            onClick: () => onNavigate?.("/insurance"),
+            kind: "primary",
+          },
+          {
+            label: "Open Life Policy Intake",
+            onClick: () => onNavigate?.("/insurance/life/upload"),
+          },
+          {
+            label: "Open Reports",
+            onClick: () => onNavigate?.("/reports"),
+          },
+        ]}
+        score={sortedPolicies.length > 0 ? 82 : 46}
+        scoreTone={heroTone}
+        scoreSubtitle="workflow"
+        scoreIconLabel="life policy"
+        asideHeadline={sortedPolicies.length > 0 ? "Clear next step" : "Simple starting point"}
+        asideSummary={
+          sortedPolicies.length > 0
+            ? "Open the intake when you need more document support, or open a saved policy when you are ready for deeper analysis."
+            : "Bring in the baseline policy file first, then layer annual statements on top so the deeper technical read has enough support."
+        }
+        glanceEyebrow="At A Glance"
+        glanceItems={[
+          { label: "Saved policies", value: sortedPolicies.length },
+          { label: "Guide purpose", value: "Life-policy intake path" },
+          { label: "Best first move", value: sortedPolicies.length > 0 ? "Open saved policy" : "Start intake" },
+          { label: "Technical depth", value: "Available underneath" },
+        ]}
       />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Start Here"
+          title="Open the intake workflow"
+          detail="Use the dedicated life-policy intake when you need to add the baseline policy file, scan pages, or upload annual statements."
+          metric="Baseline first"
+          tone="info"
+          statusLabel="Guided Action"
+          actionLabel="Open Intake"
+          onAction={() => onNavigate?.("/insurance/life/upload")}
+        />
+        <FriendlyActionTile
+          kicker="What This Produces"
+          title="Build a saved policy you can reopen"
+          detail="Once intake is complete, VaultedShield saves the policy into the main insurance workflow for ranking, comparison, and evidence review."
+          metric={`${sortedPolicies.length} saved`}
+          tone={sortedPolicies.length > 0 ? "good" : "warning"}
+          statusLabel={sortedPolicies.length > 0 ? "Well Supported" : "Needs Review"}
+          actionLabel="Open Insurance"
+          onAction={() => onNavigate?.("/insurance")}
+        />
+        <FriendlyActionTile
+          kicker="When You Want Depth"
+          title="Use reports after the packet is built"
+          detail="Reports and policy detail pages still hold the technical comparison, timeline, and evidence layers once the intake is complete."
+          metric="Deep detail"
+          tone="neutral"
+          statusLabel="Simple Read"
+          actionLabel="Open Reports"
+          onAction={() => onNavigate?.("/reports")}
+        />
+      </div>
 
       <SectionCard
         title="Start Here"

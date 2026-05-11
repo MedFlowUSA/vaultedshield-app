@@ -1,9 +1,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/layout/PageHeader";
+import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import {
   buildPolicyRecord,
   buildCashValueGrowthExplanation,
@@ -786,6 +785,9 @@ export default function LifePolicyUploadPage({ onNavigate }) {
   const nativeCameraAvailable = isNativeCameraAvailable();
   const illustrationCameraInputRef = useRef(null);
   const statementCameraInputRef = useRef(null);
+  const illustrationSectionRef = useRef(null);
+  const statementSectionRef = useRef(null);
+  const analyzeSectionRef = useRef(null);
   const [illustrationFile, setIllustrationFile] = useState(null);
   const [statementFiles, setStatementFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -868,35 +870,6 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     });
   }, [normalizedStatementInput, statementScanPages, uploadedStatementFiles]);
 
-  const summaryItems = useMemo(
-    () => [
-      {
-        label: "Initial Policy File",
-        value: illustrationFile || illustrationScan.hasPages ? 1 : 0,
-        helper: illustrationFile
-          ? illustrationFile.name
-          : illustrationScan.hasPages
-            ? `${illustrationScan.pages.length} scanned page${illustrationScan.pages.length === 1 ? "" : "s"} ready`
-            : "Upload the baseline illustration or scan the policy pages first",
-      },
-      {
-        label: "Yearly Statements",
-        value: statementFiles.length + (statementScan.hasPages ? 1 : 0),
-        helper:
-          statementFiles.length + (statementScan.hasPages ? 1 : 0) > 0
-            ? `${statementFiles.length} PDF file${statementFiles.length === 1 ? "" : "s"} and ${statementScan.hasPages ? `${statementScan.pages.length} scanned page${statementScan.pages.length === 1 ? "" : "s"}` : "no scanned statement pages"} queued`
-            : "Upload annual statement PDFs or build one scanned statement packet",
-      },
-      {
-        label: "Ready To Analyze",
-        value: illustrationFile || illustrationScan.hasPages ? "Yes" : "No",
-        helper: illustrationFile || illustrationScan.hasPages
-          ? "VaultedShield can now parse the baseline file and attach statement history."
-          : "The baseline illustration/policy file is required before analysis can run.",
-      },
-    ],
-    [illustrationFile, illustrationScan.hasPages, illustrationScan.pages.length, statementFiles, statementScan.hasPages, statementScan.pages.length]
-  );
   const readerReadiness = useMemo(
     () => buildReaderReadinessSummary(documentDiagnostics),
     [documentDiagnostics]
@@ -1382,33 +1355,154 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           product: saveStatus.product,
         })
       : "Open Saved Policy";
+  const statementInputCount = uploadedStatementFiles.length + (statementScan.hasPages ? 1 : 0);
+  const intakeHeadline = saveStatus?.succeeded
+    ? "Your life-policy packet is ready for deeper review"
+    : hasBaselineInput
+      ? "Your life-policy packet is taking shape"
+      : "Start with the original policy or illustration";
+  const intakeSummary = saveStatus?.succeeded
+    ? "VaultedShield has already normalized the current packet and saved the policy into the main insurance workflow."
+    : hasBaselineInput
+      ? "The baseline file is in place, and you can now add annual statements to strengthen the current read before analysis."
+      : "This page keeps the life-policy path simple: add the baseline file first, layer in annual statements second, then analyze the packet when it is ready.";
+  const intakeScore = Math.min(
+    96,
+    (hasBaselineInput ? 42 : 18) +
+      Math.min(statementInputCount, 4) * 11 +
+      (readerReadiness?.status === "good" ? 16 : readerReadiness?.status === "fair" ? 10 : 0) +
+      (saveStatus?.succeeded ? 24 : 0)
+  );
+  const intakeTone = saveStatus?.succeeded
+    ? "good"
+    : !hasBaselineInput
+      ? "warning"
+      : readerReadiness?.status === "poor"
+        ? "alert"
+        : readerReadiness?.status === "fair"
+          ? "warning"
+          : "info";
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="Life Policy Intelligence"
-        title="Life Policy Intake"
-        description="Bring in the original illustration, then add annual statements so the engine can normalize the policy, interpret performance, and surface charge pressure over time."
-        actions={
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-            <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(false)}>
-              Back To Insurance Intelligence
-            </button>
-            <button type="button" onClick={() => onNavigate?.("/guidance")} style={actionStyle(false)}>
-              Open Guidance
-            </button>
-          </div>
+        sectionTitle="Life Policy Intake"
+        headline={intakeHeadline}
+        summary={intakeSummary}
+        transition="Start with the easiest interpretation first: baseline file, statement history, then analyze the packet. The parser, evidence, carrier-aware reasoning, and saved-policy workflow still live underneath."
+        actions={[
+          {
+            label: "Add Baseline File",
+            onClick: () => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            kind: "primary",
+          },
+          {
+            label: "Add Statement History",
+            onClick: () => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Analyze Packet",
+            onClick: () => analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            label: "Back To Insurance",
+            onClick: () => onNavigate?.("/insurance"),
+          },
+        ]}
+        score={intakeScore}
+        scoreTone={intakeTone}
+        scoreSubtitle="packet"
+        scoreIconLabel="life policy"
+        asideHeadline={
+          saveStatus?.succeeded
+            ? "Saved for deeper review"
+            : hasBaselineInput
+              ? "Simple next step"
+              : "Baseline needed first"
         }
+        asideSummary={
+          saveStatus?.succeeded
+            ? "Open the saved policy whenever you want the deeper charge, COI, timeline, and evidence layers."
+            : hasBaselineInput
+              ? "Add statement history next, then analyze the packet when it feels complete enough for a first read."
+              : "The analysis engine needs the original policy or illustration before it can build a trustworthy read."
+        }
+        glanceEyebrow="At A Glance"
+        glanceItems={[
+          {
+            label: "Baseline file",
+            value: illustrationFile
+              ? illustrationFile.name
+              : illustrationScan.hasPages
+                ? `${illustrationScan.pages.length} scanned page${illustrationScan.pages.length === 1 ? "" : "s"}`
+                : "Not added yet",
+          },
+          {
+            label: "Statement inputs",
+            value: statementInputCount > 0 ? statementInputCount : "None yet",
+          },
+          {
+            label: "Ready to analyze",
+            value: hasBaselineInput ? "Yes" : "No",
+          },
+          {
+            label: "Saved policy",
+            value: saveStatus?.policyId ? savedPolicyLabel : "Not saved yet",
+          },
+        ]}
       />
 
-      <SummaryPanel items={summaryItems} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
+          gap: "14px",
+        }}
+      >
+        <FriendlyActionTile
+          kicker="Step 1"
+          title="Bring in the original policy or illustration"
+          detail="This anchors the policy identity, original design assumptions, and the first trustworthy baseline for later analysis."
+          metric={illustrationFile || illustrationScan.hasPages ? "Baseline loaded" : "Baseline needed"}
+          tone={illustrationFile || illustrationScan.hasPages ? "good" : "warning"}
+          statusLabel={illustrationFile || illustrationScan.hasPages ? "Well Supported" : "Needs Review"}
+          actionLabel="Open Baseline Upload"
+          onAction={() => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Step 2"
+          title="Layer in annual statement history"
+          detail="Statements strengthen cash-value trends, charge visibility, and the current in-force read without changing the underlying intake logic."
+          metric={statementInputCount > 0 ? `${statementInputCount} inputs ready` : "Add statements next"}
+          tone={statementInputCount > 0 ? "info" : "neutral"}
+          statusLabel={statementInputCount > 0 ? "Building" : "Simple Read"}
+          actionLabel="Open Statement Upload"
+          onAction={() => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        />
+        <FriendlyActionTile
+          kicker="Step 3"
+          title="Analyze and save the packet"
+          detail="Once the packet is ready, VaultedShield builds the deeper read and saves the policy into the main insurance workflow."
+          metric={saveStatus?.policyId ? "Saved" : hasBaselineInput ? "Ready soon" : "Waiting on baseline"}
+          tone={saveStatus?.succeeded ? "good" : hasBaselineInput ? intakeTone : "warning"}
+          statusLabel={saveStatus?.succeeded ? "Recently Improved" : "Guided Action"}
+          actionLabel={saveStatus?.policyId ? savedPolicyLabel : "Open Analysis"}
+          onAction={() =>
+            saveStatus?.policyId && savedPolicyRoute
+              ? onNavigate?.(savedPolicyRoute)
+              : analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+        />
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
-        <SectionCard
+        <div ref={illustrationSectionRef}>
+          <SectionCard
           title="1. Initial Policy / Illustration Upload"
           subtitle="Upload the original illustration or baseline policy PDF first so the system can anchor the policy design."
-        >
-          <div style={{ display: "grid", gap: "14px" }}>
+          >
+            <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               This establishes the policy identity, original design assumptions, issue date, death benefit, and illustration structure.
             </div>
@@ -1456,7 +1550,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               </div>
             )}
 
-            <ScanReview
+              <ScanReview
               title="Initial Policy Scan Session"
               description="Capture one or more pages, review order, and retake weak scans before analysis."
               pages={illustrationScan.pages}
@@ -1469,14 +1563,16 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               onClearSession={() => handleClearSession("illustration")}
               cameraLoading={cameraLoadingTarget === "illustration"}
               isMobile={isMobile}
-            />
-          </div>
-        </SectionCard>
-        <SectionCard
+              />
+            </div>
+          </SectionCard>
+        </div>
+        <div ref={statementSectionRef}>
+          <SectionCard
           title="2. Annual Statement History Upload"
           subtitle="Upload yearly statement PDFs separately after the baseline file to build the live in-force history."
-        >
-          <div style={{ display: "grid", gap: "14px" }}>
+          >
+            <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               Add annual statements, charge pages, and allocation pages to improve trend history, charge visibility, and current policy interpretation.
             </div>
@@ -1556,7 +1652,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               ) : null}
             </div>
 
-            <ScanReview
+              <ScanReview
               title="Annual Statement Scan Session"
               description="Build one scanned statement packet, reorder pages, and proceed even if quality is fair. Uploaded PDFs feed the same analysis packet above, so camera scanning is optional."
               pages={statementScan.pages}
@@ -1574,16 +1670,18 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               onClearSession={() => handleClearSession("statement")}
               cameraLoading={cameraLoadingTarget === "statement"}
               isMobile={isMobile}
-            />
-          </div>
-        </SectionCard>
+              />
+            </div>
+          </SectionCard>
+        </div>
       </div>
 
-      <SectionCard
+      <div ref={analyzeSectionRef}>
+        <SectionCard
         title="Analyze And Save"
         subtitle="Run the carrier-aware parser, build the in-force policy read, and save the result into the vaulted policy workflow."
-      >
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        >
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
           <button
             type="button"
             onClick={handleAnalyzeAndSave}
@@ -1603,7 +1701,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           ) : null}
         </div>
 
-        {loadingMessage ? (
+          {loadingMessage ? (
           <div style={{ marginTop: "14px", display: "grid", gap: "6px", color: "#475569" }}>
             <div>{loadingMessage}</div>
             {extractionStatus.phase ? (
@@ -1617,8 +1715,8 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           </div>
         ) : null}
 
-        {error ? <div style={{ marginTop: "14px", color: "#991b1b" }}>{error}</div> : null}
-        {qualityNotice ? <div style={{ marginTop: "14px", color: "#92400e" }}>{qualityNotice}</div> : null}
+          {error ? <div style={{ marginTop: "14px", color: "#991b1b" }}>{error}</div> : null}
+          {qualityNotice ? <div style={{ marginTop: "14px", color: "#92400e" }}>{qualityNotice}</div> : null}
 
         {readerReadiness ? (
           <div
@@ -1654,18 +1752,18 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           </div>
         ) : null}
 
-        {!hasBaselineInput ? (
+          {!hasBaselineInput ? (
           <div style={{ marginTop: "14px", color: "#475569" }}>
             Upload the initial illustration or policy document before analysis can run.
           </div>
         ) : null}
-        {hasStatementPacketGap ? (
+          {hasStatementPacketGap ? (
           <div style={{ marginTop: "14px", color: "#9a3412" }}>
             We found uploaded files, but they were not converted into an analysis packet.
           </div>
         ) : null}
 
-        {(documentDiagnostics.illustration || documentDiagnostics.statements.length > 0) ? (
+          {(documentDiagnostics.illustration || documentDiagnostics.statements.length > 0) ? (
           <div
             style={{
               marginTop: "16px",
@@ -1719,7 +1817,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
           </div>
         ) : null}
 
-        {saveStatus ? (
+          {saveStatus ? (
           <div
             style={{
               marginTop: "16px",
@@ -1932,8 +2030,9 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               </div>
             ) : null}
           </div>
-        ) : null}
-      </SectionCard>
+          ) : null}
+        </SectionCard>
+      </div>
 
       {!hasAnyFiles ? (
         <EmptyState

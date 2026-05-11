@@ -4,7 +4,6 @@ import {
   FriendlyPageHero,
 } from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
-import SummaryPanel from "../components/shared/SummaryPanel";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   buildHouseholdOnboardingChecklist,
@@ -278,7 +277,35 @@ export default function GuidanceCenterPage({ onNavigate }) {
         subtitle="Guidance is more useful when it reflects what the current household has already started."
       >
         <div style={{ display: "grid", gap: "14px" }}>
-          <SummaryPanel items={summaryItems} />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            {summaryItems.map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: "14px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{item.value}</div>
+                {item.helper ? (
+                  <div style={{ color: "#475569", fontSize: "13px", lineHeight: "1.6" }}>{item.helper}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: contextMetricColumns, gap: "12px" }}>
           <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
