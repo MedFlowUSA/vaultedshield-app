@@ -1,4 +1,7 @@
-import PageHeader from "../components/layout/PageHeader";
+import {
+  FriendlyActionTile,
+  FriendlyPageHero,
+} from "../components/shared/FriendlyIntelligenceUI";
 import SectionCard from "../components/shared/SectionCard";
 import { ACCESS_TIERS } from "../lib/auth/accessPortal";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
@@ -30,18 +33,91 @@ export default function PricingPage({
   const cardPadding = isMobile ? "18px 16px" : "22px";
   const actionRowDirection = isMobile ? "column" : "row";
   const resolvedReturnPath = returnPath && returnPath !== "/pricing" ? returnPath : "/insurance";
+  const tierOrder = Object.values(ACCESS_TIERS);
+  const currentTierConfig = tierOrder.find((tier) => tier.key === currentTier) || tierOrder[0];
+  const tierProgress = currentTier === "professional" ? 92 : currentTier === "essential" ? 72 : 44;
+  const tierTone = currentTier === "professional" ? "good" : currentTier === "essential" ? "info" : "warning";
 
   return (
     <div style={{ maxWidth: "1120px", margin: pageMargin, padding: pagePadding, display: "grid", gap: isMobile ? "18px" : "22px" }}>
-      <PageHeader
+      <FriendlyPageHero
         eyebrow="VaultedShield Access"
-        title="Plans And Tool Tiers"
-        description={
+        sectionTitle="Plans And Tool Tiers"
+        headline={lockedRouteTitle ? `${lockedRouteTitle} needs a higher tier` : "Choose the access level that fits your household work"}
+        summary={
           lockedRouteTitle
             ? `${lockedRouteTitle} is part of a higher access tier. Choose the level that fits how deeply you want to run household intelligence.`
             : "Start free, then unlock deeper intelligence, reporting, and continuity workflows as the platform grows."
         }
+        transition="The free tier stays useful for discovery. Higher tiers unlock deeper workflows, stronger review tooling, and more complete household operating coverage."
+        actions={[
+          {
+            label: "View Plan Options",
+            onClick: () => onNavigate?.("/pricing"),
+            kind: "primary",
+          },
+          {
+            label: "Continue To Workspace",
+            onClick: () => onNavigate?.(resolvedReturnPath),
+          },
+          {
+            label: "Create New Account",
+            onClick: () => onNavigate?.("/signup"),
+          },
+        ]}
+        score={tierProgress}
+        scoreTone={tierTone}
+        scoreSubtitle="access"
+        scoreIconLabel="tier"
+        asideHeadline={currentTierConfig?.label || "Free"}
+        asideSummary={
+          currentTier === "professional"
+            ? "You already have the deepest access tier, including the broadest household intelligence and workflow coverage."
+            : currentTier === "essential"
+              ? "You have the guided middle tier. Upgrade only if you need wider household coverage and deeper operating workflows."
+              : "Free stays useful for early exploration. Upgrade when you want deeper review workflows and broader module access."
+        }
+        glanceEyebrow="At A Glance"
+        glanceItems={[
+          { label: "Current tier", value: currentTierConfig?.label || "Free" },
+          { label: "Return path", value: lockedRouteTitle || "Main workspace" },
+          { label: "Best next move", value: lockedRouteTitle ? "Choose a plan" : "Keep exploring" },
+          { label: "Technical depth", value: "Unlocked by tier" },
+        ]}
       />
+
+      <div style={{ display: "grid", gridTemplateColumns: planColumns, gap: isMobile ? "12px" : "14px" }}>
+        <FriendlyActionTile
+          kicker="Current Access"
+          title={`${currentTierConfig?.label || "Free"} tier is active`}
+          detail="This is the current access level connected to your account, and it controls which deeper household workflows are available."
+          metric={currentTierConfig?.priceLabel || "$0"}
+          tone={tierTone}
+          statusLabel={currentTier === "professional" ? "Well Supported" : "Simple Read"}
+          actionLabel="See Plans"
+          onAction={() => onNavigate?.("/pricing")}
+        />
+        <FriendlyActionTile
+          kicker="When To Upgrade"
+          title={lockedRouteTitle ? `Unlock ${lockedRouteTitle}` : "Upgrade only when the workflow needs it"}
+          detail="Higher tiers are meant to unlock practical review depth, not cosmetic extras, so the choice stays tied to how much household complexity you want to run."
+          metric={lockedRouteTitle ? "Targeted unlock" : "Guided expansion"}
+          tone={lockedRouteTitle ? "warning" : "neutral"}
+          statusLabel={lockedRouteTitle ? "Needs Review" : "Guided Focus"}
+          actionLabel="Compare Tiers"
+          onAction={() => onNavigate?.("/pricing")}
+        />
+        <FriendlyActionTile
+          kicker="Continue"
+          title="Return to the working surface"
+          detail="If you already know the right tier, you can go straight back into the product and keep moving."
+          metric="No dead end"
+          tone="good"
+          statusLabel="Next Step"
+          actionLabel="Continue"
+          onAction={() => onNavigate?.(resolvedReturnPath)}
+        />
+      </div>
 
       <SectionCard
         title="Access Strategy"
