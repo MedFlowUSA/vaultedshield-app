@@ -812,6 +812,8 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
   const illustrationScan = useScanSession();
   const statementScan = useScanSession();
+  const { clearSession: clearIllustrationSession } = illustrationScan;
+  const { clearSession: clearStatementSession } = statementScan;
   const normalizedStatementInput = useMemo(
     () => buildAnnualStatementAnalysisInput(statementFiles, statementScan.pages),
     [statementFiles, statementScan.pages]
@@ -835,9 +837,9 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     setExtractionStatus({ phase: "", progress: 0, currentFile: "", detail: "" });
     setDocumentDiagnostics({ illustration: null, statements: [] });
     setQualityNotice("");
-    illustrationScan.clearSession();
-    statementScan.clearSession();
-  }, [debug.authUserId, debug.householdId, illustrationScan, statementScan]);
+    clearIllustrationSession();
+    clearStatementSession();
+  }, [debug.authUserId, debug.householdId, clearIllustrationSession, clearStatementSession]);
 
   useEffect(() => {
     if (!selectedIllustrationPageId && illustrationScan.pages[0]) {

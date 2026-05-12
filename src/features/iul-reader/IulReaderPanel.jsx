@@ -1,4 +1,6 @@
 import { useRef } from "react";
+import { buildCashValuePerformanceModel } from "./cashValuePerformance.js";
+import { CashValuePerformancePanel } from "./CashValuePerformancePanel.jsx";
 
 function ReaderStatusBadge({ status, children }) {
   const tone =
@@ -264,7 +266,8 @@ function renderReaderTable(table) {
   );
 }
 
-export function IulReaderPanel({ reader }) {
+export function IulReaderPanel({ reader, results }) {
+  const performanceModel = results ? buildCashValuePerformanceModel(results) : null;
   const trustSectionRef = useRef(null);
   const policyReadSectionRef = useRef(null);
   const prioritiesSectionRef = useRef(null);
@@ -1449,6 +1452,26 @@ export function IulReaderPanel({ reader }) {
               ) : null}
             </div>
           </details>
+        ) : null}
+
+        {performanceModel ? (
+          <div
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "16px",
+              padding: "18px 20px",
+              display: "grid",
+              gap: "6px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "#1d4ed8", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Performance Intelligence
+            </div>
+            <h3 style={{ margin: "0 0 16px 0" }}>Cash Value Performance And Vehicle Comparison</h3>
+            <CashValuePerformancePanel performanceModel={performanceModel} />
+          </div>
         ) : null}
 
         <details style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "18px", minWidth: 0 }}>
