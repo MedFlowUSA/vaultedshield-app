@@ -1639,242 +1639,60 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         ))}
       </section>
 
-      <section style={{ display: "grid", gap: "10px" }}>
-        <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-          Choose Your Lane
+      <section
+        style={friendlySurfaceCardStyle({
+          padding: isMobile ? "22px 20px" : "24px 24px 26px",
+          display: "grid",
+          gap: "18px",
+        })}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Top Priorities</div>
+          <div style={{ color: "#334155", lineHeight: "1.75" }}>
+            Start with the one or two policies that matter most instead of trying to digest the whole portfolio.
+          </div>
         </div>
-        <div style={{ color: "#475569", lineHeight: "1.75", maxWidth: "56rem" }}>
-          Start with the simple path that matches what you need right now, then let the deeper charge, confidence, and comparison layers open only when you ask for them.
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-            gap: "14px",
-          }}
-        >
-          {insuranceActionTiles.map((tile) => (
-            <FriendlyActionTile
-              key={tile.key}
-              kicker={tile.kicker}
-              title={tile.title}
-              detail={tile.detail}
-              metric={tile.metric}
-              tone={tile.tone}
-              statusLabel={tile.statusLabel}
-              actionLabel={tile.actionLabel}
-              onAction={tile.onAction}
-            />
+
+        <div style={{ display: "grid", gap: "12px" }}>
+          {insurancePriorityRows.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr) auto",
+                gap: "14px",
+                alignItems: "center",
+                padding: "16px",
+                borderRadius: "20px",
+                background: "#f8fafc",
+                border: "1px solid rgba(226, 232, 240, 0.94)",
+              }}
+            >
+              <div
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "16px",
+                  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                  color: "#1d4ed8",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: "14px",
+                  fontWeight: 800,
+                }}
+              >
+                {item.badge}
+              </div>
+              <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
+                <div style={{ color: "#64748b", lineHeight: "1.65", fontSize: "14px" }}>{item.detail}</div>
+                <div style={{ color: "#2563eb", fontWeight: 700, fontSize: "13px" }}>{item.meta}</div>
+              </div>
+              <button type="button" onClick={() => onNavigate?.(item.route)} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
+                {item.actionLabel}
+              </button>
+            </div>
           ))}
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.08fr) minmax(320px, 0.92fr)",
-          gap: "24px",
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={friendlySurfaceCardStyle({
-            padding: isMobile ? "22px 20px" : "24px 24px 26px",
-            display: "grid",
-            gap: "18px",
-            height: "100%",
-          })}
-        >
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Top Priorities</div>
-            <div style={{ color: "#334155", lineHeight: "1.75" }}>
-              Start with the one or two policies that matter most instead of trying to digest the whole portfolio.
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: "12px" }}>
-            {insurancePriorityRows.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile ? "1fr" : "auto minmax(0, 1fr) auto",
-                  gap: "14px",
-                  alignItems: "center",
-                  padding: "16px",
-                  borderRadius: "20px",
-                  background: "#f8fafc",
-                  border: "1px solid rgba(226, 232, 240, 0.94)",
-                }}
-              >
-                <div
-                  style={{
-                    width: "42px",
-                    height: "42px",
-                    borderRadius: "16px",
-                    background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-                    color: "#1d4ed8",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "14px",
-                    fontWeight: 800,
-                  }}
-                >
-                  {item.badge}
-                </div>
-                <div style={{ minWidth: 0, display: "grid", gap: "4px" }}>
-                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
-                  <div style={{ color: "#64748b", lineHeight: "1.65", fontSize: "14px" }}>{item.detail}</div>
-                  <div style={{ color: "#2563eb", fontWeight: 700, fontSize: "13px" }}>{item.meta}</div>
-                </div>
-                <button type="button" onClick={() => onNavigate?.(item.route)} style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}>
-                  {item.actionLabel}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div
-          style={friendlySurfaceCardStyle({
-            padding: isMobile ? "22px 20px" : "24px 24px 26px",
-            display: "grid",
-            gap: "18px",
-            height: "100%",
-          })}
-        >
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>What This Read Is Saying</div>
-            <div style={{ color: "#334155", lineHeight: "1.75" }}>
-              This is the plain-English bridge between the simple verdict and the technical evidence underneath.
-            </div>
-          </div>
-          <div style={{ display: "grid", gap: "12px" }}>
-            {insuranceReadRows.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  padding: "16px 18px",
-                  borderRadius: "18px",
-                  background: "#f8fafc",
-                  border: "1px solid rgba(226, 232, 240, 0.94)",
-                  display: "grid",
-                  gap: "8px",
-                }}
-              >
-                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                  {item.title}
-                </div>
-                <div style={{ color: "#0f172a", fontWeight: 800, lineHeight: "1.5" }}>{item.accent}</div>
-                <div style={{ color: "#475569", lineHeight: "1.72" }}>{item.detail}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1fr) minmax(320px, 0.9fr)",
-          gap: "24px",
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={friendlySurfaceCardStyle({
-            padding: isMobile ? "22px 20px" : "24px 24px 26px",
-            display: "grid",
-            gap: "18px",
-            height: "100%",
-          })}
-        >
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Simple Definitions</div>
-            <div style={{ color: "#334155", lineHeight: "1.75" }}>
-              These are the terms most likely to feel technical. Open one only when you want a longer explanation.
-            </div>
-          </div>
-          <div style={{ display: "grid", gap: "10px" }}>
-            {transitionGuide.keys.map((item) => (
-              <details
-                key={item.label}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: "16px",
-                  background: "#f8fafc",
-                  border: "1px solid rgba(226, 232, 240, 0.92)",
-                }}
-              >
-                <summary style={{ cursor: "pointer", listStyle: "none" }}>
-                  <div style={{ display: "grid", gap: "4px" }}>
-                    <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                      {item.label}
-                    </div>
-                    <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.55" }}>{item.simple}</div>
-                  </div>
-                </summary>
-                <div style={{ marginTop: "10px", color: "#475569", lineHeight: "1.75" }}>{item.detail}</div>
-              </details>
-            ))}
-          </div>
-        </div>
-
-        <div
-          style={friendlySurfaceCardStyle({
-            padding: isMobile ? "22px 20px" : "24px 24px 26px",
-            display: "grid",
-            gap: "16px",
-            height: "100%",
-            background: "linear-gradient(135deg, #eef4ff 0%, #ffffff 65%, #f8fbff 100%)",
-          })}
-        >
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-              How To Use This Page
-            </div>
-            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", lineHeight: "1.2" }}>
-              Let the simple answer lead, then open the proof
-            </div>
-            <div style={{ color: "#475569", lineHeight: "1.75" }}>
-              The deeper layer is here to support the verdict, not replace it. Use it when you want comparisons, evidence, pressure points, and policy order.
-            </div>
-          </div>
-          <div style={{ display: "grid", gap: "10px" }}>
-            {transitionGuide.steps.map((step) => (
-              <div
-                key={step.label}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: "16px",
-                  background: "#ffffff",
-                  border: "1px solid rgba(226, 232, 240, 0.92)",
-                  display: "grid",
-                  gap: "6px",
-                }}
-              >
-                <div style={{ fontSize: "11px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>{step.label}</div>
-                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", lineHeight: "1.35" }}>{step.title}</div>
-                <div style={{ color: "#475569", lineHeight: "1.7" }}>{step.detail}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => setShowPortfolioReport((current) => !current)}
-              style={{ ...reportButtonStyle(showPortfolioReport, false), width: isMobile ? "100%" : "auto" }}
-            >
-              {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowFasciaExplanation((current) => !current)}
-              style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
-            >
-              {showFasciaExplanation ? "Hide Explanation" : "Why This Read"}
-            </button>
-          </div>
         </div>
       </section>
 
@@ -1891,18 +1709,36 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         style={friendlySurfaceCardStyle({
           padding: isMobile ? "22px 20px" : "24px 26px",
           display: "grid",
-          gap: "10px",
+          gap: "14px",
           background: "linear-gradient(135deg, #f8fbff 0%, #ffffff 45%, #eef6ff 100%)",
         })}
       >
-        <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
-          Supporting Details Start Here
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
+            Supporting Details
+          </div>
+          <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em", color: "#0f172a" }}>
+            Evidence, pressure points, and policy order
+          </div>
+          <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "60rem" }}>
+            Everything below is the supporting layer — use it to verify the verdict, inspect thin evidence, and understand why certain policies rank where they do.
+          </div>
         </div>
-        <div style={{ fontSize: isMobile ? "22px" : "26px", fontWeight: 800, lineHeight: "1.2", letterSpacing: "-0.03em", color: "#0f172a" }}>
-          Deeper insurance detail: evidence, pressure points, and policy order
-        </div>
-        <div style={{ color: "#475569", lineHeight: "1.8", maxWidth: "60rem" }}>
-          Everything below this point is the supporting layer. Use it to verify the verdict, inspect thin evidence, and understand why certain policies should be reviewed before others.
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setShowPortfolioReport((current) => !current)}
+            style={{ ...reportButtonStyle(showPortfolioReport, false), width: isMobile ? "100%" : "auto" }}
+          >
+            {showPortfolioReport ? "Hide Portfolio Report" : "Open Portfolio Report"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFasciaExplanation((current) => !current)}
+            style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }}
+          >
+            {showFasciaExplanation ? "Hide Explanation" : "Why This Read"}
+          </button>
         </div>
       </section>
 
@@ -2045,18 +1881,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           </div>
         </section>
       ) : null}
-
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "12px",
-        }}
-      >
-        {portfolioSignalStrip.map((item) => (
-          <div key={item.label}>{renderSignalCard(item)}</div>
-        ))}
-      </section>
 
       <section
         style={{
@@ -2842,51 +2666,6 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         )}
       </section>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "14px",
-          padding: sectionPadding,
-          borderRadius: sectionRadius,
-          background: "#ffffff",
-          border: "1px solid rgba(15, 23, 42, 0.08)",
-        }}
-      >
-        <div style={{ fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>System Insight</div>
-        <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#475569" }}>
-          {rankedPolicies.length === 1
-            ? "This first saved policy is enough to start an in-force read, but the portfolio story is still early. Statement continuity, charge support, and a second comparable policy will make this hub much more useful."
-            : systemInsight.summary}
-        </div>
-        <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#0f172a" }}>
-          {(rankedPolicies.length === 1
-            ? [
-                "One saved policy now supports baseline health, continuity, and charge interpretation.",
-                "Comparison becomes much stronger after a second policy or deeper statement history is added.",
-                "Missing statement dates, limited COI visibility, and partial strategy detail still weaken confidence where present.",
-              ]
-            : systemInsight.bullets).map((bullet) => (
-            <li key={bullet} style={{ lineHeight: "1.7" }}>
-              {bullet}
-            </li>
-          ))}
-        </ul>
-        <div
-          style={{
-            padding: "16px 18px",
-            borderRadius: "16px",
-            background: "#f8fafc",
-            border: "1px solid rgba(148, 163, 184, 0.18)",
-            display: "grid",
-            gap: "10px",
-          }}
-        >
-          <div style={{ fontWeight: 700, color: "#0f172a" }}>Portfolio Bottom Line</div>
-          <div style={{ color: "#475569", lineHeight: "1.7" }}>
-            {portfolioBottomLineSection?.summary || portfolioBrief.summary}
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
