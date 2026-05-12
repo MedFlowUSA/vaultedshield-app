@@ -1,13 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import AIInsightPanel from "../components/shared/AIInsightPanel";
-import EmptyState from "../components/shared/EmptyState";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
-import StatusBadge from "../components/shared/StatusBadge";
-import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getPropertyType,
   listPropertyTypes,
@@ -17,6 +8,7 @@ import {
   listProperties,
 } from "../lib/supabase/propertyData";
 import { buildPropertyHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
+import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 
 const PROPERTY_TYPES = listPropertyTypes();
@@ -32,24 +24,369 @@ const DEFAULT_FORM = {
   property_status: "active",
 };
 
-function getStatusTone(status) {
-  if (status === "active") return "good";
-  if (status === "watch" || status === "review") return "warning";
-  return "info";
+function pillStyle(tone) {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "18px",
+    border: "1px solid #e8edf3",
+    boxShadow: "0 2px 12px rgba(15,23,42,0.05)",
+    padding: "22px 24px",
+    ...extra,
+  };
+}
+
+function StatusPill({ label, tone }) {
+  const s = pillStyle(tone);
+  return (
+    <span style={{ ...s, fontSize: "12px", fontWeight: 700, padding: "4px 10px", borderRadius: "999px", whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function ActionButton({ label, onClick, primary, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "11px 18px",
+        borderRadius: "10px",
+        border: primary ? "none" : "1px solid #cbd5e1",
+        background: primary ? (disabled ? "#94a3b8" : "#0f172a") : "#ffffff",
+        color: primary ? "#ffffff" : "#0f172a",
+        fontWeight: 700,
+        fontSize: "14px",
+        cursor: disabled ? "default" : "pointer",
+        whiteSpace: "nowrap",
+        opacity: disabled ? 0.7 : 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ReadinessCheckpoint({ icon, label, status, detail }) {
+  const tone = status === "good" ? "good" : status === "warning" ? "warning" : "alert";
+  const s = pillStyle(tone);
+  const borderColor = tone === "good" ? "#bbf7d0" : tone === "warning" ? "#fde68a" : "#fecaca";
+  return (
+    <div style={{ ...surfaceCard(), display: "grid", gap: "10px", borderLeft: `4px solid ${borderColor}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "20px" }}>{icon}</span>
+          <span style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{label}</span>
+        </div>
+        <span style={{ ...s, fontSize: "11px", fontWeight: 700, padding: "3px 9px", borderRadius: "999px" }}>
+          {tone === "good" ? "Good" : tone === "warning" ? "Partial" : "Missing"}
+        </span>
+      </div>
+      <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{detail}</div>
+    </div>
+  );
+}
+
+function PropertyCard({ property, onNavigate }) {
+  const propertyType = getPropertyType(property.property_type_key);
+  const linkedAsset = property.assets || null;
+  const name = property.property_name || linkedAsset?.asset_name || property.property_address || "Property";
+  const statusTone = property.property_status === "active" ? "good" : property.property_status === "watch" ? "warning" : "neutral";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate?.(`/property/detail/${property.id}`)}
+      style={{
+        textAlign: "left",
+        width: "100%",
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "14px",
+        padding: "18px 20px",
+        cursor: "pointer",
+        display: "grid",
+        gap: "12px",
+        boxShadow: "0 1px 4px rgba(15,23,42,0.04)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>{name}</div>
+          <div style={{ fontSize: "13px", color: "#64748b" }}>
+            {propertyType?.display_name || property.property_type_key}
+            {property.county ? ` · ${property.county} County` : ""}
+          </div>
+        </div>
+        <StatusPill label={property.property_status || "unknown"} tone={statusTone} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "8px" }}>
+        {property.property_address ? (
+          <div style={{ fontSize: "13px", color: "#475569" }}>
+            <span style={{ fontWeight: 700 }}>Address:</span> {property.property_address}
+          </div>
+        ) : null}
+        {property.owner_name ? (
+          <div style={{ fontSize: "13px", color: "#475569" }}>
+            <span style={{ fontWeight: 700 }}>Owner:</span> {property.owner_name}
+          </div>
+        ) : null}
+        {property.occupancy_type ? (
+          <div style={{ fontSize: "13px", color: "#475569" }}>
+            <span style={{ fontWeight: 700 }}>Occupancy:</span> {property.occupancy_type}
+          </div>
+        ) : null}
+        {property.purchase_date ? (
+          <div style={{ fontSize: "13px", color: "#475569" }}>
+            <span style={{ fontWeight: 700 }}>Purchased:</span> {property.purchase_date}
+          </div>
+        ) : null}
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        <StatusPill label={propertyType?.major_category?.replace("_", " ") || "property"} tone="neutral" />
+        <StatusPill
+          label={linkedAsset?.id ? "Asset Linked" : "Asset Link Pending"}
+          tone={linkedAsset?.id ? "good" : "warning"}
+        />
+      </div>
+    </button>
+  );
+}
+
+function EmptyPropertiesPanel({ onScrollToForm }) {
+  const types = [
+    { icon: "🏠", label: "Primary Home", desc: "The household's main residence" },
+    { icon: "🏢", label: "Investment Property", desc: "Rental or income-generating property" },
+    { icon: "🏖️", label: "Vacation / Second Home", desc: "Secondary or seasonal property" },
+    { icon: "🏗️", label: "Land / Other", desc: "Undeveloped land or other real estate" },
+  ];
+  return (
+    <div style={{ display: "grid", gap: "20px" }}>
+      <div style={{ fontSize: "15px", color: "#475569", lineHeight: "1.7" }}>
+        Start with the primary home. One property record gives mortgage review, homeowners coverage check, and estate continuity a shared home base.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
+        {types.map((t) => (
+          <button
+            key={t.label}
+            type="button"
+            onClick={onScrollToForm}
+            style={{
+              textAlign: "left",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "12px",
+              padding: "14px 16px",
+              cursor: "pointer",
+              display: "grid",
+              gap: "6px",
+            }}
+          >
+            <span style={{ fontSize: "22px" }}>{t.icon}</span>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{t.label}</div>
+            <div style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.5" }}>{t.desc}</div>
+          </button>
+        ))}
+      </div>
+      <ActionButton label="Add First Property" onClick={onScrollToForm} primary />
+    </div>
+  );
+}
+
+function CommandRow({ item, onNavigate }) {
+  const tone = item.urgency === "critical" ? "alert" : "warning";
+  return (
+    <div
+      style={{
+        ...surfaceCard({ padding: "16px 20px" }),
+        display: "grid",
+        gap: "8px",
+        borderLeft: `4px solid ${tone === "alert" ? "#fecaca" : "#fde68a"}`,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+        <StatusPill label={item.urgencyMeta?.badge || item.urgency} tone={tone} />
+      </div>
+      {item.blocker ? <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}><strong>Gap:</strong> {item.blocker}</div> : null}
+      {item.nextAction ? (
+        <div style={{ fontSize: "13px", color: tone === "alert" ? "#991b1b" : "#92400e", fontWeight: 700 }}>
+          Next: {item.nextAction}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AddPropertyForm({ form, setForm, creating, createError, householdState, canCreate, onSubmit }) {
+  const inputStyle = {
+    padding: "11px 14px",
+    borderRadius: "10px",
+    border: "1px solid #e2e8f0",
+    fontSize: "14px",
+    background: "#ffffff",
+    width: "100%",
+    boxSizing: "border-box",
+  };
+
+  return (
+    <form onSubmit={onSubmit} style={{ display: "grid", gap: "10px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Property Type
+          </label>
+          <select
+            value={form.property_type_key}
+            onChange={(e) => setForm((c) => ({ ...c, property_type_key: e.target.value }))}
+            style={inputStyle}
+          >
+            {PROPERTY_TYPES.map((type) => (
+              <option key={type.property_type_key} value={type.property_type_key}>
+                {type.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Property Name
+          </label>
+          <input
+            value={form.property_name}
+            onChange={(e) => setForm((c) => ({ ...c, property_name: e.target.value }))}
+            placeholder="e.g. Main Residence"
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Owner Name
+          </label>
+          <input
+            value={form.owner_name}
+            onChange={(e) => setForm((c) => ({ ...c, owner_name: e.target.value }))}
+            placeholder="Name on title"
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Property Address
+          </label>
+          <input
+            value={form.property_address}
+            onChange={(e) => setForm((c) => ({ ...c, property_address: e.target.value }))}
+            placeholder="Street address"
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            County
+          </label>
+          <input
+            value={form.county}
+            onChange={(e) => setForm((c) => ({ ...c, county: e.target.value }))}
+            placeholder="County name"
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Occupancy Type
+          </label>
+          <input
+            value={form.occupancy_type}
+            onChange={(e) => setForm((c) => ({ ...c, occupancy_type: e.target.value }))}
+            placeholder="e.g. Primary, Rental"
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Purchase Date
+          </label>
+          <input
+            type="date"
+            value={form.purchase_date}
+            onChange={(e) => setForm((c) => ({ ...c, purchase_date: e.target.value }))}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: "5px" }}>
+            Status
+          </label>
+          <select
+            value={form.property_status}
+            onChange={(e) => setForm((c) => ({ ...c, property_status: e.target.value }))}
+            style={inputStyle}
+          >
+            <option value="active">Active</option>
+            <option value="watch">Watch</option>
+            <option value="inactive">Inactive</option>
+            <option value="sold">Sold</option>
+          </select>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={creating || !canCreate}
+        style={{
+          padding: "13px 20px",
+          borderRadius: "10px",
+          border: "none",
+          background: creating || !canCreate ? "#94a3b8" : "#0f172a",
+          color: "#ffffff",
+          fontWeight: 800,
+          fontSize: "15px",
+          cursor: creating || !canCreate ? "default" : "pointer",
+          marginTop: "4px",
+        }}
+      >
+        {creating ? "Saving..." : "Save Property Record"}
+      </button>
+      {createError ? <div style={{ color: "#991b1b", fontSize: "13px" }}>{createError}</div> : null}
+      {!householdState.context.currentAuthUserId && !householdState.loading ? (
+        <div style={{ color: "#991b1b", fontSize: "13px" }}>Please sign in again before creating a property.</div>
+      ) : null}
+    </form>
+  );
 }
 
 export default function PropertyHubPage({ onNavigate }) {
   const { householdState } = usePlatformShellData();
-  const propertyCommandRef = useRef(null);
-  const createPropertyRef = useRef(null);
+  const propertiesRef = useRef(null);
+  const addFormRef = useRef(null);
+
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
-  const canCreateProperty =
-    Boolean(householdState.context.currentAuthUserId) && !householdState.loading;
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const canCreate = Boolean(householdState.context.currentAuthUserId) && !householdState.loading;
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -71,100 +408,19 @@ export default function PropertyHubPage({ onNavigate }) {
     }
 
     loadPropertyRecords();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [householdState.loading, householdState.context.householdId]);
 
-  async function refreshPropertyRecords(targetHouseholdId = householdState.context.householdId) {
-    if (!targetHouseholdId) return;
-    const result = await listProperties(targetHouseholdId);
+  async function refreshPropertyRecords(targetId = householdState.context.householdId) {
+    if (!targetId) return;
+    const result = await listProperties(targetId);
     setProperties(result.data || []);
     setLoadError(result.error?.message || "");
   }
 
-  function scrollToPropertyCommand() {
-    propertyCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function scrollToCreateProperty() {
-    createPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  const summaryItems = useMemo(() => {
-    const activeCount = properties.filter((item) => item.property_status === "active").length;
-    const ownerOccupiedCount = properties.filter((item) => {
-      const propertyType = getPropertyType(item.property_type_key);
-      return propertyType?.major_category === "owner_occupied" || propertyType?.major_category === "attached_residential";
-    }).length;
-    const investmentCount = properties.filter((item) => {
-      const propertyType = getPropertyType(item.property_type_key);
-      return Boolean(propertyType?.investment_property_relevant);
-    }).length;
-
-    return [
-      { label: "Properties", value: properties.length, helper: "Live property module records" },
-      { label: "Owner Occupied", value: ownerOccupiedCount, helper: "Primary and attached residential property records" },
-      { label: "Investment / Rental", value: investmentCount, helper: "Investment and rental-oriented property records" },
-      { label: "Active", value: activeCount, helper: `${properties.length - activeCount} non-active records` },
-    ];
-  }, [properties]);
-  const propertyHubCommand = useMemo(() => buildPropertyHubCommand(properties), [properties]);
-  const propertyPlainLanguageGuide = useMemo(() => {
-    const topCommand = propertyHubCommand.rows[0] || null;
-    const isEmpty = properties.length === 0;
-
-    return {
-      title: "Understand the real-estate picture first",
-      summary: isEmpty
-        ? "You do not need every deed, tax record, and valuation loaded to start. One property record is enough to make this page useful."
-        : propertyHubCommand.headline,
-      transition: isEmpty
-        ? "This hub should answer the simple version first: what property exists, what it supports, and what to add next before the deeper linked analysis matters."
-        : "This hub is here to make the household property picture readable before you open the deeper continuity, mortgage, and coverage connections.",
-      quickFacts: [
-        `${properties.length} propert${properties.length === 1 ? "y is" : "ies are"} currently tracked.`,
-        `${propertyHubCommand.metrics.assetLinked || 0} record${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"} are linked into the shared asset layer.`,
-        topCommand ? `Best next move: ${topCommand.nextAction}.` : "Best next move: create the first property record.",
-      ],
-      cards: [
-        {
-          label: "What This Page Does",
-          value: "Turns real estate records into a usable household picture",
-          detail: "It helps the household understand what properties exist and where deeper follow-up belongs.",
-        },
-        {
-          label: "Best First Step",
-          value: isEmpty ? "Create the primary property first" : topCommand?.title || "Review the top property blocker",
-          detail:
-            isEmpty
-              ? "That single record gives mortgage, homeowners, valuation, and continuity work a shared home base."
-              : topCommand?.blocker || "The command section below will show the clearest property move to make next.",
-        },
-        {
-          label: "What Can Wait",
-          value: "Valuation depth and full document linkage",
-          detail: "Those technical layers are still here, but they should not make the first screen feel heavy.",
-        },
-      ],
-    };
-  }, [properties.length, propertyHubCommand]);
-
   async function handleCreateProperty(event) {
     event.preventDefault();
-    if (creating) return;
-    if (!canCreateProperty || !form.property_type_key) {
-      if (!householdState.context.currentAuthUserId) {
-        setCreateError("Please sign in again before creating a property.");
-      }
-      if (import.meta.env.DEV && !canCreateProperty) {
-        console.warn("[VaultedShield] property creation attempted before household ownership was resolved in the UI.", {
-          householdId: householdState.context.householdId || null,
-          ownershipMode: householdState.context.ownershipMode || "unknown",
-        });
-      }
-      return;
-    }
+    if (creating || !canCreate || !form.property_type_key) return;
 
     setCreating(true);
     setCreateError("");
@@ -181,14 +437,7 @@ export default function PropertyHubPage({ onNavigate }) {
     });
 
     if (result.error) {
-      if (import.meta.env.DEV) {
-        console.warn("[VaultedShield] property creation failed in PropertyHubPage", {
-          error: result.error.message || null,
-          householdId: householdState.context.householdId || null,
-          authUserId: householdState.context.currentAuthUserId || null,
-        });
-      }
-      setCreateError(result.error.message || "We could not create this property record yet. Please try again.");
+      setCreateError(result.error.message || "Property could not be created. Please try again.");
       setCreating(false);
       return;
     }
@@ -196,263 +445,298 @@ export default function PropertyHubPage({ onNavigate }) {
     await refreshPropertyRecords(result.data?.householdId || householdState.context.householdId);
     setForm(DEFAULT_FORM);
     setCreating(false);
+    setShowAddForm(false);
   }
 
-  const propertyHeroScore = Math.round(
-    properties.length > 0
-      ? Math.min(84, 40 + properties.length * 10 + Number(propertyHubCommand.metrics.assetLinked || 0) * 6)
-      : 34
-  );
-  const propertyHeroTone =
-    propertyHeroScore >= 80 ? "good" : propertyHeroScore >= 60 ? "info" : propertyHeroScore >= 45 ? "warning" : "alert";
-  const propertyHeroGlanceItems = summaryItems.map((item) => ({
-    label: item.label,
-    value: item.value,
-  }));
+  const propertyHubCommand = useMemo(() => buildPropertyHubCommand(properties), [properties]);
+
+  const { activeCount, linkedCount, totalCount } = useMemo(() => ({
+    totalCount: properties.length,
+    activeCount: properties.filter((p) => p.property_status === "active").length,
+    linkedCount: properties.filter((p) => p.assets?.id).length,
+  }), [properties]);
+
+  const checkpoints = useMemo(() => {
+    const hasPrimary = properties.some((p) => {
+      const type = getPropertyType(p.property_type_key);
+      return type?.major_category === "owner_occupied" || type?.major_category === "attached_residential";
+    });
+    const allLinked = properties.length > 0 && linkedCount === properties.length;
+    const hasCommandItems = propertyHubCommand.rows.length > 0;
+
+    return [
+      {
+        icon: "🏠",
+        label: "Primary Residence on Record",
+        status: hasPrimary ? "good" : properties.length > 0 ? "warning" : "alert",
+        detail: hasPrimary
+          ? "The household's primary home is recorded — mortgage, homeowners, and estate planning all have a shared anchor."
+          : properties.length > 0
+            ? "Properties exist but no primary residence is identified. Add the main home so linked modules have a clear anchor."
+            : "No properties recorded yet. The primary home is the most critical first record in the platform.",
+      },
+      {
+        icon: "🔗",
+        label: "Properties Linked to Asset Layer",
+        status: allLinked ? "good" : linkedCount > 0 ? "warning" : properties.length > 0 ? "alert" : "alert",
+        detail: allLinked
+          ? `All ${properties.length} propert${properties.length === 1 ? "y is" : "ies are"} linked into the shared asset layer — valuations, documents, and continuity reads are available.`
+          : linkedCount > 0
+            ? `${linkedCount} of ${properties.length} properties are linked. Open each detail page to complete the remaining links.`
+            : properties.length > 0
+              ? "Properties exist but haven't been linked to the asset layer yet. Open each property to connect it."
+              : "Add a property to enable asset layer linking.",
+      },
+      {
+        icon: "🛡️",
+        label: "No Outstanding Continuity Gaps",
+        status: !hasCommandItems ? "good" : "warning",
+        detail: hasCommandItems
+          ? `${propertyHubCommand.rows.length} continuity item${propertyHubCommand.rows.length === 1 ? "" : "s"} need attention — see the command center below.`
+          : properties.length > 0
+            ? "No active continuity gaps across household property records."
+            : "Add properties to enable continuity gap detection.",
+      },
+    ];
+  }, [properties, linkedCount, propertyHubCommand]);
+
+  function scrollToAddForm() {
+    setShowAddForm(true);
+    setTimeout(() => addFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Assets"
-        sectionTitle="Property Hub"
-        headline={propertyPlainLanguageGuide.title}
-        summary={propertyPlainLanguageGuide.summary}
-        transition={propertyPlainLanguageGuide.transition}
-        actions={[
-          {
-            label: properties.length > 0 ? "Add Another Property" : "Create First Property",
-            onClick: scrollToCreateProperty,
-            kind: "primary",
-          },
-          {
-            label: "Open Property Command",
-            onClick: scrollToPropertyCommand,
-          },
-          {
-            label: "Refresh Property Data",
-            onClick: () => refreshPropertyRecords(),
-          },
-        ]}
-        score={propertyHeroScore}
-        scoreTone={propertyHeroTone}
-        scoreSubtitle="readiness"
-        scoreIconLabel="property"
-        asideHeadline={properties.length > 0 ? "Property picture is taking shape" : "Start the property picture"}
-        asideSummary={propertyHubCommand.headline}
-        glanceEyebrow="At A Glance"
-        glanceItems={propertyHeroGlanceItems}
-      />
 
+      {/* Hero */}
       <div
         style={{
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #14532d 100%)",
+          borderRadius: "22px",
+          padding: "32px 32px 28px",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Property Status"
-          title={properties.length > 0 ? propertyHubCommand.headline : "Start with the first real property"}
-          detail={propertyPlainLanguageGuide.cards[0]?.detail || "This page should make the household property picture readable before it feels technical."}
-          metric={`${properties.length} propert${properties.length === 1 ? "y" : "ies"}`}
-          tone={propertyHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="See Properties"
-          onAction={scrollToPropertyCommand}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title={propertyPlainLanguageGuide.cards[1]?.value || "Create the primary property first"}
-          detail={propertyPlainLanguageGuide.cards[1]?.detail || "The next property move should make the stack easier to trust."}
-          metric={`${propertyHubCommand.metrics.attention || 0} active prompt${propertyHubCommand.metrics.attention === 1 ? "" : "s"}`}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel={properties.length > 0 ? "Open Command" : "Create Property"}
-          onAction={properties.length > 0 ? scrollToPropertyCommand : scrollToCreateProperty}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title={propertyPlainLanguageGuide.cards[2]?.value || "Technical depth stays underneath"}
-          detail={propertyPlainLanguageGuide.cards[2]?.detail || "Valuation and linkage depth can come after the first clean read."}
-          metric={`${propertyHubCommand.metrics.assetLinked || 0} linked asset${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"}`}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="Open Records"
-          onAction={scrollToCreateProperty}
-        />
-      </div>
-
-      <div ref={propertyCommandRef} style={{ marginTop: "24px" }}>
-        <SectionCard
-          title="Property Command Center"
-          subtitle="The strongest module-level blockers and what to review next across household property records."
-        >
-          <div style={{ display: "grid", gap: "16px" }}>
-            <AIInsightPanel
-              title="Module Readiness"
-              summary={propertyHubCommand.headline}
-              bullets={[
-                `${propertyHubCommand.metrics.total || 0} property record${propertyHubCommand.metrics.total === 1 ? "" : "s"} are currently tracked.`,
-                `${propertyHubCommand.metrics.assetLinked || 0} record${propertyHubCommand.metrics.assetLinked === 1 ? "" : "s"} are already linked into the shared asset layer.`,
-                `${propertyHubCommand.metrics.attention || 0} review item${propertyHubCommand.metrics.attention === 1 ? "" : "s"} are surfaced as next moves.`,
-              ]}
-            />
-            {propertyHubCommand.rows.length > 0 ? (
-              <div style={{ display: "grid", gap: "12px" }}>
-                {propertyHubCommand.rows.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: "16px",
-                      borderRadius: "14px",
-                      background: item.urgencyMeta.background,
-                      border: item.urgencyMeta.border,
-                      display: "grid",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
-                      <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
-                    </div>
-                    <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
-                      <strong>Blocker:</strong> {item.blocker}
-                    </div>
-                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                      <strong>Consequence:</strong> {item.consequence}
-                    </div>
-                    <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
-                      Next action: {item.nextAction}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No active property command items"
-                description="Create the first property or open a property detail page to start building a stronger continuity picture."
-              />
-            )}
+        <div style={{ display: "grid", gap: "6px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#86efac" }}>
+            Real Estate & Property
           </div>
-        </SectionCard>
-      </div>
+          <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.15" }}>
+            Property Hub
+          </div>
+          <div style={{ fontSize: "15px", color: "#cbd5e1", lineHeight: "1.6", maxWidth: "600px" }}>
+            Real estate represents most of the household's net worth — and anchors mortgage review, homeowners coverage, and estate continuity. Start here.
+          </div>
+        </div>
 
-      <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: "18px", alignItems: "start" }}>
-        <SectionCard title="Properties" subtitle="Live household property records linked into the broader platform asset layer.">
-          {householdState.loading || loading ? (
-            <div style={{ color: "#64748b" }}>Loading property records...</div>
-          ) : loadError ? (
-            <EmptyState title="Property data unavailable" description={loadError} />
-          ) : properties.length === 0 ? (
-            <EmptyState
-              title="No properties yet"
-              description="Create the first property record to start building a stronger household picture around value, protection, financing, and continuity."
-            />
-          ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
-              {properties.map((property) => {
-                const propertyType = getPropertyType(property.property_type_key);
-                const linkedAsset = property.assets || null;
-                return (
-                  <button
-                    key={property.id}
-                    onClick={() => onNavigate(`/property/detail/${property.id}`)}
-                    style={{ textAlign: "left", width: "100%", border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: "14px", padding: "16px", cursor: "pointer" }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                      <div>
-                        <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
-                          {property.property_name || linkedAsset?.asset_name || property.property_address || "Property"}
-                        </div>
-                        <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.6" }}>
-                          {propertyType?.display_name || property.property_type_key}
-                          {" | "}
-                          {property.county || linkedAsset?.institution_name || "County pending"}
-                        </div>
-                      </div>
-                      <StatusBadge label={property.property_status || "unknown"} tone={getStatusTone(property.property_status)} />
-                    </div>
-
-                    <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <StatusBadge label={propertyType?.major_category || "property"} tone="info" />
-                      <StatusBadge label={linkedAsset?.id ? "Linked Asset" : "Asset Link Pending"} tone={linkedAsset?.id ? "good" : "warning"} />
-                    </div>
-
-                    <div style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", color: "#475569" }}>
-                      <div><strong>Address:</strong> {property.property_address || "Limited visibility"}</div>
-                      <div><strong>Owner:</strong> {property.owner_name || "Limited visibility"}</div>
-                      <div><strong>Occupancy:</strong> {property.occupancy_type || "Limited visibility"}</div>
-                      <div><strong>Purchased:</strong> {property.purchase_date || "Limited visibility"}</div>
-                    </div>
-                  </button>
-                );
-              })}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+          {[
+            { label: "Total Properties", value: loading ? "—" : totalCount },
+            { label: "Active", value: loading ? "—" : activeCount },
+            { label: "Asset Linked", value: loading ? "—" : linkedCount },
+            { label: "Action Items", value: loading ? "—" : propertyHubCommand.rows.length },
+          ].map((stat) => (
+            <div key={stat.label} style={{ background: "rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px 16px", display: "grid", gap: "4px" }}>
+              <div style={{ fontSize: "22px", fontWeight: 900 }}>{stat.value}</div>
+              <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{stat.label}</div>
             </div>
-          )}
-        </SectionCard>
+          ))}
+        </div>
 
-        <div style={{ display: "grid", gap: "18px" }}>
-          <div ref={createPropertyRef}>
-            <SectionCard title="Create Property" subtitle="Start with the core property record, then add documents, valuation work, and linked financing or coverage over time.">
-            <form onSubmit={handleCreateProperty} style={{ display: "grid", gap: "12px" }}>
-              <select value={form.property_type_key} onChange={(event) => setForm((current) => ({ ...current, property_type_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                {PROPERTY_TYPES.map((type) => (
-                  <option key={type.property_type_key} value={type.property_type_key}>
-                    {type.display_name} | {type.major_category}
-                  </option>
-                ))}
-              </select>
-              <input value={form.property_name} onChange={(event) => setForm((current) => ({ ...current, property_name: event.target.value }))} placeholder="Property name" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <input value={form.property_address} onChange={(event) => setForm((current) => ({ ...current, property_address: event.target.value }))} placeholder="Property address" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <input value={form.county} onChange={(event) => setForm((current) => ({ ...current, county: event.target.value }))} placeholder="County" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <input value={form.occupancy_type} onChange={(event) => setForm((current) => ({ ...current, occupancy_type: event.target.value }))} placeholder="Occupancy type" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <input value={form.owner_name} onChange={(event) => setForm((current) => ({ ...current, owner_name: event.target.value }))} placeholder="Owner name" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <input type="date" value={form.purchase_date} onChange={(event) => setForm((current) => ({ ...current, purchase_date: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-              <select value={form.property_status} onChange={(event) => setForm((current) => ({ ...current, property_status: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                <option value="active">active</option>
-                <option value="watch">watch</option>
-                <option value="inactive">inactive</option>
-                <option value="sold">sold</option>
-              </select>
-              <button type="submit" disabled={creating || !canCreateProperty} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: creating || !canCreateProperty ? "not-allowed" : "pointer", fontWeight: 700, opacity: creating || !canCreateProperty ? 0.7 : 1 }}>
-                {creating ? "Creating Property..." : "Create Property"}
-              </button>
-              {createError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{createError}</div> : null}
-              {householdState.error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{householdState.error}</div> : null}
-              {!householdState.context.currentAuthUserId && !householdState.loading ? (
-                <div style={{ color: "#991b1b", fontSize: "14px" }}>
-                  Please sign in again before creating a property.
-                </div>
-              ) : null}
-              {householdState.context.currentAuthUserId && !canCreateProperty ? (
-                <div style={{ color: "#991b1b", fontSize: "14px" }}>
-                  We could not initialize your household profile yet. Please try again.
-                </div>
-              ) : null}
-            </form>
-            </SectionCard>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <ActionButton
+            label={properties.length > 0 ? "Add Another Property" : "Add First Property"}
+            onClick={scrollToAddForm}
+            primary
+          />
+          <ActionButton
+            label="View Properties"
+            onClick={() => propertiesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          />
+        </div>
+      </div>
+
+      {/* Action tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            icon: "🏘️",
+            label: "Properties Tracked",
+            value: `${totalCount} propert${totalCount === 1 ? "y" : "ies"}`,
+            sub: totalCount > 0 ? `${activeCount} active · ${linkedCount} asset-linked` : "No properties on record yet.",
+            tone: totalCount > 0 ? "good" : "alert",
+          },
+          {
+            icon: "⚠️",
+            label: "Continuity Gaps",
+            value: propertyHubCommand.rows.length > 0 ? `${propertyHubCommand.rows.length} item${propertyHubCommand.rows.length === 1 ? "" : "s"} need attention` : "No gaps detected",
+            sub: propertyHubCommand.rows.length > 0 ? propertyHubCommand.rows[0]?.blocker || "Review the command center below." : "Property continuity is in good shape.",
+            tone: propertyHubCommand.rows.length > 0 ? "warning" : "good",
+          },
+          {
+            icon: "🔗",
+            label: "Asset Linkage",
+            value: totalCount > 0 ? `${linkedCount} of ${totalCount} linked` : "No properties yet",
+            sub: linkedCount < totalCount && totalCount > 0 ? "Open property detail pages to complete linking." : "All properties connected to the asset layer.",
+            tone: linkedCount < totalCount && totalCount > 0 ? "warning" : totalCount > 0 ? "good" : "alert",
+          },
+        ].map((tile) => {
+          const s = pillStyle(tile.tone);
+          return (
+            <div key={tile.label} style={{ ...surfaceCard(), display: "grid", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <span style={{ fontSize: "22px" }}>{tile.icon}</span>
+                <span style={{ ...s, fontSize: "11px", fontWeight: 700, padding: "3px 8px", borderRadius: "999px" }}>
+                  {tile.tone === "good" ? "Good" : tile.tone === "warning" ? "Watch" : "Act"}
+                </span>
+              </div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.label}</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{tile.value}</div>
+              <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.5" }}>{tile.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Readiness checkpoints */}
+      <div style={{ display: "grid", gap: "16px" }}>
+        <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>Property Readiness Checkpoints</div>
+        <div style={{ display: "grid", gap: "10px" }}>
+          {checkpoints.map((cp) => (
+            <ReadinessCheckpoint key={cp.label} {...cp} />
+          ))}
+        </div>
+      </div>
+
+      {/* Command center */}
+      {propertyHubCommand.rows.length > 0 ? (
+        <div style={{ display: "grid", gap: "16px" }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>Continuity Command Center</div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>Action items surfaced across household property records.</div>
           </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {propertyHubCommand.rows.map((item) => (
+              <CommandRow key={item.id} item={item} onNavigate={onNavigate} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-          <SectionCard title="Property Readiness">
-            <AIInsightPanel
-              title="Foundation Readiness"
-              summary={
-                properties.length > 0
-                  ? "Property records are now live in VaultedShield and ready for documents, snapshots, valuation work, and linked mortgage or homeowners review."
-                  : "The property module is live-ready but still waiting for its first property record."
-              }
-              bullets={[
-                "Property creation now establishes the core record and its linked property detail view.",
-                "Property detail pages are ready for linked documents, snapshots, and broader continuity context.",
-              ]}
+      {/* Property list */}
+      <div ref={propertiesRef} style={{ display: "grid", gap: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>Property Records</div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+              {properties.length > 0
+                ? `${properties.length} propert${properties.length === 1 ? "y" : "ies"} on record — click to open detail view`
+                : "No properties recorded yet"}
+            </div>
+          </div>
+          <ActionButton label="+ Add Property" onClick={scrollToAddForm} primary />
+        </div>
+
+        {householdState.loading || loading ? (
+          <div style={{ ...surfaceCard(), color: "#64748b", fontSize: "14px" }}>Loading property records...</div>
+        ) : loadError ? (
+          <div style={{ ...surfaceCard(), color: "#991b1b", fontSize: "14px" }}>{loadError}</div>
+        ) : properties.length === 0 ? (
+          <div style={{ ...surfaceCard() }}>
+            <EmptyPropertiesPanel onScrollToForm={scrollToAddForm} />
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "10px" }}>
+            {properties.map((p) => (
+              <PropertyCard key={p.id} property={p} onNavigate={onNavigate} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add property form */}
+      <div ref={addFormRef} style={{ display: "grid", gap: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+          <div>
+            <div style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>Add a Property</div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>Start with the basics — documents, valuation, and linked financing can be added in the detail view.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddForm((v) => !v)}
+            style={{ padding: "9px 16px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            {showAddForm ? "Collapse" : "Expand Form"}
+          </button>
+        </div>
+
+        {showAddForm ? (
+          <div style={{ ...surfaceCard() }}>
+            <AddPropertyForm
+              form={form}
+              setForm={setForm}
+              creating={creating}
+              createError={createError}
+              householdState={householdState}
+              canCreate={canCreate}
+              onSubmit={handleCreateProperty}
             />
-          </SectionCard>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Why This Matters */}
+      <div
+        style={{
+          background: "linear-gradient(135deg, #14532d 0%, #166534 50%, #0f172a 100%)",
+          borderRadius: "22px",
+          padding: "36px 32px",
+          color: "#ffffff",
+          display: "grid",
+          gap: "28px",
+        }}
+      >
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#86efac" }}>
+            Why This Module Matters
+          </div>
+          <div style={{ fontSize: "22px", fontWeight: 900, lineHeight: "1.25" }}>
+            Real estate is the largest asset most households own — and the most under-documented.
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+          {[
+            {
+              stat: "~70%",
+              label: "Of household net worth tied to real estate",
+              detail: "For most families, the primary home is their single largest financial asset — but it's rarely fully documented.",
+            },
+            {
+              stat: "1 in 4",
+              label: "Homes have title or deed discrepancies",
+              detail: "Ownership records, lien histories, and beneficiary alignment on property are frequently incomplete or outdated.",
+            },
+            {
+              stat: "18 mo.",
+              label: "Average estate settlement time when property records are unclear",
+              detail: "Clear property records — including who owns it, what's owed, and what covers it — dramatically speed up the handoff process.",
+            },
+          ].map((item) => (
+            <div key={item.label} style={{ background: "rgba(255,255,255,0.07)", borderRadius: "14px", padding: "20px" }}>
+              <div style={{ fontSize: "28px", fontWeight: 900, color: "#86efac", marginBottom: "6px" }}>{item.stat}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#e2e8f0", marginBottom: "6px" }}>{item.label}</div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: "1.6" }}>{item.detail}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {shouldShowDevDiagnostics() ? (
-        <div style={{ marginTop: "24px", color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
-          Property Debug: household={householdState.context.householdId || "none"} | properties={properties.length} | loading={loading ? "yes" : "no"} | loadError={loadError || "none"} | createError={createError || "none"}
+        <div style={{ color: "#64748b", fontSize: "12px", lineHeight: "1.7" }}>
+          Debug: household={householdState.context.householdId || "none"} | properties={properties.length} | loading={loading ? "yes" : "no"} | error={loadError || "none"}
         </div>
       ) : null}
     </div>
