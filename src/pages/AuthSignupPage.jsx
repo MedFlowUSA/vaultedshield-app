@@ -134,12 +134,14 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
 
                 <div style={{ display: "grid", gap: "10px" }}>
                   <button
+                    type="button"
                     onClick={() => onNavigate("/login")}
                     style={authActionStyle(true)}
                   >
                     Continue To Login
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setPendingConfirmation(null);
                       setSubmitNote("");
@@ -153,7 +155,10 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                 {submitNote ? <div style={{ color: retryCountdown > 0 ? "#92400e" : "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
               </div>
             ) : (
-              <div style={{ display: "grid", gap: "14px" }}>
+              <form
+                style={{ display: "grid", gap: "14px" }}
+                onSubmit={(event) => { event.preventDefault(); handleCreateAccount(); }}
+              >
                 <div
                   style={{
                     padding: "16px 18px",
@@ -187,7 +192,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                   style={authInputStyle()}
                 />
                 <button
-                  onClick={handleCreateAccount}
+                  type="submit"
                   disabled={submitting || retryCountdown > 0}
                   style={authActionStyle(true)}
                 >
@@ -198,6 +203,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                       : "Create VaultedShield Account"}
                 </button>
                 <button
+                  type="button"
                   onClick={() => onNavigate("/login")}
                   disabled={submitting}
                   style={authActionStyle(false)}
@@ -211,7 +217,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                 ) : null}
                 {submitNote && retryCountdown <= 0 ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
                 {submitError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
-              </div>
+              </form>
             )}
           </AuthPrimaryShell>
 

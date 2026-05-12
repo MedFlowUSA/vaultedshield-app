@@ -101,6 +101,7 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
 
                 <div style={{ display: "grid", gap: "10px" }}>
                   <button
+                    type="button"
                     onClick={() => {
                       if (accessPortal?.isAuthenticated) {
                         onNavigate(returnPath || "/insurance");
@@ -113,6 +114,7 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                     {accessPortal?.isAuthenticated ? "Open Workspace" : "Continue To Login"}
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       if (accessPortal?.isAuthenticated) {
                         accessPortal?.signOut?.();
@@ -128,7 +130,10 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                 {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
               </div>
             ) : (
-              <div style={{ display: "grid", gap: "14px" }}>
+              <form
+                style={{ display: "grid", gap: "14px" }}
+                onSubmit={(event) => { event.preventDefault(); handleEnterPlatform(); }}
+              >
                   <div
                     style={{
                       padding: "16px 18px",
@@ -156,7 +161,7 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                     style={authInputStyle()}
                   />
                   <button
-                    onClick={handleEnterPlatform}
+                    type="submit"
                     disabled={entering}
                     style={{
                       ...authActionStyle(true),
@@ -166,12 +171,12 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                   >
                     {entering ? "Opening Workspace..." : "Enter Platform"}
                   </button>
-                  <button onClick={() => onNavigate("/signup")} style={authActionStyle(false)}>
+                  <button type="button" onClick={() => onNavigate("/signup")} style={authActionStyle(false)}>
                     Create Account
                   </button>
                   {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
                   {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
-              </div>
+              </form>
             )}
           </AuthPrimaryShell>
 

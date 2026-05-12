@@ -89,11 +89,6 @@ export default function Sidebar({
           </button>
         ) : null}
       </div>
-      <div style={{ marginTop: isDrawer ? "10px" : "12px", fontSize: isDrawer ? "12px" : "14px", opacity: 0.8, lineHeight: "1.5" }}>
-        {isDrawer
-          ? "Quick access to the household operating system."
-          : "Modular household asset-intelligence shell with insurance continuity at the core."}
-      </div>
       <div
         style={{
           marginTop: isDrawer ? "14px" : "18px",

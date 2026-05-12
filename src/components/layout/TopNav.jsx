@@ -100,146 +100,6 @@ function CompactMetaPill({ label, value, accent = false }) {
   );
 }
 
-function PriorityCard({ priority }) {
-  if (!priority) return null;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: "4px",
-        padding: "10px 12px",
-        borderRadius: "12px",
-        background: priority.urgencyMeta.background,
-        border: priority.urgencyMeta.border,
-      }}
-    >
-      <div
-        style={{
-          fontSize: "11px",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: priority.urgencyMeta.accent,
-        }}
-      >
-        Start Here: {priority.urgencyMeta.label}
-      </div>
-      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-        {priority.title}
-      </div>
-      <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-        {priority.nextAction}. {priority.impactLabel}
-      </div>
-    </div>
-  );
-}
-
-function DesktopSignalCard({ prefix, signal }) {
-  if (!signal) return null;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: "4px",
-        padding: "10px 12px",
-        borderRadius: "12px",
-        background: signal.urgencyMeta.background,
-        border: signal.urgencyMeta.border,
-        minWidth: "240px",
-        maxWidth: "320px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "11px",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: signal.urgencyMeta.accent,
-        }}
-      >
-        {prefix}: {signal.urgencyMeta.badge || signal.urgencyMeta.label}
-      </div>
-      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.45" }}>
-        {signal.title}
-      </div>
-      <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.45" }}>
-        {signal.staleLabel || signal.impactLabel} | {signal.nextAction}
-      </div>
-    </div>
-  );
-}
-
-function DesktopSignalPill({ prefix, signal }) {
-  if (!signal) return null;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: "2px",
-        padding: "10px 12px",
-        borderRadius: "12px",
-        background: signal.urgencyMeta.background,
-        border: signal.urgencyMeta.border,
-        minWidth: "160px",
-        maxWidth: "220px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "11px",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: signal.urgencyMeta.accent,
-        }}
-      >
-        {prefix}: {signal.urgencyMeta.badge || signal.urgencyMeta.label}
-      </div>
-      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.35" }}>
-        {signal.title}
-      </div>
-    </div>
-  );
-}
-
-function DesktopPriorityStrip({ priority }) {
-  if (!priority) return null;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: "2px",
-        padding: "10px 12px",
-        borderRadius: "12px",
-        background: priority.urgencyMeta.background,
-        border: priority.urgencyMeta.border,
-        minWidth: "220px",
-        maxWidth: "300px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "11px",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: priority.urgencyMeta.accent,
-        }}
-      >
-        Start Here: {priority.urgencyMeta.label}
-      </div>
-      <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, lineHeight: "1.35" }}>
-        {priority.title}
-      </div>
-    </div>
-  );
-}
-
 export default function TopNav({
   title,
   subtitle,
@@ -637,7 +497,6 @@ export default function TopNav({
               Start Demo
             </button>
           )}
-          <DesktopPriorityStrip priority={topPriority} />
           <button type="button" onClick={() => onUpgrade?.()} style={desktopQuickActionStyle}>
             Upgrade
           </button>
@@ -646,21 +505,6 @@ export default function TopNav({
           </button>
           <button type="button" onClick={() => onNavigate("/account")} style={desktopQuickActionStyle}>
             Account
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate("/insurance")}
-            style={{
-              ...desktopQuickActionStyle,
-              border: "none",
-              background: "#0f172a",
-              color: "#ffffff",
-            }}
-          >
-            Insurance
-          </button>
-          <button type="button" onClick={() => onSignOut?.()} style={desktopQuickActionStyle}>
-            Log Out
           </button>
         </div>
       )}

@@ -1426,27 +1426,14 @@ export default function DashboardPage({ onNavigate }) {
         }}
       >
         <div style={{ margin: "0 auto", maxWidth: "1180px", display: "grid", gap: "28px" }}>
-          <header
-            style={{
-              display: "flex",
-              alignItems: isMobile ? "stretch" : "center",
-              justifyContent: "space-between",
-              gap: "16px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontSize: isMobile ? "16px" : "18px", fontWeight: 700, letterSpacing: "-0.02em" }}>
-              VaultedShield
-            </div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
-              <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
-                Upload Document
-              </button>
-              <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/contacts")}>
-                Add Household Member
-              </button>
-            </div>
-          </header>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button style={{ ...buttonStyle(false), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/upload-center")}>
+              Upload Document
+            </button>
+            <button style={{ ...buttonStyle(true), width: isMobile ? "100%" : "auto" }} onClick={() => onNavigate?.("/contacts")}>
+              Add Household Member
+            </button>
+          </div>
 
           <section
             style={{
@@ -2823,7 +2810,7 @@ export default function DashboardPage({ onNavigate }) {
                 {assistantReviewDigest.summary}
               </div>
             </div>
-            <button onClick={handleRefreshDigestSnapshot} style={buttonStyle(false)}>
+            <button type="button" onClick={handleRefreshDigestSnapshot} style={buttonStyle(false)}>
               Save Current Snapshot
             </button>
           </div>
@@ -3084,7 +3071,7 @@ export default function DashboardPage({ onNavigate }) {
                       <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                       <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                       <div>
-                        <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                        <button type="button" onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
                           {item.nextAction}
                         </button>
                       </div>
@@ -3177,7 +3164,7 @@ export default function DashboardPage({ onNavigate }) {
                         <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                         <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                         <div>
-                          <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                          <button type="button" onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
                             {item.nextAction}
                           </button>
                         </div>
@@ -3275,7 +3262,7 @@ export default function DashboardPage({ onNavigate }) {
                         <div style={{ color: "#334155", lineHeight: "1.7" }}>{item.blocker}</div>
                         <div style={{ color: "#94a3b8", lineHeight: "1.6" }}>{item.consequence}</div>
                         <div>
-                          <button onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
+                          <button type="button" onClick={() => item.route && onNavigate?.(item.route)} style={buttonStyle(false)}>
                             {item.nextAction}
                           </button>
                         </div>

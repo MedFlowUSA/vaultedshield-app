@@ -51,9 +51,9 @@ export const APP_NAVIGATION = [
     items: [
       { routeKey: "dashboard", label: "Dashboard" },
       { routeKey: "reviewWorkspace", label: "Review Workspace" },
-        { routeKey: "guidance", label: "Guidance" },
-        { routeKey: "householdGoals", label: "Goals" },
-        { routeKey: "vault", label: "Vault" },
+      { routeKey: "guidance", label: "Guidance" },
+      { routeKey: "householdGoals", label: "Goals" },
+      { routeKey: "vault", label: "Vault" },
       { routeKey: "uploadCenter", label: "Upload Center" },
     ],
   },

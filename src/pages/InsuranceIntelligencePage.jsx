@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildInsurancePortfolioBrief,
   buildInsurancePortfolioReport,
@@ -10,7 +10,6 @@ import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCar
 import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
 import { FriendlyActionTile, ScoreRing, friendlySurfaceCardStyle } from "../components/shared/FriendlyIntelligenceUI";
-import { useEffect } from "react";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import buildInsurancePageFascia from "../lib/intelligence/fascia/buildInsurancePageFascia";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";

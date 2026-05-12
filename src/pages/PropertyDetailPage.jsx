@@ -1868,13 +1868,13 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                           </div>
                         </div>
                         <div style={{ display: "grid", gap: "8px", width: isMobile ? "100%" : undefined }}>
-                          <button onClick={() => onNavigate(`/mortgage/detail/${mortgage.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => onNavigate(`/mortgage/detail/${mortgage.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Open Mortgage
                           </button>
-                          <button onClick={() => beginEditMortgageLink(mortgage)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => beginEditMortgageLink(mortgage)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Edit
                           </button>
-                          <button onClick={() => handleRemoveMortgageLink(mortgage.linkage?.id)} disabled={removingLinkId === mortgage.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => handleRemoveMortgageLink(mortgage.linkage?.id)} disabled={removingLinkId === mortgage.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
                             {removingLinkId === mortgage.linkage?.id ? "Removing..." : "Remove"}
                           </button>
                         </div>
@@ -1944,13 +1944,13 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                           </div>
                         </div>
                         <div style={{ display: "grid", gap: "8px", width: isMobile ? "100%" : undefined }}>
-                          <button onClick={() => onNavigate(`/insurance/homeowners/detail/${policy.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => onNavigate(`/insurance/homeowners/detail/${policy.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Open Policy
                           </button>
-                          <button onClick={() => beginEditHomeownersLink(policy)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => beginEditHomeownersLink(policy)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700, ...(actionButtonLayoutStyle || {}) }}>
                             Edit
                           </button>
-                          <button onClick={() => handleRemoveHomeownersLink(policy.linkage?.id)} disabled={removingLinkId === policy.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
+                          <button type="button" onClick={() => handleRemoveHomeownersLink(policy.linkage?.id)} disabled={removingLinkId === policy.linkage?.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b", ...(actionButtonLayoutStyle || {}) }}>
                             {removingLinkId === policy.linkage?.id ? "Removing..." : "Remove"}
                           </button>
                         </div>
