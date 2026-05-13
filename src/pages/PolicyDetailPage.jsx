@@ -2,13 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PolicyAIChat from "../components/policy/PolicyAIChat";
 import PolicySignalsSummaryCard from "../components/policy/PolicySignalsSummaryCard";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import {
-  CalmEmptyState,
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
 import { IulReaderPanel } from "../features/iul-reader/IulReaderPanel.jsx";
 import { buildIulReaderModel } from "../features/iul-reader/readerModel.js";
 import {
@@ -36,7 +30,6 @@ import {
   getVaultedPolicyStatements,
   rehydrateVaultedPolicyBundle,
 } from "../lib/supabase/vaultedPolicies";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function actionButtonStyle(primary = false) {
   return {
@@ -513,6 +506,24 @@ function renderReportFactsGrid(items = [], columns = 3) {
   );
 }
 
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
 function renderReportSection(section, isTablet = false) {
   if (!section) return null;
 
@@ -647,11 +658,15 @@ function renderReportSection(section, isTablet = false) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   if (!report) return null;
 
   return (
-    <SectionCard title={title} subtitle={subtitle} accent="#bfdbfe">
+    <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+      <div>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{title}</div>
+        {subtitle ? <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>{subtitle}</div> : null}
+      </div>
       <div style={{ display: "grid", gap: "18px" }}>
         <div
           style={{
@@ -679,7 +694,7 @@ function ReportView({ title, subtitle, report, onPrint }) {
         </div>
         {report.sections.map((section) => renderReportSection(section, isTablet))}
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -692,7 +707,7 @@ const EMPTY_POLICY_DETAIL_BUNDLE = {
 };
 
 export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "default" }) {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
   const technicalAnalysisRef = useRef(null);
@@ -1440,12 +1455,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   if (loading) {
     return (
       <div style={{ display: "grid", gap: "24px" }}>
-        <CalmEmptyState
-          title="Loading policy detail"
-          description="VaultedShield is pulling the policy, statement, and evidence bundle into one readable view."
-          icon="Policy"
-          tone="info"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8" }}>Loading policy detail...</div>
       </div>
     );
   }
@@ -1453,12 +1463,10 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
   if (!bundle.policy && !comparisonRow) {
     return (
       <div style={{ display: "grid", gap: "24px" }}>
-        <CalmEmptyState
-          title="Policy not found"
-          description={loadError || "This vaulted policy could not be loaded from the insurance intelligence workspace."}
-          icon="Missing"
-          tone="warning"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", display: "grid", gap: "12px" }}>
+          <div>{loadError || "This vaulted policy could not be loaded from the insurance intelligence workspace."}</div>
+          <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #fde68a", background: "#fff", cursor: "pointer", fontWeight: 700, width: "fit-content" }}>Back To Insurance</button>
+        </div>
       </div>
     );
   }
@@ -1498,53 +1506,35 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
             />
           ) : null}
 
-          <FriendlyPageHero
-            eyebrow={isIulConsoleMode ? "Flagship IUL Review Console" : policyPlainEnglishGuide.eyebrow}
-            sectionTitle={isIulConsoleMode ? `IUL Review Console${snapshotTitle ? `: ${snapshotTitle}` : ""}` : snapshotTitle}
-            headline={policyPlainEnglishGuide.title}
-            summary={policyPlainEnglishGuide.summary}
-            transition={policyPlainEnglishGuide.transition}
-            actions={policyHeroActions}
-            score={generalLifeScorecard?.overallScore ?? clampScore((ranking?.score ?? 5) * 10)}
-            scoreTone={generalLifeScorecard?.overallTone || "info"}
-            scoreSubtitle="readiness"
-            scoreIconLabel={ranking?.status || "policy"}
-            asideHeadline={policyActionTiles[0]?.title || "Policy read is still forming"}
-            asideSummary={policyActionTiles[0]?.detail || policyInterpretation.bottom_line_summary}
-            glanceEyebrow="At A Glance"
-            glanceItems={policyHeroGlanceItems}
-          />
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-              gap: "14px",
-            }}
-          >
-            <div
-              style={{ display: "contents" }}
-            >
-              {policyActionTiles.map((tile) => (
-                <FriendlyActionTile
-                  key={tile.key}
-                  kicker={tile.kicker}
-                  title={tile.title}
-                  detail={tile.detail}
-                  metric={tile.metric}
-                  tone={tile.tone}
-                  statusLabel={tile.statusLabel}
-                  actionLabel={tile.actionLabel}
-                  onAction={() => {
-                    if (tile.actionKey === "review") {
-                      scrollToPolicySection(firstQuickReviewSection);
-                      return;
-                    }
-                    scrollToPolicyTechnicalAnalysis();
-                  }}
-                />
+          <div style={{ borderRadius: "28px", padding: "36px 32px", background: "linear-gradient(135deg, #0f172a 0%, #0c4a6e 100%)", color: "#ffffff", display: "grid", gap: "20px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(125,211,252,0.85)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>{isIulConsoleMode ? "Flagship IUL Review Console" : policyPlainEnglishGuide.eyebrow}</div>
+            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.15", letterSpacing: "-0.03em" }}>{policyPlainEnglishGuide.title}</div>
+            <div style={{ color: "rgba(226,232,240,0.9)", lineHeight: "1.8", maxWidth: "56rem" }}>{policyPlainEnglishGuide.summary}</div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {policyHeroActions.map((action) => (
+                <button key={action.label} type="button" onClick={action.onClick} style={{ padding: "11px 18px", borderRadius: "999px", border: action.kind === "primary" ? "none" : "1px solid rgba(255,255,255,0.25)", background: action.kind === "primary" ? "#0369a1" : "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>{action.label}</button>
               ))}
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+              {policyHeroGlanceItems.map((item) => (
+                <div key={item.label} style={{ padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                  <div style={{ fontSize: "11px", color: "rgba(125,211,252,0.7)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ marginTop: "6px", fontSize: "16px", fontWeight: 800, color: "#7dd3fc" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+            {policyActionTiles.map((tile) => (
+              <div key={tile.key} style={{ ...surfaceCard({ padding: "20px 22px", display: "grid", gap: "10px" }), ...pillStyle(tile.tone) }}>
+                <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.7 }}>{tile.kicker}</div>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{tile.title}</div>
+                <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{tile.detail}</div>
+                {tile.metric ? <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{tile.metric}</div> : null}
+                <button type="button" onClick={() => { if (tile.actionKey === "review") { scrollToPolicySection(firstQuickReviewSection); return; } scrollToPolicyTechnicalAnalysis(); }} style={{ padding: "9px 14px", borderRadius: "999px", border: "1px solid rgba(0,0,0,0.12)", background: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", width: "fit-content" }}>{tile.actionLabel}</button>
+              </div>
+            ))}
           </div>
 
           <section
@@ -1962,10 +1952,11 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
             }
           />
 
-          <SectionCard
-            title="Protection Confidence"
-            subtitle="A high-level protection check built from visible death-benefit support, funding pattern, COI trend, and the current evidence trail."
-          >
+          <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Protection Confidence</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A high-level protection check built from visible death-benefit support, funding pattern, COI trend, and the current evidence trail.</div>
+            </div>
             <div style={{ display: "grid", gap: "16px" }}>
               <div
                 style={{
@@ -2053,7 +2044,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 ) : null}
               </div>
             </div>
-          </SectionCard>
+          </div>
 
           {showUnifiedIulReader && iulReader ? (
             <IulReaderPanel reader={iulReader} results={readerResults} />
@@ -2062,11 +2053,11 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
           {!showUnifiedIulReader ? (
             <>
               {generalLifeScorecard ? (
-                <SectionCard
-                  title="Policy Health Snapshot"
-                  subtitle="A plain-English policy health read before the deeper in-force performance interpretation."
-                  accent="#bfdbfe"
-                >
+                <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Policy Health Snapshot</div>
+                    <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A plain-English policy health read before the deeper in-force performance interpretation.</div>
+                  </div>
                   <div style={{ display: "grid", gap: "18px" }}>
                     <div
                       style={{
@@ -2178,12 +2169,15 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                       <div style={{ lineHeight: "1.7", fontWeight: 600 }}>{generalLifeScorecard.nextAction}</div>
                     </button>
                   </div>
-                </SectionCard>
+                </div>
               ) : null}
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "18px", alignItems: "start" }}>
-                <div ref={(node) => setSectionRef("charge_summary", node)} style={getSectionHighlight("charge_summary")}>
-                  <SectionCard title="COI and Charge Drag" subtitle="The clearest plain-English read on cost of insurance, visible charges, and how much drag they may be creating.">
+                <div style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), ...getSectionHighlight("charge_summary") }} ref={(node) => setSectionRef("charge_summary", node)}>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>COI and Charge Drag</div>
+                    <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The clearest plain-English read on cost of insurance, visible charges, and how much drag they may be creating.</div>
+                  </div>
                     <div style={{ display: "grid", gap: "14px" }}>
                       <div
                         style={{
@@ -2223,11 +2217,13 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                         </div>
                       </div>
                     </div>
-                  </SectionCard>
                 </div>
 
-                <div ref={(node) => setSectionRef("confidence", node)} style={getSectionHighlight("confidence")}>
-                  <SectionCard title="Evidence Gaps" subtitle="The biggest evidence gaps still affecting this in-force policy read.">
+                <div style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), ...getSectionHighlight("confidence") }} ref={(node) => setSectionRef("confidence", node)}>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Evidence Gaps</div>
+                    <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The biggest evidence gaps still affecting this in-force policy read.</div>
+                  </div>
                     {groupedIssues.length > 0 ? (
                       <div style={{ display: "grid", gap: "14px" }}>
                         {groupedIssues.map((group) => (
@@ -2255,18 +2251,17 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                         No critical missing data detected
                       </div>
                     )}
-                  </SectionCard>
                 </div>
               </div>
             </>
           ) : null}
 
           {!showUnifiedIulReader ? (
-          <div ref={(node) => setSectionRef("interpretation", node)} style={getSectionHighlight("interpretation")}>
-          <SectionCard
-            title="Performance Interpretation"
-            subtitle="A plain-English in-force policy read built from visible statements, charges, funding, strategy detail, and continuity support."
-          >
+          <div style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), ...getSectionHighlight("interpretation") }} ref={(node) => setSectionRef("interpretation", node)}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Performance Interpretation</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A plain-English in-force policy read built from visible statements, charges, funding, strategy detail, and continuity support.</div>
+            </div>
             <div style={{ display: "grid", gap: "18px" }}>
               <div
                 style={{
@@ -2391,16 +2386,14 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 </div>
               </details>
             </div>
-            </SectionCard>
           </div>
           ) : null}
 
-          <div ref={(node) => setSectionRef("policy_ai_assistant", node)} style={getSectionHighlight("policy_ai_assistant")}>
-          <SectionCard
-            title="Policy AI Assistant"
-            subtitle="These answers are grounded in the uploaded policy data and visible statement history."
-            accent="#bfdbfe"
-          >
+          <div style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), ...getSectionHighlight("policy_ai_assistant") }} ref={(node) => setSectionRef("policy_ai_assistant", node)}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Policy AI Assistant</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>These answers are grounded in the uploaded policy data and visible statement history.</div>
+            </div>
             <div style={{ display: "grid", gap: "18px" }}>
               <div
                 style={{
@@ -2908,13 +2901,13 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 ) : null}
 
               </div>
-            </SectionCard>
+            </div>
 
-          <div ref={(node) => setSectionRef("annual_review", node)} style={getSectionHighlight("annual_review")}>
-          <SectionCard
-            title="Annual Review"
-            subtitle="A factual change review built from live statement history, shown oldest to newest."
-          >
+          <div style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), ...getSectionHighlight("annual_review") }} ref={(node) => setSectionRef("annual_review", node)}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Annual Review</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A factual change review built from live statement history, shown oldest to newest.</div>
+            </div>
             {trendSummary.periods_count > 0 ? (
               <div style={{ display: "grid", gap: "18px" }}>
                 <div
@@ -3013,11 +3006,13 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 description="Statement history will appear here once vaulted statement rows are available for this policy."
               />
             )}
-          </SectionCard>
-          </div>
           </div>
 
-          <SectionCard title="Statement Timeline" subtitle="Statement records shown oldest to newest using live vaulted statement rows.">
+          <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Statement Timeline</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Statement records shown oldest to newest using live vaulted statement rows.</div>
+            </div>
             {trendSummary.timeline_rows.length > 0 ? (
               <div
                 style={{
@@ -3103,12 +3098,16 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                 description="Statement records will appear here once vaulted statement rows are available for this policy."
               />
             )}
-          </SectionCard>
+          </div>
 
           <details>
             <summary style={{ cursor: "pointer", fontWeight: 700, color: "#0f172a" }}>Advanced Detail</summary>
             <div style={{ marginTop: "14px", display: "grid", gap: "16px" }}>
-              <SectionCard title="Debug Payloads" subtitle="Live comparison and charge payloads used by the policy detail view.">
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Debug Payloads</div>
+                  <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Live comparison and charge payloads used by the policy detail view.</div>
+                </div>
                 <div style={{ display: "grid", gap: "14px" }}>
                   <div>
                     <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Missing Fields</div>
@@ -3183,7 +3182,7 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
                     </pre>
                   </div>
                 </div>
-              </SectionCard>
+              </div>
             </div>
           </details>
 
