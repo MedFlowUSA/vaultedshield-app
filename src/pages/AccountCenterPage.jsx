@@ -1,10 +1,5 @@
 import { useState } from "react";
 import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
-import {
   ACCOUNT_DELETION_SCOPE_ITEMS,
   requiresDeletionReauth,
 } from "../lib/auth/requestAccountDeletion";
@@ -41,6 +36,24 @@ const EMPTY_DELETE_STATE = {
   error: "",
   loading: false,
 };
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function overlayStyle() {
   return {
@@ -191,87 +204,141 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
     }
   }
 
+  const actionTiles = [
+    {
+      kicker: "Simple Read",
+      title: session.email ? "Account looks reachable" : "Account needs sign-in context",
+      detail: "Legal links, account controls, and the active workspace details are grouped here without forcing the technical or compliance details first.",
+      metric: accessPortal?.currentPlan?.label || "Free plan",
+      tone: accountHeroTone,
+      statusLabel: "Simple Read",
+      actionLabel: "Open Privacy Policy",
+      onAction: () => onNavigate?.("/privacy-policy"),
+    },
+    {
+      kicker: "Best First Step",
+      title: "Review the account control path",
+      detail: "Make sure sign-out and permanent deletion are understandable before you need them in a real household handoff.",
+      metric: needsReauth ? "reauth needed" : "controls ready",
+      tone: "warning",
+      statusLabel: "Guided Focus",
+      actionLabel: "Open Controls",
+      onAction: () => document.querySelector('[data-account-controls="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    },
+    {
+      kicker: "What Can Wait",
+      title: "Store and compliance polish can come after the core controls",
+      detail: "The most important work is still making the account actions understandable and safe. Release-detail cleanup can follow.",
+      metric: isSupabaseAccount ? "managed auth" : "local auth",
+      tone: "info",
+      statusLabel: "Building",
+      actionLabel: "See Notes",
+      onAction: () => document.querySelector('[data-store-readiness="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    },
+  ];
+
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Account"
-        sectionTitle="Account Center"
-        headline="Keep the household account easy to understand before anyone needs deeper legal or access controls."
-        summary={
-          session.email
-            ? "Your session details, legal links, and account controls are available in one place."
-            : "This surface is ready, but the account still needs an active signed-in session to feel complete."
-        }
-        transition="This top layer keeps the account page calm: what account is active, where the legal links live, and what control matters next. The destructive actions and compliance notes stay below."
-        actions={[
-          {
-            label: "Open Privacy Policy",
-            onClick: () => onNavigate?.("/privacy-policy"),
-            kind: "primary",
-          },
-          {
-            label: "Open Terms Of Service",
-            onClick: () => onNavigate?.("/terms-of-service"),
-          },
-          {
-            label: "Sign Out",
-            onClick: handleSignOut,
-          },
-        ]}
-        score={accountHeroScore}
-        scoreTone={accountHeroTone}
-        scoreSubtitle="account score"
-        scoreIconLabel="account"
-        asideHeadline={isSupabaseAccount ? "Managed account controls are active" : "Local account controls are available"}
-        asideSummary={
-          isSupabaseAccount
-            ? "Supabase-backed identity is active, so legal access and destructive controls can stay in one governed place."
-            : "This device is using the local account mode, which is useful for demo and sandbox work but lighter on identity controls."
-        }
-        glanceItems={accountHeroGlanceItems}
-      />
-
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={session.email ? "Account looks reachable" : "Account needs sign-in context"}
-          detail="Legal links, account controls, and the active workspace details are grouped here without forcing the technical or compliance details first."
-          metric={accessPortal?.currentPlan?.label || "Free plan"}
-          tone={accountHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="Open Privacy Policy"
-          onAction={() => onNavigate?.("/privacy-policy")}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title="Review the account control path"
-          detail="Make sure sign-out and permanent deletion are understandable before you need them in a real household handoff."
-          metric={needsReauth ? "reauth needed" : "controls ready"}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="Open Controls"
-          onAction={() => document.querySelector('[data-account-controls="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title="Store and compliance polish can come after the core controls"
-          detail="The most important work is still making the account actions understandable and safe. Release-detail cleanup can follow."
-          metric={isSupabaseAccount ? "managed auth" : "local auth"}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="See Notes"
-          onAction={() => document.querySelector('[data-store-readiness="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Account
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>Account Center</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>
+              {session.email
+                ? "Your session details, legal links, and account controls are available in one place."
+                : "This surface is ready, but the account still needs an active signed-in session to feel complete."}
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#94a3b8" }}>{accountHeroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>account</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {accountHeroGlanceItems.map((item) => (
+            <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px", wordBreak: "break-all" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/privacy-policy")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#1d4ed8", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Privacy Policy
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/terms-of-service")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Terms Of Service
+          </button>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* Action Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {actionTiles.map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "grid", gap: "18px" }}>
-        <SectionCard title="Legal" subtitle="These links should remain reachable in the app and in store metadata.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Legal</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>These links should remain reachable in the app and in store metadata.</div>
+          </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" onClick={() => onNavigate?.("/privacy-policy")} style={actionButtonStyle()}>
               Open Privacy Policy
@@ -280,16 +347,16 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
               Open Terms of Service
             </button>
           </div>
-          <div style={{ marginTop: "14px", color: "#475569", lineHeight: "1.75" }}>
+          <div style={{ color: "#475569", lineHeight: "1.75" }}>
             The current privacy page still reads like beta legal copy and should be replaced with reviewed production language before store submission.
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard
-          data-account-controls="true"
-          title="Account Controls"
-          subtitle="Users can request permanent deletion directly in-app without contacting support."
-        >
+        <div data-account-controls="true" style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Account Controls</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Users can request permanent deletion directly in-app without contacting support.</div>
+          </div>
           <div style={{ display: "grid", gap: "14px" }}>
             <div
               style={{
@@ -318,20 +385,20 @@ export default function AccountCenterPage({ onNavigate, accessPortal }) {
               </button>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard
-          data-store-readiness="true"
-          title="Store Readiness Notes"
-          subtitle="Highest-signal account and compliance items still open."
-        >
+        <div data-store-readiness="true" style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Store Readiness Notes</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Highest-signal account and compliance items still open.</div>
+          </div>
           <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "8px", color: "#475569" }}>
             <li>Native iOS and Android project folders now exist, but signing and archive validation still need a native release pass.</li>
             <li>Camera usage text and manifest coverage are now started, but the final permission review still needs to be completed against the shipped feature set.</li>
             <li>Store privacy disclosures and data safety answers still need to be aligned with real backend behavior.</li>
             <li>Release signing, screenshots, icons, and review-access instructions still need a native submission pass.</li>
           </ul>
-        </SectionCard>
+        </div>
       </div>
 
       {deleteState.open ? (

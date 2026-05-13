@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import AuthPortalLayout, { AuthPrimaryShell, AuthSupportTiles } from "../components/auth/AuthPortalLayout";
 import { authActionStyle, authInputStyle } from "../components/auth/authPortalStyles";
-import SectionCard from "../components/shared/SectionCard";
 import { ACCESS_TIERS } from "../lib/auth/accessPortal";
 
 export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = "/insurance" }) {
@@ -221,7 +220,9 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             )}
           </AuthPrimaryShell>
 
-            <SectionCard title="Choose Your Starting Tier" subtitle="Free is the recommended starting point. Higher tiers unlock practical review depth as usage grows.">
+            <div style={{ padding: "22px 24px", borderRadius: "20px", border: "1px solid rgba(226,232,240,0.92)", background: "#ffffff", boxShadow: "0 4px 16px rgba(15,23,42,0.05)", display: "grid", gap: "12px" }}>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Choose Your Starting Tier</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Free is the recommended starting point. Higher tiers unlock practical review depth as usage grows.</div>
               <div style={{ display: "grid", gap: "14px" }}>
                 {Object.values(ACCESS_TIERS).map((tier) => {
                   const selected = form.tier === tier.key;
@@ -254,7 +255,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                   );
                 })}
               </div>
-            </SectionCard>
+            </div>
         </>
       }
     />
