@@ -58,7 +58,6 @@ import {
   getStatusPresentation,
   scoreFromReadinessStatus,
 } from "../lib/presentation/readinessVerdicts";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function buttonStyle(primary = false) {
   return {
@@ -731,7 +730,8 @@ function DashboardRingCard({ label, score, statusLabel, helper, iconLabel, tone 
 }
 
 export default function DashboardPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const { isDemoMode, startDemo } = useDemoMode();
   const {
     householdState,
