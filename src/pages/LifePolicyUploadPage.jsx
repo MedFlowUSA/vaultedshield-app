@@ -31,6 +31,7 @@ import { analyzeScanQuality } from "../utils/ocr/analyzeScanQuality";
 import { extractTextFromImage } from "../utils/ocr/extractTextFromImage";
 import { preparePageForOCR } from "../utils/ocr/preparePageForOCR";
 import { preprocessImageForOCR } from "../utils/ocr/preprocessImageForOCR";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function actionStyle(primary = false) {
   return {
@@ -795,7 +796,7 @@ function ScanReview({
 }
 
 export default function LifePolicyUploadPage({ onNavigate }) {
-  const isMobile = false; const isTablet = false;
+  const { isMobile, isTablet } = useResponsiveLayout();
   const { debug } = usePlatformShellData();
   const nativeCameraAvailable = isNativeCameraAvailable();
   const illustrationCameraInputRef = useRef(null);

@@ -31,6 +31,7 @@ import {
 } from "../lib/supabase/mortgageData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilters";
 import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
@@ -129,7 +130,7 @@ class MortgageDetailRecoveryBoundary extends Component {
 }
 
 export default function MortgageLoanDetailPage({ mortgageLoanId, onNavigate }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});

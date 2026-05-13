@@ -20,6 +20,7 @@ import {
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
 import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
   const numeric = Number(value);
@@ -487,7 +488,7 @@ function renderReportSection(section, isTablet = false) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   if (!report) return null;
 
   return (
@@ -588,7 +589,7 @@ function PolicyCard({ title, policy, onOpen }) {
 }
 
 export default function PolicyComparisonPage({ policyId, comparePolicyId = "", onNavigate }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   const reportSectionRef = useRef(null);
   const comparisonSectionRef = useRef(null);
   const [statementBundles, setStatementBundles] = useState({});

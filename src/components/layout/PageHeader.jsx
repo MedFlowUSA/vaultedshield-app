@@ -24,7 +24,7 @@ export default function PageHeader({ eyebrow, title, description, actions = null
             </p>
           ) : null}
         </div>
-        {actions ? <div style={{ width: "100%", maxWidth: "100%", flex: "1 1 220px" }}>{actions}</div> : null}
+        {actions ? <div style={{ maxWidth: "100%", flex: "0 1 auto", display: "flex", justifyContent: "flex-end" }}>{actions}</div> : null}
       </div>
     </div>
   );

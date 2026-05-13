@@ -30,6 +30,7 @@ import {
   getVaultedPolicyStatements,
   rehydrateVaultedPolicyBundle,
 } from "../lib/supabase/vaultedPolicies";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function actionButtonStyle(primary = false) {
   return {
@@ -658,7 +659,7 @@ function renderReportSection(section, isTablet = false) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   if (!report) return null;
 
   return (
@@ -707,7 +708,7 @@ const EMPTY_POLICY_DETAIL_BUNDLE = {
 };
 
 export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "default" }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   const { insuranceRows, errors, debug } = usePlatformShellData();
   const sectionRefs = useRef({});
   const technicalAnalysisRef = useRef(null);
@@ -3195,4 +3196,3 @@ export default function PolicyDetailPage({ policyId, onNavigate, featureMode = "
     </div>
   );
 }
-

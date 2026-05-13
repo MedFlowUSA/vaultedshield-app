@@ -29,6 +29,7 @@ import {
 } from "../lib/supabase/homeownersData";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { listAssetLinksForAssets } from "../lib/supabase/assetLinks";
 import { listProperties } from "../lib/supabase/propertyData";
 import { getAssetDetailBundle } from "../lib/supabase/platformData";
@@ -132,7 +133,7 @@ class HomeownersDetailRecoveryBoundary extends Component {
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const technicalAnalysisRef = useRef(null);

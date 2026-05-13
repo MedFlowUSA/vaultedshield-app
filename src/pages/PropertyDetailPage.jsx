@@ -26,6 +26,7 @@ import {
 } from "../lib/supabase/client";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import {
   getPropertyBundle,
   linkHomeownersToProperty,
@@ -366,7 +367,7 @@ function buildPropertyFactsDraft(property) {
 }
 
 export default function PropertyDetailPage({ propertyId, onNavigate }) {
-  const isMobile = false; const isTablet = false;
+  const { isMobile, isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
