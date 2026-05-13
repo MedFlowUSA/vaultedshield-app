@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+* {
+  min-width: 0;
+}
+
 html {
   min-width: 320px;
   background: #f8fbff;
@@ -45,6 +49,33 @@ textarea {
 
 button {
   border-radius: 8px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+div,
+span,
+label,
+a {
+  overflow-wrap: anywhere;
+}
+
+table {
+  max-width: 100%;
 }
 
 #root {

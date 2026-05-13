@@ -10,6 +10,7 @@ import { buildHouseholdIntelligence } from "../lib/domain/platformIntelligence";
 import { createAssetTask, getEmergencyModeBundle, updateHousehold } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function pillStyle(tone = "neutral") {
   if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
@@ -41,7 +42,7 @@ function formatDate(value) {
 }
 
 export default function EmergencyModePage() {
-  const isTablet = false;
+  const { isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const [bundle, setBundle] = useState({
     household: null,

@@ -11,6 +11,7 @@ import {
 } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
 import { convertImageToFile } from "../utils/imageToFile";
 
@@ -204,8 +205,7 @@ function surfaceCard(extra = {}) {
 }
 
 export default function UploadCenterPage() {
-  const isMobile = false;
-  const isTablet = false;
+  const { isMobile, isTablet } = useResponsiveLayout();
   const householdState = usePlatformHousehold();
   const supabaseConfigured = isSupabaseConfigured();
   const fileInputRef = useRef(null);

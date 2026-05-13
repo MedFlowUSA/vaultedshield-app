@@ -21,6 +21,7 @@ import {
 import { buildAssetDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
 const ACCESS_STATUS = ["active", "limited", "locked", "unknown"];
@@ -56,8 +57,7 @@ function surfaceCard(extra = {}) {
 }
 
 export default function AssetDetailPage({ assetId, onNavigate }) {
-  const isMobile = false;
-  const isTablet = false;
+  const { isMobile, isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState({

@@ -25,6 +25,7 @@ import {
 } from "../lib/presentation/readinessVerdicts";
 import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilters";
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
+import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_VALUE = "-";
 const METRIC_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
@@ -326,8 +327,7 @@ function insuranceStatusScore(status = "", fallback = 52) {
 }
 
 export default function InsuranceIntelligencePage({ onNavigate }) {
-  const isMobile = false;
-  const isTablet = false;
+  const { isMobile, isTablet } = useResponsiveLayout();
   const comparisonRef = useRef(null);
   const protectionSignalsRef = useRef(null);
   const technicalAnalysisRef = useRef(null);
