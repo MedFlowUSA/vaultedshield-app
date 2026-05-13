@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
-import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import {
   getVaultedPolicyStatements,
@@ -22,7 +20,6 @@ import {
   detectInsuranceGaps,
 } from "../lib/domain/insurance/insuranceIntelligence";
 import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 function formatCurrency(value) {
   const numeric = Number(value);
@@ -32,6 +29,24 @@ function formatCurrency(value) {
     currency: "USD",
     maximumFractionDigits: 0,
   });
+}
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
 }
 
 function formatDate(value) {
@@ -472,11 +487,15 @@ function renderReportSection(section, isTablet = false) {
 }
 
 function ReportView({ title, subtitle, report, onPrint }) {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   if (!report) return null;
 
   return (
-    <SectionCard title={title} subtitle={subtitle} accent="#bfdbfe">
+    <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+      <div>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{title}</div>
+        {subtitle ? <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>{subtitle}</div> : null}
+      </div>
       <div style={{ display: "grid", gap: "18px" }}>
         <div
           style={{
@@ -504,7 +523,7 @@ function ReportView({ title, subtitle, report, onPrint }) {
         </div>
         {report.sections.map((section) => renderReportSection(section, isTablet))}
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -569,7 +588,7 @@ function PolicyCard({ title, policy, onOpen }) {
 }
 
 export default function PolicyComparisonPage({ policyId, comparePolicyId = "", onNavigate }) {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   const reportSectionRef = useRef(null);
   const comparisonSectionRef = useRef(null);
   const [statementBundles, setStatementBundles] = useState({});
@@ -847,47 +866,81 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <FriendlyPageHero
-        eyebrow="Insurance Comparison"
-        sectionTitle="Policy Strength Comparison"
-        headline={comparisonHeroHeadline}
-        summary={comparisonHeroSummary}
-        transition="Start with the plain-English verdict first. The deeper charge support, statement trail, protection confidence, and report-ready comparison stay below when you want proof."
-        actions={[
-          {
-            label: policyId ? "Back To Policy" : "Back To Insurance",
-            onClick: () => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance"),
-            kind: "primary",
-          },
-          {
-            label: showComparisonReport ? "Hide Comparison Report" : "Open Comparison Report",
-            onClick: () => {
+      <div
+        style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+          color: "#ffffff",
+          display: "grid",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Insurance Comparison
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>{comparisonHeroHeadline}</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{comparisonHeroSummary}</div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#93c5fd" }}>{comparisonPolicy?.ranking?.score || basePolicy?.ranking?.score || 0}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>strength</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+          {[
+            { label: "Current policy", value: basePolicy?.product || "Loading" },
+            { label: "Comparison policy", value: comparisonPolicy?.product || "Needed" },
+            { label: "Current score", value: basePolicy?.ranking?.score ? `${basePolicy.ranking.score}/100` : "--" },
+            { label: "Comparison score", value: comparisonPolicy?.ranking?.score ? `${comparisonPolicy.ranking.score}/100` : "--" },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+              <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "4px", lineHeight: "1.3" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#1e40af", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            {policyId ? "Back To Policy" : "Back To Insurance"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setShowComparisonReport((current) => !current);
               reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-            },
-          },
-          {
-            label: "Print Report",
-            onClick: handlePrintReport,
-          },
-        ]}
-        score={comparisonPolicy?.ranking?.score || basePolicy?.ranking?.score || 0}
-        scoreTone={comparisonHeroTone}
-        scoreSubtitle="strength"
-        scoreIconLabel="policy"
-        asideHeadline={comparisonAnalysis?.summary ? "Why this read happened" : "Open the evidence when ready"}
-        asideSummary={
-          comparisonAnalysis?.summary ||
-          "VaultedShield compares support quality, charge visibility, missing data pressure, and protection confidence before calling one file stronger."
-        }
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          { label: "Current policy", value: basePolicy?.product || "Loading" },
-          { label: "Comparison policy", value: comparisonPolicy?.product || "Needed" },
-          { label: "Current score", value: basePolicy?.ranking?.score ? `${basePolicy.ranking.score}/100` : "--" },
-          { label: "Comparison score", value: comparisonPolicy?.ranking?.score ? `${comparisonPolicy.ranking.score}/100` : "--" },
-        ]}
-      />
+            }}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            {showComparisonReport ? "Hide Comparison Report" : "Open Comparison Report"}
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintReport}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Print Report
+          </button>
+        </div>
+      </div>
 
       <div
         style={{
@@ -896,45 +949,63 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
           gap: "14px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={comparisonPolicy && basePolicy ? `${strongerPolicyLabel} is the stronger working file` : "Choose two saved policies to compare"}
-          detail="Use this when you want the fastest answer to which current policy file looks cleaner before getting into the technical proof."
-          metric={comparisonPolicy && basePolicy ? `${Math.max(0, (comparisonPolicy.ranking?.score || 0) - (basePolicy.ranking?.score || 0))} point gap` : "2 files"}
-          tone={comparisonHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="Open Comparison"
-          onAction={() => comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Evidence Path"
-          title="See the report-ready proof"
-          detail="Open the structured comparison report when you want the export-style evidence bundle instead of just the headline call."
-          metric={showComparisonReport ? "Report open" : "Report hidden"}
-          tone="info"
-          statusLabel="Well Supported"
-          actionLabel={showComparisonReport ? "Hide Report" : "Open Report"}
-          onAction={() => {
-            setShowComparisonReport((current) => !current);
-            reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-        />
-        <FriendlyActionTile
-          kicker="Best Next Step"
-          title="Go back into the policy that needs attention"
-          detail="After the side-by-side read, reopen the policy page or Insurance Intelligence to keep the deeper review moving."
-          metric={policyId ? "Policy route ready" : "Insurance route ready"}
-          tone="warning"
-          statusLabel="Guided Action"
-          actionLabel={policyId ? "Back To Policy" : "Open Insurance"}
-          onAction={() => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance")}
-        />
+        {[
+          {
+            kicker: "Simple Read",
+            title: comparisonPolicy && basePolicy ? `${strongerPolicyLabel} is the stronger working file` : "Choose two saved policies to compare",
+            detail: "Use this when you want the fastest answer to which current policy file looks cleaner before getting into the technical proof.",
+            metric: comparisonPolicy && basePolicy ? `${Math.max(0, (comparisonPolicy.ranking?.score || 0) - (basePolicy.ranking?.score || 0))} point gap` : "2 files",
+            tone: comparisonHeroTone,
+            statusLabel: "Simple Read",
+            actionLabel: "Open Comparison",
+            onAction: () => comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Evidence Path",
+            title: "See the report-ready proof",
+            detail: "Open the structured comparison report when you want the export-style evidence bundle instead of just the headline call.",
+            metric: showComparisonReport ? "Report open" : "Report hidden",
+            tone: "info",
+            statusLabel: "Well Supported",
+            actionLabel: showComparisonReport ? "Hide Report" : "Open Report",
+            onAction: () => {
+              setShowComparisonReport((current) => !current);
+              reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            },
+          },
+          {
+            kicker: "Best Next Step",
+            title: "Go back into the policy that needs attention",
+            detail: "After the side-by-side read, reopen the policy page or Insurance Intelligence to keep the deeper review moving.",
+            metric: policyId ? "Policy route ready" : "Insurance route ready",
+            tone: "warning",
+            statusLabel: "Guided Action",
+            actionLabel: policyId ? "Back To Policy" : "Open Insurance",
+            onAction: () => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance"),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       {loading ? (
-        <SectionCard>
+        <div style={surfaceCard({ padding: "22px 24px" })}>
           <div style={{ color: "#64748b" }}>Loading comparison view...</div>
-        </SectionCard>
+        </div>
       ) : !basePolicy ? (
         <EmptyState
           title="Policy comparison unavailable"
@@ -958,11 +1029,11 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             </div>
           ) : null}
 
-          <div ref={comparisonSectionRef}>
-            <SectionCard
-            title="Policy Health Comparison"
-            subtitle="This view highlights which in-force policy currently looks stronger, where charge drag and evidence support differ, and which file needs closer attention."
-          >
+          <div ref={comparisonSectionRef} style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Policy Health Comparison</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This view highlights which in-force policy currently looks stronger, where charge drag and evidence support differ, and which file needs closer attention.</div>
+            </div>
             <div style={{ display: "grid", gap: "14px" }}>
               <div
                 style={{
@@ -990,14 +1061,14 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                 </ul>
               ) : null}
             </div>
-            </SectionCard>
           </div>
 
           {protectionComparison ? (
-            <SectionCard
-              title="Protection Confidence"
-              subtitle="This layer compares protection-read confidence, funding visibility, and visible gap pressure so stronger policy monitoring is not mistaken for complete protection."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Protection Confidence</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This layer compares protection-read confidence, funding visibility, and visible gap pressure so stronger policy monitoring is not mistaken for complete protection.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -1106,14 +1177,15 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </div>
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           {basePolicy?.adequacyReview || comparisonPolicy?.adequacyReview ? (
-            <SectionCard
-              title="Policy Parties"
-              subtitle="This layer compares owner, trust, payor, and beneficiary visibility so side-by-side review is not limited to values and charges."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Policy Parties</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This layer compares owner, trust, payor, and beneficiary visibility so side-by-side review is not limited to values and charges.</div>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
                 {[basePolicy, comparisonPolicy].map((policy, index) => {
                   const adequacyReview = policy?.adequacyReview || {};
@@ -1167,14 +1239,15 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   );
                 })}
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           {advisorComparisonRead ? (
-            <SectionCard
-              title="Plain-English Comparison Read"
-              subtitle="A practical recommendation layer that separates cleaner monitoring support from actual protection confidence."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Plain-English Comparison Read</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A practical recommendation layer that separates cleaner monitoring support from actual protection confidence.</div>
+              </div>
               <div style={{ display: "grid", gap: "14px" }}>
                 <div
                   style={{
@@ -1196,14 +1269,15 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </ul>
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           {comparisonAnalysis ? (
-            <SectionCard
-              title="Why One Policy Looks Stronger"
-              subtitle="This layer compares continuity, statement support, charge drag, COI support, strategy visibility, and missing-data pressure side by side."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Why One Policy Looks Stronger</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This layer compares continuity, statement support, charge drag, COI support, strategy visibility, and missing-data pressure side by side.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -1309,14 +1383,15 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </div>
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           {trendDeltaAnalysis ? (
-            <SectionCard
-              title="Performance Trend Comparison"
-              subtitle="This layer compares how cash value, surrender value, COI, charge drag, and statement support are moving over time in each policy."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Performance Trend Comparison</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This layer compares how cash value, surrender value, COI, charge drag, and statement support are moving over time in each policy.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -1376,14 +1451,15 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </div>
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           {activeEvidence ? (
-            <SectionCard
-              title={activeEvidence.title}
-              subtitle="This drill-down shows the specific side-by-side evidence currently driving the policy comparison call."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>{activeEvidence.title}</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>This drill-down shows the specific side-by-side evidence currently driving the policy comparison call.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -1422,7 +1498,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                   ))}
                 </div>
               </div>
-            </SectionCard>
+            </div>
           ) : null}
 
           <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: "18px" }}>
@@ -1438,7 +1514,11 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             />
           </div>
 
-          <SectionCard title="Try Another Comparison" subtitle="Choose a different policy to use as the comparison reference.">
+          <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Try Another Comparison</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Choose a different policy to use as the comparison reference.</div>
+            </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {compareOptions.map((policy) => (
                 <button
@@ -1459,7 +1539,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
                 </button>
               ))}
             </div>
-          </SectionCard>
+          </div>
         </>
       )}
     </div>

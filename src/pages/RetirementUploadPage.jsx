@@ -5,7 +5,6 @@ import { extractRetirementSummary } from "../lib/domain/retirement/retirementExt
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadRetirementGoalSnapshot, saveRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { extractPdfTextSafe } from "../utils/pdf/safePdfExtraction";
 
 function pillStyle(tone = "neutral") {
@@ -102,7 +101,8 @@ const DEFAULT_GOAL_FORM = {
 };
 
 export default function RetirementUploadPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const { debug } = usePlatformShellData();
   const uploadSectionRef = useRef(null);
   const goalSectionRef = useRef(null);

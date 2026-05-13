@@ -19,7 +19,6 @@ import SetupChecklist from "../components/onboarding/SetupChecklist";
 import { useDemoMode } from "../lib/demo/DemoModeContext";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { getPolicyDetailRoute } from "../lib/navigation/insurancePolicyRouting";
 import {
   buildHouseholdOnboardingChecklist,
@@ -731,7 +730,8 @@ function DashboardRingCard({ label, score, statusLabel, helper, iconLabel, tone 
 }
 
 export default function DashboardPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const { isDemoMode, startDemo } = useDemoMode();
   const {
     householdState,
