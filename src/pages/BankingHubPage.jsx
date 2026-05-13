@@ -1,9 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import { summarizeBankingModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { buildBankingHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { getPortalHubBundle, listAssets, listContacts } from "../lib/supabase/platformData";
@@ -393,83 +388,141 @@ export default function BankingHubPage({ onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
-      <FriendlyPageHero
-        eyebrow="Banking and Cash"
-        sectionTitle="Liquidity & Access"
-        headline={
-          bankingAssets.length === 0
-            ? "Map where household cash lives and who can reach it"
-            : readiness.status === "Ready"
-              ? "Banking continuity looks well-covered from the visible records"
-              : "Cash access is visible — access continuity still needs work"
-        }
-        summary={
-          bankingAssets.length === 0
-            ? "VaultedShield's banking module is not about balances — it's about continuity. If the primary account holder were unreachable, could the household access its money? That question drives everything here."
-            : readiness.headline
-        }
-        transition={
-          bankingAssets.length === 0
-            ? "Start by adding one checking or savings account. That first record anchors the household cash picture and lets the emergency readiness view begin."
-            : "The readiness checkpoints below show exactly where access continuity is solid and where it still has gaps."
-        }
-        actions={[
-          { label: "Connect Portal", onClick: () => onNavigate?.("/portals"), kind: "primary" },
-          { label: "See Accounts", onClick: () => accountsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) },
-          { label: "Review Contacts", onClick: () => onNavigate?.("/contacts") },
-        ]}
-        score={heroScore}
-        scoreTone={heroTone}
-        scoreSubtitle="readiness"
-        scoreIconLabel="BK"
-        asideHeadline={readiness.status}
-        asideSummary={readiness.headline}
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          { label: "Accounts", value: bankingAssets.length || "None yet" },
-          { label: "Portals connected", value: connectedPortals.length || "None yet" },
-          { label: "Emergency access", value: readiness.metrics.emergencyPortals > 0 ? `${readiness.metrics.emergencyPortals} set up` : "Not mapped" },
-          { label: "Banking contacts", value: bankingContacts.length || "None yet" },
-        ]}
-      />
-
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #1e40af 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Access Readiness"
-          title={`${readyCount} of 3 checkpoints clear`}
-          detail="Account visibility, portal access, and institution contacts are the three pillars of banking continuity."
-          metric={`${bankingAssets.length} account${bankingAssets.length === 1 ? "" : "s"} visible`}
-          tone={readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert"}
-          statusLabel={readyCount === 3 ? "All Clear" : "Needs Work"}
-          actionLabel="See Checkpoints"
-          onAction={() => commandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Emergency Scenario"
-          title="Could your family reach cash right now?"
-          detail="If the primary account holder were hospitalized tomorrow, would your household know which accounts exist and how to access them?"
-          metric={connectedPortals.length > 0 ? `${connectedPortals.length} portals mapped` : "Not yet mapped"}
-          tone={connectedPortals.length > 0 ? "info" : "alert"}
-          statusLabel="Critical Gap"
-          actionLabel="Map Portals"
-          onAction={() => onNavigate?.("/portals")}
-        />
-        <FriendlyActionTile
-          kicker="Institution Support"
-          title="Who to call at each bank"
-          detail="Advisor, banker, and support contacts for each institution reduce friction when access is lost or restricted."
-          metric={`${bankingContacts.length} contact${bankingContacts.length === 1 ? "" : "s"} on file`}
-          tone={bankingContacts.length > 0 ? "good" : "warning"}
-          statusLabel={bankingContacts.length > 0 ? "Covered" : "Building"}
-          actionLabel="Manage Contacts"
-          onAction={() => onNavigate?.("/contacts")}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Banking and Cash
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>
+              {bankingAssets.length === 0
+                ? "Map where household cash lives and who can reach it"
+                : readiness.status === "Ready"
+                  ? "Banking continuity looks well-covered from the visible records"
+                  : "Cash access is visible — access continuity still needs work"}
+            </div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "560px" }}>
+              {bankingAssets.length === 0
+                ? "This module is not about balances — it's about continuity. If the primary account holder were unreachable, could the household access its money?"
+                : readiness.headline}
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#93c5fd" }}>{heroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>readiness</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {[
+            { label: "Accounts", value: bankingAssets.length || "None" },
+            { label: "Portals", value: connectedPortals.length || "None" },
+            { label: "Emergency Access", value: readiness.metrics.emergencyPortals > 0 ? `${readiness.metrics.emergencyPortals} set up` : "Not mapped" },
+            { label: "Contacts", value: bankingContacts.length || "None" },
+          ].map((stat) => (
+            <div key={stat.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#bfdbfe" }}>{stat.value}</div>
+              <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "2px" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <ActionButton label="Connect Portal" primary onClick={() => onNavigate?.("/portals")} />
+          <button
+            type="button"
+            onClick={() => accountsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            See Accounts
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/contacts")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Review Contacts
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Access Readiness",
+            title: `${readyCount} of 3 checkpoints clear`,
+            detail: "Account visibility, portal access, and institution contacts are the three pillars of banking continuity.",
+            metric: `${bankingAssets.length} account${bankingAssets.length === 1 ? "" : "s"} visible`,
+            tone: readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert",
+            statusLabel: readyCount === 3 ? "All Clear" : "Needs Work",
+            actionLabel: "See Checkpoints",
+            onAction: () => commandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Emergency Scenario",
+            title: "Could your family reach cash right now?",
+            detail: "If the primary account holder were hospitalized tomorrow, would your household know which accounts exist and how to access them?",
+            metric: connectedPortals.length > 0 ? `${connectedPortals.length} portals mapped` : "Not yet mapped",
+            tone: connectedPortals.length > 0 ? "good" : "alert",
+            statusLabel: connectedPortals.length > 0 ? "Mapped" : "Critical Gap",
+            actionLabel: "Map Portals",
+            onAction: () => onNavigate?.("/portals"),
+          },
+          {
+            kicker: "Institution Support",
+            title: "Who to call at each bank",
+            detail: "Advisor, banker, and support contacts reduce friction when access is lost or restricted.",
+            metric: `${bankingContacts.length} contact${bankingContacts.length === 1 ? "" : "s"} on file`,
+            tone: bankingContacts.length > 0 ? "good" : "warning",
+            statusLabel: bankingContacts.length > 0 ? "Covered" : "Building",
+            actionLabel: "Manage Contacts",
+            onAction: () => onNavigate?.("/contacts"),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{
+              padding: "20px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              display: "grid",
+              gap: "12px",
+              alignContent: "start",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* Emergency Readiness Checkpoints */}
@@ -634,16 +687,17 @@ export default function BankingHubPage({ onNavigate }) {
 
       {/* Command Center */}
       {bankingCommand.rows.length > 0 ? (
-        <SectionCard
-          title="What Needs Attention"
-          subtitle="Active continuity gaps in the household banking picture."
-        >
+        <div style={surfaceCard({ padding: "26px 28px", display: "grid", gap: "20px" })}>
+          <div style={{ display: "grid", gap: "4px" }}>
+            <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>What Needs Attention</div>
+            <div style={{ color: "#64748b", lineHeight: "1.6" }}>Active continuity gaps in the household banking picture.</div>
+          </div>
           <div style={{ display: "grid", gap: "12px" }}>
             {bankingCommand.rows.map((item) => (
               <CommandRow key={item.id} item={item} onNavigate={onNavigate} />
             ))}
           </div>
-        </SectionCard>
+        </div>
       ) : null}
 
       {/* Why This Matters */}

@@ -1,9 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import { summarizeEstateModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { buildEstateHubCommand } from "../lib/domain/platformIntelligence/continuityCommandCenter";
 import { listAssets, listContacts } from "../lib/supabase/platformData";
@@ -365,77 +360,141 @@ export default function EstateHubPage({ onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
-      <FriendlyPageHero
-        eyebrow="Estate and Legal"
-        sectionTitle="Estate Planning"
-        headline={
-          successorContacts.length === 0 && legalAssets.length === 0
-            ? "Name who steps in — before you ever need to think in legal terms"
-            : readiness.status === "Ready"
-              ? "Household succession looks reasonably clear from the visible records"
-              : "Estate handoff is building — a few key gaps still need to be closed"
-        }
-        summary={
-          successorContacts.length === 0
-            ? "Estate planning isn't about complex legal documents. It starts with one question: if something happened to you today, would the right people know what to do? VaultedShield helps you answer that before it becomes urgent."
-            : readiness.headline
-        }
-        transition={
-          successorContacts.length === 0
-            ? "Start by adding an executor or trustee contact. That one record immediately makes the household handoff picture more readable."
-            : "The successor contacts and document tracker below show exactly where the estate picture is solid and where gaps still exist."
-        }
-        actions={[
-          { label: "Add Successor Contact", onClick: () => onNavigate?.("/contacts"), kind: "primary" },
-          { label: "See Documents", onClick: () => documentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) },
-          { label: "Emergency Mode", onClick: () => onNavigate?.("/emergency") },
-        ]}
-        score={heroScore}
-        scoreTone={heroTone}
-        scoreSubtitle="readiness"
-        scoreIconLabel="ES"
-        asideHeadline={readiness.status}
-        asideSummary={readiness.headline}
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          { label: "Successor contacts", value: successorContacts.length || "None yet" },
-          { label: "Legal documents", value: legalAssets.length || "None yet" },
-          { label: "Checkpoints clear", value: `${readyCount + partialCount}/3` },
-          { label: "Action items", value: estateCommand.rows.length || "None" },
-        ]}
-      />
+      {/* Hero */}
+      <div
+        style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #4c1d95 100%)",
+          color: "#ffffff",
+          display: "grid",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Estate and Legal
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>
+              {successorContacts.length === 0 && legalAssets.length === 0
+                ? "Name who steps in — before you ever need to think in legal terms"
+                : readiness.status === "Ready"
+                  ? "Household succession looks reasonably clear from the visible records"
+                  : "Estate handoff is building — a few key gaps still need to be closed"}
+            </div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "560px" }}>
+              {successorContacts.length === 0
+                ? "Estate planning starts with one question: if something happened to you today, would the right people know what to do?"
+                : readiness.headline}
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#d8b4fe" }}>{heroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>readiness</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {[
+            { label: "Successor Contacts", value: successorContacts.length || "None" },
+            { label: "Legal Documents", value: legalAssets.length || "None" },
+            { label: "Pillars Clear", value: `${readyCount + partialCount}/3` },
+            { label: "Action Items", value: estateCommand.rows.length || "None" },
+          ].map((stat) => (
+            <div key={stat.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#e9d5ff" }}>{stat.value}</div>
+              <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "2px" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <ActionButton label="Add Successor Contact" primary onClick={() => onNavigate?.("/contacts")} />
+          <button
+            type="button"
+            onClick={() => documentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            See Documents
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/emergency")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Emergency Mode
+          </button>
+        </div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
-        <FriendlyActionTile
-          kicker="Succession Read"
-          title={`${readyCount} of 3 pillars in place`}
-          detail="Executor, legal documents, and beneficiary designations are the three pillars of a clear estate handoff."
-          metric={`${successorContacts.length} successor contact${successorContacts.length === 1 ? "" : "s"}`}
-          tone={readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert"}
-          statusLabel={readyCount === 3 ? "Complete" : "Gaps Exist"}
-          actionLabel="See Checkpoints"
-          onAction={() => successorContactsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Biggest Risk"
-          title="Beneficiary designations override a will"
-          detail="Life insurance policies and retirement accounts pay out to whoever is named on the beneficiary form — not what the will says. These should be reviewed every 2–3 years."
-          metric="Often overlooked"
-          tone="warning"
-          statusLabel="Review Required"
-          actionLabel="Check Policies"
-          onAction={() => onNavigate?.("/insurance")}
-        />
-        <FriendlyActionTile
-          kicker="Emergency Access"
-          title="Does your family know where everything is?"
-          detail="Emergency mode creates a structured access summary for trusted successors — so the right people can act quickly without having to search for information."
-          metric={legalAssets.length > 0 ? `${legalAssets.length} docs on file` : "No docs yet"}
-          tone="info"
-          statusLabel="Set Up Now"
-          actionLabel="Open Emergency Mode"
-          onAction={() => onNavigate?.("/emergency")}
-        />
+        {[
+          {
+            kicker: "Succession Read",
+            title: `${readyCount} of 3 pillars in place`,
+            detail: "Executor, legal documents, and beneficiary designations are the three pillars of a clear estate handoff.",
+            metric: `${successorContacts.length} successor contact${successorContacts.length === 1 ? "" : "s"}`,
+            tone: readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert",
+            statusLabel: readyCount === 3 ? "Complete" : "Gaps Exist",
+            actionLabel: "See Checkpoints",
+            onAction: () => successorContactsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Biggest Risk",
+            title: "Beneficiary designations override a will",
+            detail: "Life insurance policies and retirement accounts pay out to whoever is named on the beneficiary form — not what the will says.",
+            metric: "Review every 2–3 years",
+            tone: "warning",
+            statusLabel: "Review Required",
+            actionLabel: "Check Policies",
+            onAction: () => onNavigate?.("/insurance"),
+          },
+          {
+            kicker: "Emergency Access",
+            title: "Does your family know where everything is?",
+            detail: "Emergency mode creates a structured access summary for trusted successors — so the right people can act quickly.",
+            metric: legalAssets.length > 0 ? `${legalAssets.length} docs on file` : "No docs yet",
+            tone: "info",
+            statusLabel: "Set Up Now",
+            actionLabel: "Open Emergency Mode",
+            onAction: () => onNavigate?.("/emergency"),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{
+              padding: "20px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              display: "grid",
+              gap: "12px",
+              alignContent: "start",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* Readiness Checkpoints */}
@@ -570,13 +629,17 @@ export default function EstateHubPage({ onNavigate }) {
 
       {/* Command Center */}
       {estateCommand.rows.length > 0 ? (
-        <SectionCard title="What Needs Attention" subtitle="Active estate planning gaps in the household record.">
+        <div style={surfaceCard({ padding: "26px 28px", display: "grid", gap: "20px" })}>
+          <div style={{ display: "grid", gap: "4px" }}>
+            <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>What Needs Attention</div>
+            <div style={{ color: "#64748b", lineHeight: "1.6" }}>Active estate planning gaps in the household record.</div>
+          </div>
           <div style={{ display: "grid", gap: "12px" }}>
             {estateCommand.rows.map((item) => (
               <CommandRow key={item.id} item={item} onNavigate={onNavigate} />
             ))}
           </div>
-        </SectionCard>
+        </div>
       ) : null}
 
       {/* Why This Matters */}
