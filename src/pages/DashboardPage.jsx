@@ -1276,7 +1276,7 @@ export default function DashboardPage({ onNavigate }) {
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
   const sectionRadius = isMobile ? "20px" : "24px";
-  const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(180px, 1fr))";
+  const metricGridColumns = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(min(100%, 180px), 1fr))";
   const householdAssistantSectionLabels = useMemo(
     () => ({
       "household-priority": "Top Priorities",
@@ -1558,7 +1558,7 @@ export default function DashboardPage({ onNavigate }) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
                 gap: "14px",
               }}
             >
@@ -1609,7 +1609,7 @@ export default function DashboardPage({ onNavigate }) {
           <section
             style={{
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr",
+              gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))",
               gap: "18px",
             }}
           >
@@ -1693,7 +1693,7 @@ export default function DashboardPage({ onNavigate }) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
                 gap: "12px",
               }}
             >
@@ -2060,7 +2060,7 @@ export default function DashboardPage({ onNavigate }) {
                   ? "1fr"
                   : isTablet
                     ? "minmax(0, 1fr) 170px"
-                    : "minmax(280px, 1.05fr) 210px minmax(280px, 0.95fr)",
+                    : "minmax(0, 1.05fr) minmax(160px, 210px) minmax(0, 0.95fr)",
                 gap: isMobile ? "20px" : "24px",
                 alignItems: "center",
               }}
@@ -2163,7 +2163,7 @@ export default function DashboardPage({ onNavigate }) {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(320px, 0.9fr)",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(0, 0.9fr)",
             gap: "24px",
             alignItems: "stretch",
           }}
@@ -2521,7 +2521,7 @@ export default function DashboardPage({ onNavigate }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
               gap: "14px",
             }}
           >
@@ -2563,7 +2563,7 @@ export default function DashboardPage({ onNavigate }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
               gap: "14px",
             }}
           >
@@ -2978,7 +2978,7 @@ export default function DashboardPage({ onNavigate }) {
             style={{
               marginTop: "22px",
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "1.2fr 1fr",
+              gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.2fr) minmax(0, 1fr)",
               gap: "18px",
             }}
           >

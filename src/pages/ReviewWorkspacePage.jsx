@@ -805,7 +805,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>active</div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: "12px" }}>
           {[
             { label: "Active work", value: activeQueueItems.length },
             { label: "Completed reviews", value: resolvedQueueItems.length },
@@ -853,7 +853,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
             gap: "14px",
           }}
         >
@@ -937,7 +937,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
           <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Quick Status</div>
           <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>{workflowSummary.summary}</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "12px" }}>
           {metrics.map((item) => (
             <div
               key={item.label}
@@ -967,7 +967,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Reviewed work stays out of active priority until fresh evidence reopens it.</div>
           </div>
         <div style={{ display: "grid", gap: "14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "12px" }}>
             {[
               { label: "Household Readiness", value: workflowScorecard?.overallScore ?? "-", helper: workflowScorecard?.overallStatus || "Starter" },
               { label: "Readiness Lift", value: scoreLift > 0 ? `+${scoreLift}` : "0", helper: "Lift from resolved issues" },
@@ -1165,7 +1165,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
                     Start here before scanning the full work list. Similar items are grouped together so repeated documentation, continuity, and linkage gaps are easier to handle in one pass.
                   </div>
                 </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "12px" }}>
                 {visibleIssueClusters.slice(0, 8).map((cluster, clusterIndex) => {
                   const urgencyMeta = friendlyUrgencyPresentation(cluster.urgency);
                   return (

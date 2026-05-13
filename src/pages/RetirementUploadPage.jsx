@@ -279,7 +279,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>readiness</div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: "10px" }}>
           {[
             { label: "PDFs processed", value: results.length },
             { label: "Successful reads", value: successful.length },
@@ -305,7 +305,7 @@ export default function RetirementUploadPage({ onNavigate }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
         {[
           {
             kicker: "Start Here",
@@ -502,7 +502,7 @@ export default function RetirementUploadPage({ onNavigate }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
+              gridTemplateColumns: isTablet ? "1fr" : "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
               gap: "12px",
             }}
           >
@@ -670,7 +670,7 @@ export default function RetirementUploadPage({ onNavigate }) {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
                         gap: "10px 14px",
                         color: "#475569",
                       }}

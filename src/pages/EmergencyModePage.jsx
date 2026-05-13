@@ -195,10 +195,10 @@ export default function EmergencyModePage() {
     status: document.processing_status || "uploaded",
     updatedAt: formatDate(document.created_at),
   }));
-  const summaryRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
-  const dualLayout = isTablet ? "1fr" : "1fr 1fr";
-  const documentRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
-  const notesRailLayout = isTablet ? "1fr" : "1.1fr 1fr";
+  const summaryRailLayout = isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(0, 1fr)";
+  const dualLayout = isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))";
+  const documentRailLayout = isTablet ? "1fr" : "minmax(0, 1.25fr) minmax(0, 1fr)";
+  const notesRailLayout = isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(0, 1fr)";
   const emergencyHeroScore =
     intelligence.emergency_readiness.score_label === "Strong"
       ? 84
@@ -256,7 +256,7 @@ export default function EmergencyModePage() {
             <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>continuity</div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: "10px" }}>
           {emergencyHeroGlanceItems.map((item) => (
             <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
               <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
@@ -283,7 +283,7 @@ export default function EmergencyModePage() {
       </div>
 
       {/* Action Tiles */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
         {[
           {
             kicker: "Simple Read",

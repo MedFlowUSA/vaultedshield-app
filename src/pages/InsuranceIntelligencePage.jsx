@@ -27,8 +27,8 @@ import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilte
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
 
 const EMPTY_VALUE = "-";
-const METRIC_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
-const DETAIL_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
+const METRIC_GRID_COLUMNS = "repeat(auto-fit, minmax(min(100%, 180px), 1fr))";
+const DETAIL_GRID_COLUMNS = "repeat(auto-fit, minmax(min(100%, 180px), 1fr))";
 
 function buttonStyle(primary = false) {
   return {
@@ -1374,7 +1374,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
               gap: "12px",
             }}
           >
@@ -1469,7 +1469,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr",
+            gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))",
             gap: "18px",
           }}
         >
@@ -1530,7 +1530,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "minmax(0, 1fr) 190px" : "minmax(280px, 1.05fr) 220px minmax(280px, 0.95fr)",
+            gridTemplateColumns: isMobile ? "1fr" : isTablet ? "minmax(0, 1fr) minmax(150px, 190px)" : "minmax(0, 1.05fr) minmax(170px, 220px) minmax(0, 0.95fr)",
             gap: "24px",
             alignItems: "center",
           }}
@@ -1813,7 +1813,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
           {topPolicyReportSection.items?.length > 0 ? renderReportFactsGrid(topPolicyReportSection.items, 4) : null}
 
-          <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: "14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
             {[carrierSupportReportSection, advisorHandoffReportSection].filter(Boolean).map((section) => (
               <div
                 key={section.id}
@@ -1850,7 +1850,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.05fr) minmax(300px, 0.95fr)",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.05fr) minmax(0, 0.95fr)",
             gap: "18px",
             padding: sectionPadding,
             borderRadius: sectionRadius,

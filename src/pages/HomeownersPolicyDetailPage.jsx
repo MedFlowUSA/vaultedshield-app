@@ -430,8 +430,8 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
       liabilityRows: normalizedPropertyLinks.filter((row) => row.bucket === "liability"),
     };
   }, [homeownersAssetLinks, linkedAsset?.id, linkedPropertyAssetLinks, propertyAssetIds]);
-  const documentRailLayout = isTablet ? "1fr" : "1.15fr 1fr";
-  const dualLayout = isTablet ? "1fr" : "1fr 1fr";
+  const documentRailLayout = isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(0, 1fr)";
+  const dualLayout = isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))";
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
@@ -660,7 +660,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                     <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>stack score</div>
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: "10px" }}>
                   {homeownersHeroGlanceItems.map((item) => (
                     <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
                       <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
@@ -684,7 +684,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
                 {[
                   {
                     kicker: "Simple Read",
@@ -892,7 +892,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
               </div>
             </div>
 
-            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
               <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
                 <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Policy Summary</div>
                 <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
@@ -926,7 +926,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
               </div>
             </div>
 
-            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
               <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
                 <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Property</div>
                 {propertyLinks.length > 0 ? (

@@ -380,9 +380,9 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
     };
   }, [bundle.alerts.length, bundle.documents.length, bundle.portalContinuity?.missingRecoveryCount, bundle.portalLinks.length, bundle.tasks.length, commandCenter, topReviewItem]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
-  const dualRailLayout = isTablet ? "1fr" : "1.25fr 1fr";
-  const splitLayout = isTablet ? "1fr" : "1fr 1fr";
-  const portalLayout = isTablet ? "1fr" : "1.1fr 1fr";
+  const dualRailLayout = isTablet ? "1fr" : "minmax(0, 1.25fr) minmax(0, 1fr)";
+  const splitLayout = isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))";
+  const portalLayout = isTablet ? "1fr" : "minmax(0, 1.1fr) minmax(0, 1fr)";
 
   function handleReviewWorkflowUpdate(itemId, status) {
     if (!reviewScope.householdId || !itemId) return;
@@ -435,7 +435,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(280px, 0.85fr)",
+            gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.15fr) minmax(0, 0.85fr)",
             gap: "18px",
             alignItems: "start",
           }}
