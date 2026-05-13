@@ -1,11 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import AIInsightPanel from "../components/shared/AIInsightPanel";
-import EmptyState from "../components/shared/EmptyState";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { loadRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
@@ -19,7 +12,24 @@ import { listMortgageLoans } from "../lib/supabase/mortgageData";
 import { getHouseholdInsuranceSummary, listVaultedPolicies } from "../lib/supabase/vaultedPolicies";
 import { listHomeownersPolicies } from "../lib/supabase/homeownersData";
 import { listAutoPolicies } from "../lib/supabase/autoData";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "Not recorded";
@@ -226,7 +236,6 @@ function buildHouseholdPriorityItems({ retirementReadiness, collegePlans, proper
 }
 
 export default function HouseholdGoalsDashboardPage({ onNavigate }) {
-  const { isMobile } = useResponsiveLayout();
   const { householdState, debug } = usePlatformShellData();
   const [propertyBundles, setPropertyBundles] = useState([]);
   const [propertyLoading, setPropertyLoading] = useState(true);
@@ -585,7 +594,6 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
     return lines.join(" ");
   }, [activeCollegePlan, insuranceGaps, insuranceSummary, mortgageSummary, priorityItems, propertySummary, retirementReadiness]);
 
-  const cardGrid = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
   const planningHeroScore = Math.round(
     Math.max(
       34,
@@ -599,110 +607,185 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
   );
   const planningHeroTone =
     planningHeroScore >= 80 ? "good" : planningHeroScore >= 60 ? "info" : planningHeroScore >= 45 ? "warning" : "alert";
-  const planningHeroGlanceItems = summaryItems.slice(0, 4).map((item) => ({
-    label: item.label,
-    value: item.value,
-  }));
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Household Goals"
-        sectionTitle="Household Goals Dashboard"
-        headline="See the household planning picture in one calm view before you go deeper into any single goal."
-        summary={householdNarrative}
-        transition="This top layer should answer whether retirement, college, protection, property, and mortgage planning are roughly aligned, what is most urgent, and where to focus next. The deeper planning detail stays below."
-        actions={[
-          { label: "Open Retirement Hub", onClick: () => onNavigate?.("/retirement") },
-          { label: "Open College Planner", onClick: () => onNavigate?.("/college-planning") },
-          { label: "See Protection", onClick: () => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }), kind: "primary" },
-        ]}
-        score={planningHeroScore}
-        scoreTone={planningHeroTone}
-        scoreSubtitle="planning score"
-        scoreIconLabel="goals"
-        asideHeadline={priorityItems[0]?.title || "No urgent planning blocker"}
-        asideSummary={priorityItems[0]?.detail || "No single planning issue is currently outranking the others."}
-        glanceItems={planningHeroGlanceItems}
-      />
-
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #064e3b 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={priorityItems.length > 0 ? "Planning view has clear next steps" : "Planning view looks calm right now"}
-          detail={householdNarrative}
-          metric={`${priorityItems.length} priority${priorityItems.length === 1 ? "" : "ies"}`}
-          tone={planningHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="See Priorities"
-          onAction={() => document.querySelector('[data-household-priorities="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title={priorityItems[0]?.title || "Start with the strongest planning gap"}
-          detail={priorityItems[0]?.detail || "Retirement, college, mortgage, and protection signals all roll up here so you can choose the best next workstream."}
-          metric={priorityItems[0]?.urgency || "Watch"}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="Open Priority"
-          onAction={() => onNavigate?.(priorityItems[0]?.actionPath || "/retirement")}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title="Detailed optimization can come later"
-          detail="Use this page to decide which planning lane deserves attention first. The deeper calculators and record-by-record reviews can follow."
-          metric={`${summaryItems.length} signals`}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="See Protection"
-          onAction={() => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Household Goals
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>
+              {priorityItems.length > 0
+                ? "Planning view has clear next steps"
+                : "Household planning view looks calm right now"}
+            </div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "560px" }}>
+              See the household planning picture in one calm view before going deeper into any single goal.
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#6ee7b7" }}>{planningHeroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>planning score</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {[
+            { label: "Priority Items", value: priorityItems.length || "None" },
+            { label: "Retirement", value: retirementReadiness ? `${retirementReadiness.readinessScore}/100` : "Not set" },
+            { label: "College Plans", value: collegePlans.length || "None" },
+            { label: "Properties", value: propertySummary.propertyCount || 0 },
+          ].map((stat) => (
+            <div key={stat.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#a7f3d0" }}>{stat.value}</div>
+              <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "2px" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/retirement")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#065f46", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Retirement Hub
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/college-planning")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open College Planner
+          </button>
+          <button
+            type="button"
+            onClick={() => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            See Protection
+          </button>
+        </div>
       </div>
 
-      <AIInsightPanel
-        data-household-priorities="true"
-        title="Household planning read"
-        summary={householdNarrative}
-        bullets={[
-          priorityItems[0]
-            ? `Top household priority: ${priorityItems[0].title}. ${priorityItems[0].detail}`
-            : "No urgent household planning item is currently outranking the others.",
-          retirementReadiness
-            ? `Retirement projected balance: ${formatCurrency(retirementReadiness.projectedRetirementBalance)}.`
-            : "Retirement goal has not been saved yet.",
-          activeCollegePlan
-            ? `${activeCollegePlan.childLabel} projected college savings: ${formatCurrency(activeCollegePlan.projectedSavings)}.`
-            : "No college plan is visible yet.",
-          collegePlans.length > 0
-            ? `College planning status: ${collegeHouseholdRead.status}.`
-            : "College planning has not been set up yet.",
-          propertySummary.propertyCount > 0
-            ? `Visible property equity midpoint: ${propertySummary.totalEquityMidpoint !== null ? formatCurrency(propertySummary.totalEquityMidpoint) : "Limited"}.`
-            : "Property equity is not in view yet.",
-          mortgageSummary.totalLoans > 0
-            ? `Mortgage read: ${mortgageSummary.headline}`
-            : "No mortgage loans are visible yet.",
-          insuranceGaps.summary.protectionFlags.length > 0
-            ? `Protection review flags: ${insuranceGaps.summary.protectionFlags.join(", ")}.`
-            : "No obvious insurance protection gaps were detected from the current household data.",
-        ]}
-      />
+      {/* Action Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Simple Read",
+            title: priorityItems.length > 0 ? "Planning view has clear next steps" : "Planning view looks calm right now",
+            detail: householdNarrative.split(".")[0] + ".",
+            metric: `${priorityItems.length} priorit${priorityItems.length === 1 ? "y" : "ies"}`,
+            tone: planningHeroTone,
+            statusLabel: "Simple Read",
+            actionLabel: "See Priorities",
+            onAction: () => document.querySelector('[data-household-priorities="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Best First Step",
+            title: priorityItems[0]?.title || "Start with the strongest planning gap",
+            detail: priorityItems[0]?.detail || "Retirement, college, mortgage, and protection signals all roll up here so you can choose the best next workstream.",
+            metric: priorityItems[0]?.urgency || "Watch",
+            tone: "warning",
+            statusLabel: "Guided Focus",
+            actionLabel: "Open Priority",
+            onAction: () => onNavigate?.(priorityItems[0]?.actionPath || "/retirement"),
+          },
+          {
+            kicker: "What Can Wait",
+            title: "Detailed optimization can come later",
+            detail: "Use this page to decide which planning lane deserves attention first. The deeper calculators and record-by-record reviews can follow.",
+            metric: `${summaryItems.length} signals`,
+            tone: "info",
+            statusLabel: "Building",
+            actionLabel: "See Protection",
+            onAction: () => document.querySelector('[data-household-protection="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{
+              padding: "20px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              display: "grid",
+              gap: "12px",
+              alignContent: "start",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
+      </div>
 
-      <SectionCard
-        data-household-protection="true"
-        title="Protection & Insurance"
-        subtitle="A simple household protection health check based on visible policy and property data."
-      >
+      {/* Household Planning Narrative */}
+      <div data-household-priorities="true" style={surfaceCard({ padding: "24px 26px", display: "grid", gap: "16px" })}>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Household Planning Read</div>
+        <div style={{ color: "#475569", lineHeight: "1.7" }}>{householdNarrative}</div>
+        <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#64748b", fontSize: "13px", lineHeight: "1.7" }}>
+          {[
+            priorityItems[0]
+              ? `Top household priority: ${priorityItems[0].title}. ${priorityItems[0].detail}`
+              : "No urgent household planning item is currently outranking the others.",
+            retirementReadiness
+              ? `Retirement projected balance: ${formatCurrency(retirementReadiness.projectedRetirementBalance)}.`
+              : "Retirement goal has not been saved yet.",
+            activeCollegePlan
+              ? `${activeCollegePlan.childLabel} projected college savings: ${formatCurrency(activeCollegePlan.projectedSavings)}.`
+              : "No college plan is visible yet.",
+            propertySummary.propertyCount > 0
+              ? `Visible property equity midpoint: ${propertySummary.totalEquityMidpoint !== null ? formatCurrency(propertySummary.totalEquityMidpoint) : "Limited"}.`
+              : "Property equity is not in view yet.",
+            mortgageSummary.totalLoans > 0
+              ? `Mortgage read: ${mortgageSummary.headline}`
+              : "No mortgage loans are visible yet.",
+            insuranceGaps.summary.protectionFlags.length > 0
+              ? `Protection review flags: ${insuranceGaps.summary.protectionFlags.join(", ")}.`
+              : "No obvious insurance protection gaps were detected from the current household data.",
+          ].map((bullet) => <li key={bullet}>{bullet}</li>)}
+        </ul>
+      </div>
+
+      {/* Protection & Insurance */}
+      <div data-household-protection="true" style={surfaceCard({ padding: "24px 26px", display: "grid", gap: "16px" })}>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Protection & Insurance</div>
+        <div style={{ color: "#64748b", fontSize: "14px" }}>A simple household protection health check based on visible policy and property data.</div>
         {insuranceLoading ? (
           <div style={{ color: "#64748b" }}>Loading household protection signals...</div>
         ) : insuranceError ? (
-          <EmptyState title="Insurance visibility is limited" description={insuranceError} />
+          <div style={{ padding: "20px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b" }}>{insuranceError}</div>
         ) : (
           <div style={{ display: "grid", gap: "16px" }}>
             {insuranceSummary ? (
@@ -732,117 +815,32 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                   </div>
                 </div>
                 <div style={{ color: "#475569", lineHeight: "1.7" }}>{insuranceSummary.headline}</div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Policies</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.totalPolicies || 0}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Visible Coverage</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.totalCoverage ? formatCurrency(insuranceSummary.totalCoverage) : "Not recorded"}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Confidence</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{formatScore((insuranceSummary.confidence || 0) * 100)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Gap Flags</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{insuranceSummary.metrics?.gapPolicies || 0}</div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Owner Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.ownerVisiblePolicies || 0}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+                  {[
+                    { label: "Policies", value: insuranceSummary.totalPolicies || 0 },
+                    { label: "Visible Coverage", value: insuranceSummary.totalCoverage ? formatCurrency(insuranceSummary.totalCoverage) : "Not recorded" },
+                    { label: "Confidence", value: formatScore((insuranceSummary.confidence || 0) * 100) },
+                    { label: "Gap Flags", value: insuranceSummary.metrics?.gapPolicies || 0 },
+                    { label: "Owner Visible", value: insuranceSummary.metrics?.ownerVisiblePolicies || 0 },
+                    { label: "Insured Visible", value: insuranceSummary.metrics?.insuredVisiblePolicies || 0 },
+                    { label: "Named Beneficiaries", value: insuranceSummary.metrics?.beneficiaryNamedPolicies || 0 },
+                    { label: "Beneficiary Limited", value: insuranceSummary.metrics?.beneficiaryLimitedPolicies || 0 },
+                    { label: "Joint Insured", value: insuranceSummary.metrics?.jointInsuredVisiblePolicies || 0 },
+                    { label: "Payor Visible", value: insuranceSummary.metrics?.payorVisiblePolicies || 0 },
+                    { label: "Trust Name Visible", value: insuranceSummary.metrics?.trustNameVisiblePolicies || 0 },
+                    { label: "Beneficiary Shares", value: insuranceSummary.metrics?.beneficiaryShareVisiblePolicies || 0 },
+                    { label: "Trust-Owned", value: insuranceSummary.metrics?.trustOwnedPolicies || 0 },
+                    { label: "Trustee Visible", value: insuranceSummary.metrics?.trusteeVisiblePolicies || 0 },
+                    { label: "Benefit Option Visible", value: insuranceSummary.metrics?.benefitOptionVisiblePolicies || 0 },
+                    { label: "Rider Support Visible", value: insuranceSummary.metrics?.riderVisiblePolicies || 0 },
+                    { label: "Living Benefit Visible", value: insuranceSummary.metrics?.livingBenefitVisiblePolicies || 0 },
+                    { label: "Income Protection Visible", value: insuranceSummary.metrics?.incomeProtectionVisiblePolicies || 0 },
+                  ].map((m) => (
+                    <div key={m.label}>
+                      <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{m.label}</div>
+                      <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>{m.value}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Insured Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.insuredVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Named Beneficiaries</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.beneficiaryNamedPolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Beneficiary Limited</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.beneficiaryLimitedPolicies || 0}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Joint Insured</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.jointInsuredVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Payor Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.payorVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Trust Name Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.trustNameVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Beneficiary Shares</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.beneficiaryShareVisiblePolicies || 0}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Trust-Owned</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.trustOwnedPolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Trustee Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.trusteeVisiblePolicies || 0}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Benefit Option Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.benefitOptionVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Rider Support Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.riderVisiblePolicies || 0}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Living Benefit Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.livingBenefitVisiblePolicies || 0}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Income Protection Visible</div>
-                    <div style={{ marginTop: "4px", fontWeight: 800, color: "#0f172a" }}>
-                      {insuranceSummary.metrics?.incomeProtectionVisiblePolicies || 0}
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 {Array.isArray(insuranceSummary.notes) && insuranceSummary.notes.length > 0 ? (
                   <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
@@ -854,7 +852,7 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               </div>
             ) : null}
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
               {[
                 { label: "Life", gap: insuranceGaps.life },
                 { label: "Homeowners", gap: insuranceGaps.homeowners },
@@ -914,135 +912,60 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => onNavigate?.("/insurance")}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "10px",
-                  border: "1px solid #cbd5e1",
-                  background: "#ffffff",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
+                style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer" }}
               >
                 Review Coverage
               </button>
             </div>
           </div>
         )}
-      </SectionCard>
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: cardGrid, gap: "18px" }}>
-        <SectionCard title="Retirement Readiness" subtitle="Saved retirement goal status for this household.">
+      {/* Retirement + College */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Retirement Readiness</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>Saved retirement goal status for this household.</div>
           {retirementReadiness ? (
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ display: "grid", gap: "12px" }}>
               <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "999px",
-                    background: getReadinessTone(retirementReadiness.readinessStatus).background,
-                    color: getReadinessTone(retirementReadiness.readinessStatus).color,
-                    fontWeight: 800,
-                    fontSize: "13px",
-                  }}
-                >
+                <div style={{ padding: "8px 12px", borderRadius: "999px", background: getReadinessTone(retirementReadiness.readinessStatus).background, color: getReadinessTone(retirementReadiness.readinessStatus).color, fontWeight: 800, fontSize: "13px" }}>
                   {retirementReadiness.readinessStatus}
                 </div>
-                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>
-                  {retirementReadiness.readinessScore}/100
-                </div>
+                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{retirementReadiness.readinessScore}/100</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Projected Balance:</strong> {formatCurrency(retirementReadiness.projectedRetirementBalance)}</div>
                 <div><strong>Income Gap:</strong> {formatCurrency(retirementReadiness.estimatedIncomeGapMonthly)}/month</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{retirementReadiness.explanation}</div>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/retirement")}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Open Retirement Hub
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/retirement/upload")}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Update Retirement Goal
-                </button>
-              </div>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
-              <EmptyState title="No retirement goal saved" description="Set a retirement goal to activate a household readiness view." />
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/retirement")}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Open Retirement Hub
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.("/retirement/upload")}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Set Retirement Goal
-                </button>
-              </div>
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", border: "1px dashed #cbd5e1", textAlign: "center", display: "grid", gap: "6px" }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>No retirement goal saved</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Set a retirement goal to activate a household readiness view.</div>
             </div>
           )}
-        </SectionCard>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => onNavigate?.("/retirement")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: "13px" }}>
+              Open Retirement Hub
+            </button>
+            <button type="button" onClick={() => onNavigate?.("/retirement/upload")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: "13px" }}>
+              {retirementReadiness ? "Update Goal" : "Set Retirement Goal"}
+            </button>
+          </div>
+        </div>
 
-        <SectionCard title="College Planning" subtitle="Saved child plans and current education-funding readiness.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>College Planning</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>Saved child plans and current education-funding readiness.</div>
           {activeCollegePlan ? (
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ display: "grid", gap: "12px" }}>
               <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "999px",
-                    background: getReadinessTone(activeCollegePlan.readinessStatus).background,
-                    color: getReadinessTone(activeCollegePlan.readinessStatus).color,
-                    fontWeight: 800,
-                    fontSize: "13px",
-                  }}
-                >
+                <div style={{ padding: "8px 12px", borderRadius: "999px", background: getReadinessTone(activeCollegePlan.readinessStatus).background, color: getReadinessTone(activeCollegePlan.readinessStatus).color, fontWeight: 800, fontSize: "13px" }}>
                   {activeCollegePlan.readinessStatus}
                 </div>
-                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>
-                  {activeCollegePlan.readinessScore}/100
-                </div>
+                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{activeCollegePlan.readinessScore}/100</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Active Child Plan:</strong> {activeCollegePlan.childLabel}</div>
@@ -1050,22 +973,34 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                 <div><strong>{activeCollegePlan.fundingDifference >= 0 ? "Projected Surplus" : "Funding Gap"}:</strong> {formatCurrency(Math.abs(activeCollegePlan.fundingDifference))}</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{activeCollegePlan.explanation}</div>
-              <div style={{ color: "#64748b", lineHeight: "1.7" }}>
-                Household college read: {collegeHouseholdRead.headline}
-              </div>
+              <div style={{ color: "#64748b", lineHeight: "1.7" }}>Household college read: {collegeHouseholdRead.headline}</div>
             </div>
           ) : (
-            <EmptyState title="No college plans saved" description="Add a child plan to activate college readiness tracking for the household." />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", border: "1px dashed #cbd5e1", textAlign: "center", display: "grid", gap: "6px" }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>No college plans saved</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Add a child plan to activate college readiness tracking for the household.</div>
+            </div>
           )}
-        </SectionCard>
+          <button type="button" onClick={() => onNavigate?.("/college-planning")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: "13px", textAlign: "left" }}>
+            Open College Planner
+          </button>
+        </div>
+      </div>
 
-        <SectionCard title="Property Equity Snapshot" subtitle="Current equity visibility across linked household properties.">
+      {/* Property + Mortgage */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Property Equity Snapshot</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>Current equity visibility across linked household properties.</div>
           {propertyLoading ? (
             <div style={{ color: "#64748b" }}>Loading household property equity visibility...</div>
           ) : propertyError ? (
-            <EmptyState title="Property snapshot unavailable" description={propertyError} />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: "13px" }}>{propertyError}</div>
           ) : propertyBundles.length === 0 ? (
-            <EmptyState title="No properties linked yet" description="Add a property and run valuation/linkage review to bring equity visibility into household planning." />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", border: "1px dashed #cbd5e1", textAlign: "center", display: "grid", gap: "6px" }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>No properties linked yet</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Add a property and run valuation/linkage review to bring equity visibility into household planning.</div>
+            </div>
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
@@ -1080,29 +1015,11 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
                 return (
                   <div
                     key={property.id}
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: "14px",
-                      background: "#f8fafc",
-                      border: "1px solid rgba(148, 163, 184, 0.18)",
-                      display: "grid",
-                      gap: "8px",
-                    }}
+                    style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid rgba(148, 163, 184, 0.18)", display: "grid", gap: "8px" }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                        {property.property_name || property.property_address || "Property"}
-                      </div>
-                      <div
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: "999px",
-                          background: getEquityTone(propertyStatus).background,
-                          color: getEquityTone(propertyStatus).color,
-                          fontWeight: 700,
-                          fontSize: "12px",
-                        }}
-                      >
+                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{property.property_name || property.property_address || "Property"}</div>
+                      <div style={{ padding: "6px 10px", borderRadius: "999px", background: getEquityTone(propertyStatus).background, color: getEquityTone(propertyStatus).color, fontWeight: 700, fontSize: "12px" }}>
                         {equity.equity_visibility_status || "limited"}
                       </div>
                     </div>
@@ -1115,37 +1032,36 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               })}
             </div>
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Mortgage Readiness" subtitle="Debt review, payoff visibility, and refinance readiness across household mortgage loans.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Mortgage Readiness</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>Debt review, payoff visibility, and refinance readiness across household mortgage loans.</div>
           {mortgageLoading ? (
             <div style={{ color: "#64748b" }}>Loading household mortgage readiness...</div>
           ) : mortgageError ? (
-            <EmptyState title="Mortgage readiness is limited" description={mortgageError} />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: "13px" }}>{mortgageError}</div>
           ) : mortgageSummary.totalLoans === 0 ? (
-            <EmptyState title="No mortgage loans linked yet" description="Add or link a mortgage to bring debt-readiness signals into the household dashboard." />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", border: "1px dashed #cbd5e1", textAlign: "center", display: "grid", gap: "6px" }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>No mortgage loans linked yet</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Add or link a mortgage to bring debt-readiness signals into the household dashboard.</div>
+            </div>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ display: "grid", gap: "12px" }}>
               <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
                 <div
                   style={{
                     padding: "8px 12px",
                     borderRadius: "999px",
-                    background: getMortgageStatusTone(
-                      mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"
-                    ).background,
-                    color: getMortgageStatusTone(
-                      mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"
-                    ).color,
+                    background: getMortgageStatusTone(mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported").background,
+                    color: getMortgageStatusTone(mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported").color,
                     fontWeight: 800,
                     fontSize: "13px",
                   }}
                 >
                   {mortgageSummary.needsReviewCount > 0 ? "Needs Review" : mortgageSummary.reviewSoonCount > 0 ? "Review Soon" : "Better Supported"}
                 </div>
-                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>
-                  {formatScore((mortgageSummary.averageConfidence || 0) * 100)}
-                </div>
+                <div style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a" }}>{formatScore((mortgageSummary.averageConfidence || 0) * 100)}</div>
               </div>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Loans in View:</strong> {mortgageSummary.totalLoans}</div>
@@ -1155,48 +1071,31 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{mortgageSummary.headline}</div>
               {Array.isArray(mortgageSummary.notes) && mortgageSummary.notes.length > 0 ? (
                 <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#475569" }}>
-                  {mortgageSummary.notes.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
+                  {mortgageSummary.notes.map((item) => <li key={item}>{item}</li>)}
                 </ul>
               ) : null}
             </div>
           )}
-        </SectionCard>
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 0.8fr", gap: "18px" }}>
-        <SectionCard title="Priority Queue" subtitle="The next household planning items that deserve attention first.">
+      {/* Priority Queue + Next Layer */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Priority Queue</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>The next household planning items that deserve attention first.</div>
           {priorityItems.length > 0 ? (
-            <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "grid", gap: "10px" }}>
               {priorityItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => onNavigate?.(item.actionPath)}
-                  style={{
-                    textAlign: "left",
-                    padding: "14px 16px",
-                    borderRadius: "14px",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    background: "#f8fafc",
-                    cursor: "pointer",
-                    display: "grid",
-                    gap: "6px",
-                  }}
+                  style={{ textAlign: "left", padding: "14px 16px", borderRadius: "14px", border: "1px solid rgba(148, 163, 184, 0.18)", background: "#f8fafc", cursor: "pointer", display: "grid", gap: "6px" }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                     <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
-                    <div
-                      style={{
-                        padding: "5px 9px",
-                        borderRadius: "999px",
-                        background: getPriorityUrgencyTone(item.urgency).background,
-                        color: getPriorityUrgencyTone(item.urgency).color,
-                        fontWeight: 700,
-                        fontSize: "12px",
-                      }}
-                    >
+                    <div style={{ padding: "5px 9px", borderRadius: "999px", background: getPriorityUrgencyTone(item.urgency).background, color: getPriorityUrgencyTone(item.urgency).color, fontWeight: 700, fontSize: "12px" }}>
                       {item.urgency}
                     </div>
                   </div>
@@ -1205,22 +1104,26 @@ export default function HouseholdGoalsDashboardPage({ onNavigate }) {
               ))}
             </div>
           ) : (
-            <EmptyState title="No immediate planning flags" description="Current retirement, college, property, mortgage, and visible insurance signals do not show an obvious household priority queue yet." />
+            <div style={{ padding: "20px", borderRadius: "12px", background: "#f8fafc", border: "1px dashed #cbd5e1", textAlign: "center", display: "grid", gap: "6px" }}>
+              <div style={{ fontWeight: 700, color: "#0f172a" }}>No immediate planning flags</div>
+              <div style={{ color: "#64748b", fontSize: "13px" }}>Current retirement, college, property, mortgage, and visible insurance signals do not show an obvious household priority queue yet.</div>
+            </div>
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Next Layer" subtitle="The next connected planning surfaces that will make this household dashboard stronger.">
-          <AIInsightPanel
-            title="Coming next"
-            summary="This first household dashboard now ties together retirement, college planning, property equity, and a simple protection check. Later versions can deepen policy adequacy and household continuity planning."
-            bullets={[
-              "Future insurance layers can move from policy presence checks into adequacy, liability limit, and beneficiary review.",
-              "Mortgage layers can deepen from debt-read visibility into payment trend, escrow pressure, and amortization planning.",
-              "Later versions can add a single household readiness narrative that blends goals, protection, and asset continuity.",
-              "Persistence is already in place for retirement and college, so this dashboard can grow into an ongoing family planning surface.",
-            ]}
-          />
-        </SectionCard>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px", alignContent: "start" })}>
+          <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>Next Layer</div>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>The next connected planning surfaces that will make this household dashboard stronger.</div>
+          <div style={{ color: "#475569", lineHeight: "1.7" }}>
+            This first household dashboard now ties together retirement, college planning, property equity, and a simple protection check. Later versions can deepen policy adequacy and household continuity planning.
+          </div>
+          <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#64748b", fontSize: "13px", lineHeight: "1.7" }}>
+            <li>Future insurance layers can move from policy presence checks into adequacy, liability limit, and beneficiary review.</li>
+            <li>Mortgage layers can deepen from debt-read visibility into payment trend, escrow pressure, and amortization planning.</li>
+            <li>Later versions can add a single household readiness narrative that blends goals, protection, and asset continuity.</li>
+            <li>Persistence is already in place for retirement and college, so this dashboard can grow into an ongoing family planning surface.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
