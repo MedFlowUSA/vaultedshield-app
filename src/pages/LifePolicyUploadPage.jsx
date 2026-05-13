@@ -1,8 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
 import {
   buildPolicyRecord,
   buildCashValueGrowthExplanation,
@@ -25,7 +23,6 @@ import { analyzePolicyBasics } from "../lib/domain/insurance/insuranceIntelligen
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
 import { getPolicyDetailRoute, getPolicyEntryLabel } from "../lib/navigation/insurancePolicyRouting";
 import { persistVaultedPolicyAnalysis } from "../lib/supabase/vaultedPolicies";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import useScanSession from "../hooks/useScanSession";
 import { extractDocumentText } from "../utils/documents/extractDocumentText";
 import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
@@ -52,6 +49,24 @@ function getConfidenceLabel(confidence) {
   if (confidence >= 85) return "High";
   if (confidence >= 65) return "Moderate";
   return "Low";
+}
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
 }
 
 function getQualityLabel(level) {
@@ -780,7 +795,7 @@ function ScanReview({
 }
 
 export default function LifePolicyUploadPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false; const isTablet = false;
   const { debug } = usePlatformShellData();
   const nativeCameraAvailable = isNativeCameraAvailable();
   const illustrationCameraInputRef = useRef(null);
@@ -1387,123 +1402,53 @@ export default function LifePolicyUploadPage({ onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Life Policy Intelligence"
-        sectionTitle="Life Policy Intake"
-        headline={intakeHeadline}
-        summary={intakeSummary}
-        transition="Start with the easiest interpretation first: baseline file, statement history, then analyze the packet. The parser, evidence, carrier-aware reasoning, and saved-policy workflow still live underneath."
-        actions={[
-          {
-            label: "Add Baseline File",
-            onClick: () => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-            kind: "primary",
-          },
-          {
-            label: "Add Statement History",
-            onClick: () => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-          },
-          {
-            label: "Analyze Packet",
-            onClick: () => analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-          },
-          {
-            label: "Back To Insurance",
-            onClick: () => onNavigate?.("/insurance"),
-          },
-        ]}
-        score={intakeScore}
-        scoreTone={intakeTone}
-        scoreSubtitle="packet"
-        scoreIconLabel="life policy"
-        asideHeadline={
-          saveStatus?.succeeded
-            ? "Saved for deeper review"
-            : hasBaselineInput
-              ? "Simple next step"
-              : "Baseline needed first"
-        }
-        asideSummary={
-          saveStatus?.succeeded
-            ? "Open the saved policy whenever you want the deeper charge, COI, timeline, and evidence layers."
-            : hasBaselineInput
-              ? "Add statement history next, then analyze the packet when it feels complete enough for a first read."
-              : "The analysis engine needs the original policy or illustration before it can build a trustworthy read."
-        }
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          {
-            label: "Baseline file",
-            value: illustrationFile
-              ? illustrationFile.name
-              : illustrationScan.hasPages
-                ? `${illustrationScan.pages.length} scanned page${illustrationScan.pages.length === 1 ? "" : "s"}`
-                : "Not added yet",
-          },
-          {
-            label: "Statement inputs",
-            value: statementInputCount > 0 ? statementInputCount : "None yet",
-          },
-          {
-            label: "Ready to analyze",
-            value: hasBaselineInput ? "Yes" : "No",
-          },
-          {
-            label: "Saved policy",
-            value: saveStatus?.policyId ? savedPolicyLabel : "Not saved yet",
-          },
-        ]}
-      />
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-          gap: "14px",
-        }}
-      >
-        <FriendlyActionTile
-          kicker="Step 1"
-          title="Bring in the original policy or illustration"
-          detail="This anchors the policy identity, original design assumptions, and the first trustworthy baseline for later analysis."
-          metric={illustrationFile || illustrationScan.hasPages ? "Baseline loaded" : "Baseline needed"}
-          tone={illustrationFile || illustrationScan.hasPages ? "good" : "warning"}
-          statusLabel={illustrationFile || illustrationScan.hasPages ? "Well Supported" : "Needs Review"}
-          actionLabel="Open Baseline Upload"
-          onAction={() => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Step 2"
-          title="Layer in annual statement history"
-          detail="Statements strengthen cash-value trends, charge visibility, and the current in-force read without changing the underlying intake logic."
-          metric={statementInputCount > 0 ? `${statementInputCount} inputs ready` : "Add statements next"}
-          tone={statementInputCount > 0 ? "info" : "neutral"}
-          statusLabel={statementInputCount > 0 ? "Building" : "Simple Read"}
-          actionLabel="Open Statement Upload"
-          onAction={() => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Step 3"
-          title="Analyze and save the packet"
-          detail="Once the packet is ready, VaultedShield builds the deeper read and saves the policy into the main insurance workflow."
-          metric={saveStatus?.policyId ? "Saved" : hasBaselineInput ? "Ready soon" : "Waiting on baseline"}
-          tone={saveStatus?.succeeded ? "good" : hasBaselineInput ? intakeTone : "warning"}
-          statusLabel={saveStatus?.succeeded ? "Recently Improved" : "Guided Action"}
-          actionLabel={saveStatus?.policyId ? savedPolicyLabel : "Open Analysis"}
-          onAction={() =>
-            saveStatus?.policyId && savedPolicyRoute
-              ? onNavigate?.(savedPolicyRoute)
-              : analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-          }
-        />
+      <div style={{ borderRadius: "28px", padding: "36px 32px", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", color: "#ffffff", display: "grid", gap: "20px" }}>
+        <div style={{ fontSize: "11px", color: "rgba(196,181,253,0.85)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>Life Policy Intelligence</div>
+        <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.15", letterSpacing: "-0.03em" }}>{intakeHeadline}</div>
+        <div style={{ color: "rgba(226,232,240,0.9)", lineHeight: "1.8", maxWidth: "56rem" }}>{intakeSummary}</div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "11px 18px", borderRadius: "999px", border: "none", background: "#6d28d9", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Add Baseline File</button>
+          <button type="button" onClick={() => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "11px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Add Statement History</button>
+          <button type="button" onClick={() => analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "11px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Analyze Packet</button>
+          <button type="button" onClick={() => onNavigate?.("/insurance")} style={{ padding: "11px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Back To Insurance</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+          {[
+            { label: "Baseline file", value: illustrationFile ? illustrationFile.name : illustrationScan.hasPages ? `${illustrationScan.pages.length} scanned page${illustrationScan.pages.length === 1 ? "" : "s"}` : "Not added yet" },
+            { label: "Statement inputs", value: statementInputCount > 0 ? statementInputCount : "None yet" },
+            { label: "Ready to analyze", value: hasBaselineInput ? "Yes" : "No" },
+            { label: "Saved policy", value: saveStatus?.policyId ? savedPolicyLabel : "Not saved yet" },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "11px", color: "rgba(196,181,253,0.7)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+              <div style={{ marginTop: "6px", fontSize: "16px", fontWeight: 800, color: "#c4b5fd" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
-        <div ref={illustrationSectionRef}>
-          <SectionCard
-          title="1. Initial Policy / Illustration Upload"
-          subtitle="Upload the original illustration or baseline policy PDF first so the system can anchor the policy design."
-          >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+        {[
+          { kicker: "Step 1", title: "Bring in the original policy or illustration", detail: "This anchors the policy identity, original design assumptions, and the first trustworthy baseline for later analysis.", metric: illustrationFile || illustrationScan.hasPages ? "Baseline loaded" : "Baseline needed", tone: illustrationFile || illustrationScan.hasPages ? "good" : "warning", actionLabel: "Open Baseline Upload", onAction: () => illustrationSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+          { kicker: "Step 2", title: "Layer in annual statement history", detail: "Statements strengthen cash-value trends, charge visibility, and the current in-force read without changing the underlying intake logic.", metric: statementInputCount > 0 ? `${statementInputCount} inputs ready` : "Add statements next", tone: statementInputCount > 0 ? "info" : "neutral", actionLabel: "Open Statement Upload", onAction: () => statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+          { kicker: "Step 3", title: "Analyze and save the packet", detail: "Once the packet is ready, VaultedShield builds the deeper read and saves the policy into the main insurance workflow.", metric: saveStatus?.policyId ? "Saved" : hasBaselineInput ? "Ready soon" : "Waiting on baseline", tone: saveStatus?.succeeded ? "good" : hasBaselineInput ? intakeTone : "warning", actionLabel: saveStatus?.policyId ? savedPolicyLabel : "Open Analysis", onAction: () => saveStatus?.policyId && savedPolicyRoute ? onNavigate?.(savedPolicyRoute) : analyzeSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+        ].map((tile) => (
+          <div key={tile.kicker} style={{ ...surfaceCard({ padding: "20px 22px", display: "grid", gap: "10px" }), ...pillStyle(tile.tone) }}>
+            <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.7 }}>{tile.kicker}</div>
+            <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "999px", border: "1px solid rgba(0,0,0,0.12)", background: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", width: "fit-content" }}>{tile.actionLabel}</button>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "18px" }}>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={illustrationSectionRef}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>1. Initial Policy / Illustration Upload</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Upload the original illustration or baseline policy PDF first so the system can anchor the policy design.</div>
+          </div>
             <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               This establishes the policy identity, original design assumptions, issue date, death benefit, and illustration structure.
@@ -1567,13 +1512,12 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               isMobile={isMobile}
               />
             </div>
-          </SectionCard>
         </div>
-        <div ref={statementSectionRef}>
-          <SectionCard
-          title="2. Annual Statement History Upload"
-          subtitle="Upload yearly statement PDFs separately after the baseline file to build the live in-force history."
-          >
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={statementSectionRef}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>2. Annual Statement History Upload</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Upload yearly statement PDFs separately after the baseline file to build the live in-force history.</div>
+          </div>
             <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               Add annual statements, charge pages, and allocation pages to improve trend history, charge visibility, and current policy interpretation.
@@ -1674,15 +1618,14 @@ export default function LifePolicyUploadPage({ onNavigate }) {
               isMobile={isMobile}
               />
             </div>
-          </SectionCard>
         </div>
       </div>
 
-      <div ref={analyzeSectionRef}>
-        <SectionCard
-        title="Analyze And Save"
-        subtitle="Run the carrier-aware parser, build the in-force policy read, and save the result into the vaulted policy workflow."
-        >
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={analyzeSectionRef}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Analyze And Save</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Run the carrier-aware parser, build the in-force policy read, and save the result into the vaulted policy workflow.</div>
+        </div>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
           <button
             type="button"
@@ -2033,7 +1976,6 @@ export default function LifePolicyUploadPage({ onNavigate }) {
             ) : null}
           </div>
           ) : null}
-        </SectionCard>
       </div>
 
       {!hasAnyFiles ? (
