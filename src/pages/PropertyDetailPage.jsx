@@ -2,12 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
 import PropertyAIChat from "../components/property/PropertyAIChat";
-import {
-  CalmEmptyState,
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import PropertyActionFeedCard from "../components/property/PropertyActionFeedCard";
 import PropertyLinkedContextCard from "../components/property/PropertyLinkedContextCard";
@@ -58,7 +52,6 @@ import {
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildPropertyDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { executeSmartAction } from "../lib/navigation/smartActions";
 
 const PROPERTY_DOCUMENT_CLASSES = listPropertyDocumentClasses();
@@ -200,7 +193,11 @@ function ReportView({ report, onPrint }) {
   if (!report) return null;
 
   return (
-    <SectionCard title="Property Review Report" subtitle="Printable property valuation, comp, equity, and linkage summary." accent="#bfdbfe">
+    <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+      <div>
+        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Review Report</div>
+        <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Printable property valuation, comp, equity, and linkage summary.</div>
+      </div>
       <div style={{ display: "grid", gap: "18px" }}>
         <div
           style={{
@@ -228,8 +225,26 @@ function ReportView({ report, onPrint }) {
         </div>
         {report.sections.map((section) => renderReportSection(section))}
       </div>
-    </SectionCard>
+    </div>
   );
+}
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
 }
 
 function formatDate(value) {
@@ -351,7 +366,7 @@ function buildPropertyFactsDraft(property) {
 }
 
 export default function PropertyDetailPage({ propertyId, onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false; const isTablet = false;
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const sectionRefs = useRef({});
@@ -1361,74 +1376,48 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
   return (
     <div style={{ width: "100%", minWidth: 0, overflowX: "clip", display: "grid", gap: "24px" }}>
       {loading ? (
-        <CalmEmptyState
-          title="Loading property detail"
-          description="VaultedShield is assembling the property, valuation, and linkage records into one readable stack."
-          icon="Home"
-          tone="info"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8" }}>Loading property detail...</div>
       ) : !property ? (
-        <CalmEmptyState
-          title="Property not found"
-          description={loadError || "This property detail page could not load a matching property record."}
-          icon="Missing"
-          tone="warning"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", display: "grid", gap: "12px" }}>
+          <div>{loadError || "This property detail page could not load a matching property record."}</div>
+          <button type="button" onClick={() => onNavigate?.("/property")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #fde68a", background: "#fff", cursor: "pointer", fontWeight: 700, width: "fit-content" }}>Back To Property Hub</button>
+        </div>
       ) : (
         <>
-          <FriendlyPageHero
-            eyebrow={propertyPlainEnglishGuide.eyebrow}
-            sectionTitle={property?.property_name || linkedAsset?.asset_name || "Property Detail"}
-            headline={propertyPlainEnglishGuide.title}
-            summary={propertyPlainEnglishGuide.summary}
-            transition={propertyPlainEnglishGuide.transition}
-            actions={[
-              { label: "Back To Property Hub", onClick: () => onNavigate?.("/property") },
-              {
-                label: showPropertyReport ? "Hide Property Report" : "Open Property Report",
-                onClick: () => setShowPropertyReport((current) => !current),
-              },
-              { label: "Print Report", onClick: handlePrintPropertyReport },
-            ]}
-            score={propertyHeroScore}
-            scoreTone={propertyHeroTone}
-            scoreSubtitle="readiness"
-            scoreIconLabel="property"
-            asideHeadline={propertyActionTiles[0]?.title || "Property story still forming"}
-            asideSummary={propertyActionTiles[0]?.detail || propertyPlainEnglishGuide.summary}
-            glanceEyebrow="At A Glance"
-            glanceItems={propertyHeroGlanceItems}
-          />
+          <div style={{ borderRadius: "28px", padding: "36px 32px", background: "linear-gradient(135deg, #0f172a 0%, #14532d 100%)", color: "#ffffff", display: "grid", gap: "20px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(187,247,208,0.85)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>{propertyPlainEnglishGuide.eyebrow}</div>
+            <div style={{ fontSize: "32px", fontWeight: 800, lineHeight: "1.15", letterSpacing: "-0.03em" }}>{propertyPlainEnglishGuide.title}</div>
+            <div style={{ color: "rgba(226,232,240,0.9)", lineHeight: "1.8", maxWidth: "56rem" }}>{propertyPlainEnglishGuide.summary}</div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button type="button" onClick={() => onNavigate?.("/property")} style={{ padding: "11px 18px", borderRadius: "999px", border: "none", background: "#15803d", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Back To Property Hub</button>
+              <button type="button" onClick={() => setShowPropertyReport((current) => !current)} style={{ padding: "11px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>{showPropertyReport ? "Hide Property Report" : "Open Property Report"}</button>
+              <button type="button" onClick={handlePrintPropertyReport} style={{ padding: "11px 18px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Print Report</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+              {propertyHeroGlanceItems.map((item) => (
+                <div key={item.label} style={{ padding: "14px 16px", borderRadius: "16px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                  <div style={{ fontSize: "11px", color: "rgba(187,247,208,0.7)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ marginTop: "6px", fontSize: "16px", fontWeight: 800, color: "#86efac" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-              gap: "14px",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
             {propertyActionTiles.map((tile) => (
-              <FriendlyActionTile
-                key={tile.key}
-                kicker={tile.kicker}
-                title={tile.title}
-                detail={tile.detail}
-                metric={tile.metric}
-                tone={tile.tone}
-                statusLabel={tile.statusLabel}
-                actionLabel={tile.actionLabel}
-                onAction={() => {
+              <div key={tile.key} style={{ ...surfaceCard({ padding: "20px 22px", display: "grid", gap: "10px" }), ...pillStyle(tile.tone) }}>
+                <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, opacity: 0.7 }}>{tile.kicker}</div>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{tile.title}</div>
+                <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{tile.detail}</div>
+                {tile.metric ? <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>{tile.metric}</div> : null}
+                <button type="button" onClick={() => {
                   if (tile.actionKey === "next-step") {
-                    if (propertyPageFascia?.primaryAction) {
-                      handlePropertyFasciaAction(propertyPageFascia.primaryAction);
-                      return;
-                    }
-                    onNavigate?.(propertyReviewWorkspaceRoute);
-                    return;
+                    if (propertyPageFascia?.primaryAction) { handlePropertyFasciaAction(propertyPageFascia.primaryAction); return; }
+                    onNavigate?.(propertyReviewWorkspaceRoute); return;
                   }
                   scrollToPropertyTechnicalAnalysis();
-                }}
-              />
+                }} style={{ padding: "9px 14px", borderRadius: "999px", border: "1px solid rgba(0,0,0,0.12)", background: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: "13px", width: "fit-content" }}>{tile.actionLabel}</button>
+              </div>
             ))}
           </div>
 
@@ -1607,12 +1596,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           <div
             id="continuity-command"
             ref={(node) => setSectionRef("continuity-command", node)}
-            style={{ marginTop: "24px" }}
+            style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })}
           >
-            <SectionCard
-              title="Property Command"
-              subtitle="The strongest blockers, the risk if they sit, and the next move to keep this property stack healthy."
-            >
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Command</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The strongest blockers, the risk if they sit, and the next move to keep this property stack healthy.</div>
+            </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <AIInsightPanel
                   title="Continuity Command"
@@ -1729,11 +1718,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   />
                 )}
               </div>
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
-            <SectionCard title="Property Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Summary</div></div>
               <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                 <div><strong>Property Name:</strong> {property.property_name || linkedAsset?.asset_name || "Limited visibility"}</div>
                 <div><strong>Property Type:</strong> {propertyType?.display_name || property.property_type_key}</div>
@@ -1744,9 +1733,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 <div><strong>Purchase Date:</strong> {formatDate(property.purchase_date)}</div>
                 <div><strong>Status:</strong> <StatusBadge label={property.property_status || "unknown"} tone={getStatusTone(property.property_status)} /></div>
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Linked Platform Asset Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Platform Asset Summary</div></div>
               {linkedAsset ? (
                 <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7", ...wrapTextStyle }}>
                   <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
@@ -1761,11 +1751,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No linked household summary" description="This property is not yet connected to a broader household asset summary." />
               )}
-            </SectionCard>
+            </div>
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.facts = node; }}>
-            <SectionCard title="Property Address & Facts">
+          <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.facts = node; }}>
+            <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Address & Facts</div></div>
               <form onSubmit={handleSaveFacts} style={{ display: "grid", gap: "12px", minWidth: 0 }}>
                 <div style={{ display: "grid", gridTemplateColumns: factsHeaderLayout, gap: "12px" }}>
                   <input value={factsDraft.property_name} onChange={(event) => setFactsDraft((current) => ({ ...current, property_name: event.target.value }))} placeholder="Property name" style={baseInputStyle} />
@@ -1818,7 +1808,6 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 {valuationSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{valuationSuccess}</div> : null}
                 {valuationError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{valuationError}</div> : null}
               </form>
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px" }}>
@@ -1850,8 +1839,8 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
-            <div ref={(node) => { sectionRefs.current.mortgages = node; }}>
-            <SectionCard title="Linked Mortgages">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.mortgages = node; }}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Mortgages</div></div>
               {linkedMortgages.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {linkedMortgages.map((mortgage) => (
@@ -1923,11 +1912,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   {linkingMortgage ? "Linking Mortgage..." : "Link Mortgage"}
                 </button>
               </form>
-            </SectionCard>
             </div>
 
-            <div ref={(node) => { sectionRefs.current.homeowners = node; }}>
-            <SectionCard title="Linked Homeowners Policies">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.homeowners = node; }}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Homeowners Policies</div></div>
               {linkedHomeownersPolicies.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {linkedHomeownersPolicies.map((policy) => (
@@ -2001,37 +1989,22 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
                 {linkError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
               </form>
-            </SectionCard>
             </div>
           </div>
 
           <div
             id="property-stack-analytics"
             ref={(node) => setSectionRef("property-stack-analytics", node)}
-            style={{ marginTop: "24px" }}
+            style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })}
           >
-            <SectionCard
-              title="Property Stack Analytics"
-              actions={
-                shouldShowDevDiagnostics() ? (
-                  <button
-                    type="button"
-                    onClick={handleRefreshAnalytics}
-                    disabled={refreshingAnalytics}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: "10px",
-                      border: "1px solid #cbd5e1",
-                      background: "#fff",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {refreshingAnalytics ? "Refreshing..." : "Refresh Analytics"}
-                  </button>
-                ) : null
-              }
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Stack Analytics</div>
+              {shouldShowDevDiagnostics() ? (
+                <button type="button" onClick={handleRefreshAnalytics} disabled={refreshingAnalytics} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                  {refreshingAnalytics ? "Refreshing..." : "Refresh Analytics"}
+                </button>
+              ) : null}
+            </div>
               {propertyStackAnalytics ? (
                 <div style={{ display: "grid", gap: "16px" }}>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2084,18 +2057,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               {analyticsError ? (
                 <div style={{ marginTop: "12px", color: "#991b1b", fontSize: "14px" }}>{analyticsError}</div>
               ) : null}
-            </SectionCard>
           </div>
 
           <div
             id="linked-context"
             ref={(node) => setSectionRef("linked-context", node)}
-            style={{ marginTop: "24px" }}
+            style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })}
           >
-            <SectionCard
-              title="Linked Context"
-              subtitle="See the property as part of one operating system across debt, protection, documents, and access continuity."
-            >
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Context</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>See the property as part of one operating system across debt, protection, documents, and access continuity.</div>
+            </div>
               <PropertyLinkedContextCard
                 currentAssetId={linkedAsset?.id || null}
                 propertyAssetLinks={propertyAssetLinks}
@@ -2106,17 +2078,15 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                 isMobile={isMobile}
                 actionButtonLayoutStyle={actionButtonLayoutStyle}
               />
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
             <div
               id="valuation"
-              ref={(node) => {
-                sectionRefs.current.valuation = node;
-              }}
+              ref={(node) => { sectionRefs.current.valuation = node; }}
+              style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}
             >
-            <SectionCard title="Virtual Valuation">
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Virtual Valuation</div></div>
               {latestPropertyValuation ? (
                 <div style={{ display: "grid", gap: "14px" }}>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2269,11 +2239,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No virtual valuation yet" description="Run a virtual valuation to store a blended estimate, confidence score, source summary, and comparable sales review for this property." />
               )}
-            </SectionCard>
             </div>
 
-            <div ref={(node) => { sectionRefs.current.valuation_history = node; }}>
-            <SectionCard title="Valuation History">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.valuation_history = node; }}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Valuation History</div></div>
               {propertyValuationHistory.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   <AIInsightPanel
@@ -2300,12 +2269,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No valuation history yet" description="Saved virtual valuation runs will appear here so later reviews can compare changes over time." />
               )}
-            </SectionCard>
             </div>
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.equity = node; }}>
-            <SectionCard title="Property Equity & Coverage Intelligence">
+          <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.equity = node; }}>
+            <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Equity & Coverage Intelligence</div></div>
               {propertyEquityPosition ? (
                 <div style={{ display: "grid", gap: "14px" }}>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2370,11 +2338,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No equity intelligence yet" description="Run a virtual valuation and link financing/protection records to improve value, debt, and protection visibility for this property." />
               )}
-            </SectionCard>
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.comps = node; }}>
-            <SectionCard title="Comparable Sales">
+          <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.comps = node; }}>
+            <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Comparable Sales</div></div>
               {propertyComps.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   <AIInsightPanel
@@ -2426,12 +2393,11 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No comparable sales yet" description="Comparable sales will appear here after a virtual valuation run saves comp data for this property." />
               )}
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
-            <div id="documents" ref={(node) => setSectionRef("documents", node)}>
-            <SectionCard title="Property Documents">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} id="documents" ref={(node) => setSectionRef("documents", node)}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Documents</div></div>
               {bundle.propertyDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertyDocuments.map((document) => (
@@ -2452,10 +2418,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No property documents yet" description="Property-specific document records will appear here as uploads are classified and linked." />
               )}
-            </SectionCard>
             </div>
 
-            <SectionCard title="Property Document Intake">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Document Intake</div></div>
               <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px", minWidth: 0 }}>
                 <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: isMobile ? "16px" : "20px", background: "#f8fafc", minWidth: 0 }}>
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop property documents here</div>
@@ -2505,11 +2471,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   <EmptyState title="No property files queued" description="Add one or more property documents to create linked generic and property-specific document records." />
                 )}
               </div>
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
-            <SectionCard title="Property Snapshots">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Snapshots</div></div>
               {bundle.propertySnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertySnapshots.map((snapshot) => (
@@ -2525,9 +2492,10 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No property snapshots yet" description="Property snapshots will land here after later property parsing is added." />
               )}
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Property Analytics">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Analytics</div></div>
               {bundle.propertyAnalytics.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.propertyAnalytics.map((analytics) => (
@@ -2549,12 +2517,12 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
                   />
                 </div>
               )}
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualColumnLayout, gap: "18px" }}>
-            <div id="portals" ref={(node) => setSectionRef("portals", node)}>
-            <SectionCard title="Linked Portals">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} id="portals" ref={(node) => setSectionRef("portals", node)}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Portals</div></div>
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {assetBundle.portalLinks.map((link) => {
@@ -2573,17 +2541,17 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
               ) : (
                 <EmptyState title="No linked portals yet" description="Portal continuity records will surface here through the linked platform asset when county, tax, mortgage, or homeowners access continuity is mapped." />
               )}
-            </SectionCard>
             </div>
 
           </div>
 
           {shouldShowDevDiagnostics() ? (
-            <SectionCard title="Property Debug">
+            <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div><div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Property Debug</div></div>
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 property_id={property.id} | asset_id={linkedAsset?.id || "none"} | household_id={property.household_id || "none"} | documents={bundle.propertyDocuments.length} | snapshots={bundle.propertySnapshots.length} | analytics={bundle.propertyAnalytics.length} | assetLinkCount={propertyAssetLinks.length} | linkedMortgageIds={linkedMortgages.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedMortgageTypes={linkedMortgages.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedMortgagePrimary={linkedMortgages.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkedHomeownersIds={linkedHomeownersPolicies.map((item) => item.linkage?.id || item.id).join(", ") || "none"} | linkedHomeownersTypes={linkedHomeownersPolicies.map((item) => item.linkage?.link_type).join(", ") || "none"} | linkedHomeownersPrimary={linkedHomeownersPolicies.map((item) => String(Boolean(item.linkage?.is_primary))).join(", ") || "none"} | linkageStatus={propertyStackLinkageStatus} | stackAnalyticsId={propertyStackAnalytics?.id || "none"} | stackCompleteness={propertyStackAnalytics?.completeness_score ?? "none"} | stackContinuity={propertyStackAnalytics?.continuity_status || "none"} | latestValuationId={latestPropertyValuation?.id || "none"} | valuationStatus={latestPropertyValuation?.valuation_status || "none"} | valuationMidpoint={latestPropertyValuation?.midpoint_estimate ?? "none"} | valuationConfidenceScore={latestPropertyValuation?.confidence_score ?? "none"} | valuationConfidenceLabel={latestPropertyValuation?.confidence_label || "none"} | valuationCompsCount={latestPropertyValuation?.comps_count ?? 0} | valuationCompOrigin={compDataOrigin} | valuationProviderMode={providerMode} | valuationProviderKey={latestPropertyValuation?.metadata?.provider_key || "none"} | valuationSources={(latestPropertyValuation?.source_summary || []).map((item) => item.source_name).join(", ") || "none"} | valuationChangeStatus={valuationChangeSummary.change_status || "none"} | valuationChangeSummary={valuationChangeSummary.summary || "none"} | valuationChangeBullets={(valuationChangeSummary.bullets || []).join(", ") || "none"} | equityMidpoint={propertyEquityPosition?.estimated_equity_midpoint ?? "none"} | equityLtv={propertyEquityPosition?.estimated_ltv ?? "none"} | equityVisibility={propertyEquityPosition?.equity_visibility_status || "none"} | valuationAvailable={propertyEquityPosition?.valuation_available ? "yes" : "no"} | valuationReviewFlags={propertyEquityPosition?.review_flags?.join(", ") || "none"} | stackFlags={propertyStackAnalytics?.review_flags?.join(", ") || "none"} | stackPrompts={propertyStackAnalytics?.prompts?.join(", ") || "none"} | stackUpdatedAt={propertyStackAnalytics?.updated_at || "none"} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | propertyDocumentIds={uploadQueue.map((item) => item.propertyDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | supabaseClientAvailable={supabaseDiagnostics.clientAvailable ? "yes" : "no"} | supabaseMissingKeys={supabaseDiagnostics.missing.join(", ") || "none"} | error={loadError || uploadError || linkError || analyticsError || factsError || valuationError || "none"}
               </div>
-            </SectionCard>
+            </div>
           ) : null}
         </>
       )}
