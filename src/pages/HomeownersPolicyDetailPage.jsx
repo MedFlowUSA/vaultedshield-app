@@ -42,7 +42,6 @@ import {
 } from "../lib/domain/platformIntelligence/reviewWorkflowState";
 import { buildHomeownersDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const HOMEOWNERS_DOCUMENT_CLASSES = listHomeownersDocumentClasses();
 const HOMEOWNERS_CARRIERS = listHomeownersCarriers();
@@ -133,7 +132,7 @@ class HomeownersDetailRecoveryBoundary extends Component {
 }
 
 export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavigate }) {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const fileInputRef = useRef(null);
   const technicalAnalysisRef = useRef(null);

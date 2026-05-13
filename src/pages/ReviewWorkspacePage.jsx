@@ -858,40 +858,47 @@ export default function ReviewWorkspacePage({ onNavigate }) {
           }}
         >
           {reviewWorkspaceActionTiles.map((tile) => (
-            <FriendlyActionTile
+            <div
               key={tile.key}
-              kicker={tile.kicker}
-              title={tile.title}
-              detail={tile.detail}
-              metric={tile.metric}
-              tone={tile.tone}
-              statusLabel={tile.statusLabel}
-              actionLabel={tile.actionLabel}
-              onAction={() => {
-                if (tile.actionKey === "completed-progress") {
-                  scrollToWorkspaceSection("review-progress-memory");
-                  return;
-                }
-                if (tile.actionKey === "clear-filters") {
-                  handleClearAssistantFilters();
-                  return;
-                }
-                scrollToWorkspaceSection("review-work-queue");
-              }}
-            />
+              style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+                <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+              </div>
+              <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+              <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (tile.actionKey === "completed-progress") {
+                    scrollToWorkspaceSection("review-progress-memory");
+                    return;
+                  }
+                  if (tile.actionKey === "clear-filters") {
+                    handleClearAssistantFilters();
+                    return;
+                  }
+                  scrollToWorkspaceSection("review-work-queue");
+                }}
+                style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}
+              >
+                {tile.actionLabel}
+              </button>
+            </div>
           ))}
         </div>
       </section>
 
       {assistantFilterState.filters ? (
-        <SectionCard
-          title="Filtered Review View"
-          subtitle={
-            assistantFilterState.openedFromAssistant
-              ? "Opened from household assistant"
-              : "Saved filters were restored from the current route."
-          }
-        >
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Filtered Review View</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>
+              {assistantFilterState.openedFromAssistant ? "Opened from household assistant" : "Saved filters were restored from the current route."}
+            </div>
+          </div>
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>Showing:</span>
@@ -922,10 +929,14 @@ export default function ReviewWorkspacePage({ onNavigate }) {
               </button>
             </div>
           </div>
-        </SectionCard>
+        </div>
       ) : null}
 
-      <SectionCard title="Quick Status" subtitle={workflowSummary.summary}>
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Quick Status</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>{workflowSummary.summary}</div>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
           {metrics.map((item) => (
             <div
@@ -947,10 +958,14 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             </div>
           ))}
         </div>
-      </SectionCard>
+      </div>
 
       <div id="review-progress-memory">
-        <SectionCard title="Completed Reviews Still Improving Readiness" subtitle="Reviewed work stays out of active priority until fresh evidence reopens it.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Completed Reviews Still Improving Readiness</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Reviewed work stays out of active priority until fresh evidence reopens it.</div>
+          </div>
         <div style={{ display: "grid", gap: "14px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
             {[
@@ -1003,11 +1018,15 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             </div>
           ) : null}
         </div>
-        </SectionCard>
+        </div>
       </div>
 
       <div id="review-work-queue">
-        <SectionCard title="Active Review Work" subtitle="These are the household items worth looking at next. Filters, ownership, and workflow controls stay available below.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Active Review Work</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>These are the household items worth looking at next. Filters, ownership, and workflow controls stay available below.</div>
+          </div>
         <div style={{ display: "grid", gap: "16px" }}>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {[
@@ -1339,7 +1358,7 @@ export default function ReviewWorkspacePage({ onNavigate }) {
             </div>
           )}
         </div>
-        </SectionCard>
+        </div>
       </div>
     </div>
   );
