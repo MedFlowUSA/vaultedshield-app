@@ -1,13 +1,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
-import {
-  CalmEmptyState,
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
 import HomeownersLinkedContextCard from "../components/homeowners/HomeownersLinkedContextCard";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import {
   buildLinkedPropertyStackCompleteness,
@@ -60,6 +54,24 @@ const DEFAULT_UPLOAD_FORM = {
   notes: "",
 };
 
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
 function formatDate(value) {
   if (!value) return "Unknown";
   const parsed = new Date(value);
@@ -92,10 +104,9 @@ class HomeownersDetailRecoveryBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <SectionCard
-          title="Homeowners detail recovery"
-          subtitle="VaultedShield hit a live rendering issue on this homeowners view, so the page was reduced to a safe fallback instead of failing blank."
-        >
+        <div style={{ background: "#ffffff", borderRadius: "20px", border: "1px solid rgba(226,232,240,0.92)", boxShadow: "0 4px 16px rgba(15,23,42,0.05)", padding: "22px 24px", display: "grid", gap: "14px" }}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners detail recovery</div>
+          <div style={{ color: "#64748b", fontSize: "14px" }}>VaultedShield hit a live rendering issue on this homeowners view, so the page was reduced to a safe fallback instead of failing blank.</div>
           <div style={{ display: "grid", gap: "12px" }}>
             <div
               style={{
@@ -113,7 +124,7 @@ class HomeownersDetailRecoveryBoundary extends Component {
               The route is still available, and the recovery state keeps the protection side of the stack from disappearing entirely.
             </div>
           </div>
-        </SectionCard>
+        </div>
       );
     }
 
@@ -353,6 +364,18 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     topHomeownersReviewItem,
   ]);
   const assigneeChoices = useMemo(() => buildReviewAssignmentOptions(intelligenceBundle || {}), [intelligenceBundle]);
+  const propertyAssetIds = useMemo(
+    () => propertyLinks.map((link) => link.properties?.assets?.id).filter(Boolean),
+    [propertyLinks]
+  );
+  const propertyAnalyticsById = useMemo(
+    () => intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId || {},
+    [intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId]
+  );
+  const linkedStackCompleteness = useMemo(
+    () => buildLinkedPropertyStackCompleteness(propertyLinks, propertyAnalyticsById),
+    [propertyAnalyticsById, propertyLinks]
+  );
   const plainLanguageGuide = useMemo(() => {
     const documentCount = bundle?.homeownersDocuments?.length || 0;
     const snapshotCount = bundle?.homeownersSnapshots?.length || 0;
@@ -395,18 +418,6 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     };
   }, [bundle?.homeownersDocuments?.length, bundle?.homeownersSnapshots?.length, bundleWarnings.length, homeownersCommandCenter, linkedStackCompleteness.score, propertyLinks.length, topHomeownersReviewItem]);
 
-  const propertyAssetIds = useMemo(
-    () => propertyLinks.map((link) => link.properties?.assets?.id).filter(Boolean),
-    [propertyLinks]
-  );
-  const propertyAnalyticsById = useMemo(
-    () => intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId || {},
-    [intelligenceBundle?.propertyStackSummary?.analyticsByPropertyId]
-  );
-  const linkedStackCompleteness = useMemo(
-    () => buildLinkedPropertyStackCompleteness(propertyLinks, propertyAnalyticsById),
-    [propertyAnalyticsById, propertyLinks]
-  );
   const homeownersLinkedContext = useMemo(() => {
     const normalizedHomeownersLinks = dedupeLinkedContextRows(
       normalizeLinkedContextRows(homeownersAssetLinks, linkedAsset?.id)
@@ -614,102 +625,120 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
     <div style={{ display: "grid", gap: "24px" }}>
       <HomeownersDetailRecoveryBoundary>
         {loading ? (
-          <CalmEmptyState
-            title="Loading homeowners policy detail"
-            description="VaultedShield is pulling together the policy, property links, and supporting homeowners records."
-            icon="Home"
-            tone="info"
-          />
+          <div style={{ padding: "40px 24px", borderRadius: "20px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", textAlign: "center" }}>
+            <div style={{ fontWeight: 800, fontSize: "18px" }}>Loading homeowners policy detail</div>
+            <div style={{ marginTop: "8px", color: "#334155" }}>VaultedShield is pulling together the policy, property links, and supporting homeowners records.</div>
+          </div>
         ) : !homeownersPolicy ? (
-          <CalmEmptyState
-            title="Homeowners policy not found"
-            description={loadError || "This homeowners detail page could not load a matching policy record."}
-            icon="Missing"
-            tone="warning"
-            actionLabel="Back To Homeowners Hub"
-            onAction={() => onNavigate("/insurance/homeowners")}
-          />
+          <div style={{ padding: "40px 24px", borderRadius: "20px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", textAlign: "center", display: "grid", gap: "16px" }}>
+            <div style={{ fontWeight: 800, fontSize: "18px" }}>Homeowners policy not found</div>
+            <div style={{ color: "#78350f" }}>{loadError || "This homeowners detail page could not load a matching policy record."}</div>
+            <button type="button" onClick={() => onNavigate("/insurance/homeowners")} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#92400e", color: "#ffffff", fontWeight: 700, cursor: "pointer", justifySelf: "center" }}>
+              Back To Homeowners Hub
+            </button>
+          </div>
         ) : (
           <>
             <div style={{ display: "grid", gap: "20px" }}>
-              <FriendlyPageHero
-                eyebrow="Insurance"
-                sectionTitle={homeownersPolicy.policy_name || linkedAsset?.asset_name || "Homeowners Policy Detail"}
-                headline={plainLanguageGuide.title}
-                summary={plainLanguageGuide.summary}
-                transition={plainLanguageGuide.transition}
-                actions={[
-                  {
-                    label: "Back To Homeowners Hub",
-                    onClick: () => onNavigate("/insurance/homeowners"),
-                  },
-                  {
-                    label: "Open Review Workspace",
-                    onClick: () => onNavigate(homeownersReviewWorkspaceRoute),
-                  },
-                  {
-                    label: "See Supporting Details",
-                    onClick: scrollToHomeownersTechnicalAnalysis,
-                  },
-                  {
-                    label: "Upload Policy Files",
-                    onClick: () => fileInputRef.current?.click(),
-                    kind: "primary",
-                  },
-                ]}
-                score={Math.max(0, Math.min(100, Math.round(linkedStackCompleteness.score || 0)))}
-                scoreTone={linkedStackCompleteness.tone || "info"}
-                scoreSubtitle="stack score"
-                scoreIconLabel="homeowners"
-                asideHeadline={plainLanguageGuide.cards[0]?.value || "Homeowners picture is forming"}
-                asideSummary={homeownersCommandCenter.headline}
-                glanceItems={homeownersHeroGlanceItems}
-              />
-
               <div
                 style={{
+                  padding: "32px 36px",
+                  borderRadius: "24px",
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+                  color: "#ffffff",
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "14px",
+                  gap: "20px",
                 }}
               >
-                <FriendlyActionTile
-                  kicker="Simple Read"
-                  title={plainLanguageGuide.cards[0]?.value || "Read the policy status first"}
-                  detail={plainLanguageGuide.cards[0]?.detail || homeownersCommandCenter.headline}
-                  metric={`Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`}
-                  tone={linkedStackCompleteness.tone || "info"}
-                  statusLabel="Simple Read"
-                  actionLabel="See Supporting Details"
-                  onAction={scrollToHomeownersTechnicalAnalysis}
-                />
-                <FriendlyActionTile
-                  kicker="Best First Step"
-                  title={plainLanguageGuide.cards[1]?.value || "Open the review workspace"}
-                  detail={plainLanguageGuide.cards[1]?.detail || topHomeownersReviewItem?.summary || "Take the next homeowners step."}
-                  metric={`${homeownersReviewQueueItems.length} review item${homeownersReviewQueueItems.length === 1 ? "" : "s"}`}
-                  tone="warning"
-                  statusLabel="Guided Focus"
-                  actionLabel="Open Review Workspace"
-                  onAction={() => onNavigate(homeownersReviewWorkspaceRoute)}
-                />
-                <FriendlyActionTile
-                  kicker="Evidence Support"
-                  title={plainLanguageGuide.cards[2]?.value || "Confidence is still forming"}
-                  detail={plainLanguageGuide.cards[2]?.detail || "Support improves as policy and property records connect."}
-                  metric={`${bundleWarnings.length} warning${bundleWarnings.length === 1 ? "" : "s"}`}
-                  tone={bundleWarnings.length > 0 ? "warning" : "good"}
-                  statusLabel={bundleWarnings.length > 0 ? "Missing Information" : "Well Supported"}
-                  actionLabel="Upload Files"
-                  onAction={() => fileInputRef.current?.click()}
-                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>Insurance</div>
+                    <div style={{ fontSize: "24px", fontWeight: 900, lineHeight: "1.2" }}>{homeownersPolicy.policy_name || linkedAsset?.asset_name || "Homeowners Policy Detail"}</div>
+                    <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{plainLanguageGuide.summary}</div>
+                  </div>
+                  <div style={{ padding: "16px 20px", borderRadius: "18px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", gap: "4px", textAlign: "center", minWidth: "100px", flexShrink: 0 }}>
+                    <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#93c5fd" }}>{Math.max(0, Math.min(100, Math.round(linkedStackCompleteness.score || 0)))}</div>
+                    <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>stack score</div>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+                  {homeownersHeroGlanceItems.map((item) => (
+                    <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                      <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+                      <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px" }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#1e3a5f", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                    Upload Policy Files
+                  </button>
+                  <button type="button" onClick={() => onNavigate(homeownersReviewWorkspaceRoute)} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                    Open Review Workspace
+                  </button>
+                  <button type="button" onClick={() => onNavigate("/insurance/homeowners")} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                    Back To Homeowners Hub
+                  </button>
+                  <button type="button" onClick={scrollToHomeownersTechnicalAnalysis} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                    See Supporting Details
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                {[
+                  {
+                    kicker: "Simple Read",
+                    title: plainLanguageGuide.cards[0]?.value || "Read the policy status first",
+                    detail: plainLanguageGuide.cards[0]?.detail || homeownersCommandCenter.headline,
+                    metric: `Stack ${formatCompletenessScore(linkedStackCompleteness.score)}`,
+                    tone: linkedStackCompleteness.tone || "info",
+                    statusLabel: "Simple Read",
+                    actionLabel: "See Supporting Details",
+                    onAction: scrollToHomeownersTechnicalAnalysis,
+                  },
+                  {
+                    kicker: "Best First Step",
+                    title: plainLanguageGuide.cards[1]?.value || "Open the review workspace",
+                    detail: plainLanguageGuide.cards[1]?.detail || topHomeownersReviewItem?.summary || "Take the next homeowners step.",
+                    metric: `${homeownersReviewQueueItems.length} review item${homeownersReviewQueueItems.length === 1 ? "" : "s"}`,
+                    tone: "warning",
+                    statusLabel: "Guided Focus",
+                    actionLabel: "Open Review Workspace",
+                    onAction: () => onNavigate(homeownersReviewWorkspaceRoute),
+                  },
+                  {
+                    kicker: "Evidence Support",
+                    title: plainLanguageGuide.cards[2]?.value || "Confidence is still forming",
+                    detail: plainLanguageGuide.cards[2]?.detail || "Support improves as policy and property records connect.",
+                    metric: `${bundleWarnings.length} warning${bundleWarnings.length === 1 ? "" : "s"}`,
+                    tone: bundleWarnings.length > 0 ? "warning" : "good",
+                    statusLabel: bundleWarnings.length > 0 ? "Missing Information" : "Well Supported",
+                    actionLabel: "Upload Files",
+                    onAction: () => fileInputRef.current?.click(),
+                  },
+                ].map((tile) => (
+                  <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+                      <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+                    </div>
+                    <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+                    <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+                    <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+                      {tile.actionLabel}
+                    </button>
+                  </div>
+                ))}
               </div>
 
               {bundleWarnings.length > 0 ? (
-                <SectionCard
-                  title="Partial visibility"
-                  subtitle="The core homeowners policy loaded, but some supporting context is still unavailable. VaultedShield is showing the verified data that could be read safely."
-                >
+                <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                  <div>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Partial visibility</div>
+                    <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The core homeowners policy loaded, but some supporting context is still unavailable. VaultedShield is showing the verified data that could be read safely.</div>
+                  </div>
                   <div style={{ display: "grid", gap: "8px" }}>
                     {bundleWarnings.map((warning) => (
                       <div
@@ -727,7 +756,7 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                       </div>
                     ))}
                   </div>
-                </SectionCard>
+                </div>
               ) : null}
 
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -739,415 +768,424 @@ export default function HomeownersPolicyDetailPage({ homeownersPolicyId, onNavig
                 />
               </div>
 
-              <div ref={technicalAnalysisRef}>
-            <SectionCard
-              title="Homeowners Command"
-              subtitle="The strongest protection blockers, why they matter, and what to do next on this policy."
-            >
-              <div style={{ display: "grid", gap: "16px" }}>
-                <AIInsightPanel
-                  title="Coverage Command"
-                  summary={homeownersCommandCenter.headline}
-                  bullets={[
-                    `${homeownersCommandCenter.metrics.critical || 0} critical blocker${homeownersCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
-                    `${homeownersCommandCenter.metrics.warning || 0} warning item${homeownersCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
-                    `${homeownersCommandCenter.metrics.documents || 0} homeowners document${homeownersCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
-                    `${homeownersCommandCenter.metrics.snapshots || 0} snapshot${homeownersCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${homeownersCommandCenter.metrics.analytics || 0} analytic${homeownersCommandCenter.metrics.analytics === 1 ? "" : "s"} are visible.`,
-                  ]}
-                />
-                {homeownersCommandCenter.blockers.length > 0 ? (
-                  <div style={{ display: "grid", gap: "12px" }}>
-                    {homeownersCommandCenter.blockers.map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          padding: "16px",
-                          borderRadius: "14px",
-                          background: item.urgencyMeta.background,
-                          border: item.urgencyMeta.border,
-                          display: "grid",
-                          gap: "8px",
-                        }}
-                      >
-                        {(() => {
-                          const workflowItem =
-                            homeownersReviewItemsById[`homeowners:${homeownersPolicy?.id}:${item.id}`] || null;
-                          return (
-                            <>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
-                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                            <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
-                            <StatusBadge label={item.staleLabel} tone="info" />
-                            {workflowItem ? (
-                              <StatusBadge
-                                label={workflowItem.workflow_label}
-                                tone={
-                                  workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
-                                    ? "good"
-                                    : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
-                                      ? "warning"
-                                      : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
-                                        ? "alert"
-                                        : "info"
-                                }
-                              />
-                            ) : null}
-                          </div>
-                        </div>
-                        <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
-                          <strong>Blocker:</strong> {item.blocker}
-                        </div>
-                        <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                          <strong>Consequence:</strong> {item.consequence}
-                        </div>
-                        <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
-                          Next action: {item.nextAction}
-                        </div>
-                        {workflowItem ? (
-                          <div style={{ display: "grid", gap: "8px" }}>
-                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                              <StatusBadge
-                                label={`Owner: ${workflowItem.workflow_assignee_label}`}
-                                tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
-                              />
-                              <select
-                                value={workflowItem.workflow_assignee_key || ""}
-                                onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
-                                style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
-                              >
-                                {assigneeChoices.map((option) => (
-                                  <option key={option.key || "unassigned"} value={option.key}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
-                              style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
-                            >
-                              Pending Docs
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
-                              style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
-                            >
-                              Follow Up
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
-                              style={{ padding: "9px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-                            >
-                              {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
-                            </button>
-                            </div>
-                          </div>
-                        ) : null}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No active homeowners blockers"
-                    description="This homeowners policy currently looks relatively steady across evidence, linkage, renewal, and continuity."
+              <div ref={technicalAnalysisRef} style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), marginTop: "24px" }}>
+                <div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Command</div>
+                  <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The strongest protection blockers, why they matter, and what to do next on this policy.</div>
+                </div>
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <AIInsightPanel
+                    title="Coverage Command"
+                    summary={homeownersCommandCenter.headline}
+                    bullets={[
+                      `${homeownersCommandCenter.metrics.critical || 0} critical blocker${homeownersCommandCenter.metrics.critical === 1 ? "" : "s"} are active.`,
+                      `${homeownersCommandCenter.metrics.warning || 0} warning item${homeownersCommandCenter.metrics.warning === 1 ? "" : "s"} should be reviewed soon.`,
+                      `${homeownersCommandCenter.metrics.documents || 0} homeowners document${homeownersCommandCenter.metrics.documents === 1 ? "" : "s"} are attached.`,
+                      `${homeownersCommandCenter.metrics.snapshots || 0} snapshot${homeownersCommandCenter.metrics.snapshots === 1 ? "" : "s"} and ${homeownersCommandCenter.metrics.analytics || 0} analytic${homeownersCommandCenter.metrics.analytics === 1 ? "" : "s"} are visible.`,
+                    ]}
                   />
-                )}
-              </div>
-            </SectionCard>
+                  {homeownersCommandCenter.blockers.length > 0 ? (
+                    <div style={{ display: "grid", gap: "12px" }}>
+                      {homeownersCommandCenter.blockers.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: "16px",
+                            borderRadius: "14px",
+                            background: item.urgencyMeta.background,
+                            border: item.urgencyMeta.border,
+                            display: "grid",
+                            gap: "8px",
+                          }}
+                        >
+                          {(() => {
+                            const workflowItem =
+                              homeownersReviewItemsById[`homeowners:${homeownersPolicy?.id}:${item.id}`] || null;
+                            return (
+                              <>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{item.title}</div>
+                                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                    <StatusBadge label={item.urgencyMeta.badge} tone={item.urgency === "critical" ? "alert" : "warning"} />
+                                    <StatusBadge label={item.staleLabel} tone="info" />
+                                    {workflowItem ? (
+                                      <StatusBadge
+                                        label={workflowItem.workflow_label}
+                                        tone={
+                                          workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.reviewed.key
+                                            ? "good"
+                                            : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.pending_documents.key
+                                              ? "warning"
+                                              : workflowItem.workflow_status === REVIEW_WORKFLOW_STATUSES.follow_up.key
+                                                ? "alert"
+                                                : "info"
+                                        }
+                                      />
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <div style={{ color: "#0f172a", lineHeight: "1.7" }}>
+                                  <strong>Blocker:</strong> {item.blocker}
+                                </div>
+                                <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                                  <strong>Consequence:</strong> {item.consequence}
+                                </div>
+                                <div style={{ color: item.urgencyMeta.accent, fontWeight: 700, lineHeight: "1.7" }}>
+                                  Next action: {item.nextAction}
+                                </div>
+                                {workflowItem ? (
+                                  <div style={{ display: "grid", gap: "8px" }}>
+                                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                                      <StatusBadge
+                                        label={`Owner: ${workflowItem.workflow_assignee_label}`}
+                                        tone={workflowItem.workflow_assignee_key ? "info" : "neutral"}
+                                      />
+                                      <select
+                                        value={workflowItem.workflow_assignee_key || ""}
+                                        onChange={(event) => handleReviewAssignmentUpdate(workflowItem.id, event.target.value)}
+                                        style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                      >
+                                        {assigneeChoices.map((option) => (
+                                          <option key={option.key || "unassigned"} value={option.key}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.pending_documents.key)}
+                                        style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                      >
+                                        Pending Docs
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.follow_up.key)}
+                                        style={{ padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                      >
+                                        Follow Up
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReviewWorkflowUpdate(workflowItem.id, REVIEW_WORKFLOW_STATUSES.reviewed.key)}
+                                        style={{ padding: "9px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                                      >
+                                        {workflowItem.changed_since_review ? "Review Again" : "Mark Reviewed"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="No active homeowners blockers"
+                      description="This homeowners policy currently looks relatively steady across evidence, linkage, renewal, and continuity."
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
-            <SectionCard title="Homeowners Policy Summary">
-              <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
-                <div><strong>Policy Name:</strong> {homeownersPolicy.policy_name || linkedAsset?.asset_name || "Limited visibility"}</div>
-                <div><strong>Policy Type:</strong> {homeownersPolicyType?.display_name || homeownersPolicy.homeowners_policy_type_key}</div>
-                <div><strong>Carrier:</strong> {getHomeownersCarrier(homeownersPolicy.carrier_key)?.display_name || homeownersPolicy.carrier_key || linkedAsset?.institution_name || "Limited visibility"}</div>
-                <div><strong>Property Address:</strong> {homeownersPolicy.property_address || "Limited visibility"}</div>
-                <div><strong>Named Insured:</strong> {homeownersPolicy.named_insured || "Limited visibility"}</div>
-                <div><strong>Effective:</strong> {formatDate(homeownersPolicy.effective_date)}</div>
-                <div><strong>Expiration:</strong> {formatDate(homeownersPolicy.expiration_date)}</div>
-                <div><strong>Status:</strong> <StatusBadge label={homeownersPolicy.policy_status || "unknown"} tone={getStatusTone(homeownersPolicy.policy_status)} /></div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Linked Platform Asset Summary">
-              {linkedAsset ? (
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Policy Summary</div>
                 <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
-                  <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
-                  <div><strong>Category:</strong> {linkedAsset.asset_category}</div>
-                  <div><strong>Subcategory:</strong> {linkedAsset.asset_subcategory || "Limited visibility"}</div>
-                  <div><strong>Institution:</strong> {linkedAsset.institution_name || "Limited visibility"}</div>
-                  <div><strong>Status:</strong> {linkedAsset.status || "Limited visibility"}</div>
-                  <div style={{ color: "#64748b" }}>
-                    This homeowners record remains linked to the broader platform asset layer so shared documents, portals, alerts, and tasks can continue to coexist cleanly.
-                  </div>
+                  <div><strong>Policy Name:</strong> {homeownersPolicy.policy_name || linkedAsset?.asset_name || "Limited visibility"}</div>
+                  <div><strong>Policy Type:</strong> {homeownersPolicyType?.display_name || homeownersPolicy.homeowners_policy_type_key}</div>
+                  <div><strong>Carrier:</strong> {getHomeownersCarrier(homeownersPolicy.carrier_key)?.display_name || homeownersPolicy.carrier_key || linkedAsset?.institution_name || "Limited visibility"}</div>
+                  <div><strong>Property Address:</strong> {homeownersPolicy.property_address || "Limited visibility"}</div>
+                  <div><strong>Named Insured:</strong> {homeownersPolicy.named_insured || "Limited visibility"}</div>
+                  <div><strong>Effective:</strong> {formatDate(homeownersPolicy.effective_date)}</div>
+                  <div><strong>Expiration:</strong> {formatDate(homeownersPolicy.expiration_date)}</div>
+                  <div><strong>Status:</strong> <StatusBadge label={homeownersPolicy.policy_status || "unknown"} tone={getStatusTone(homeownersPolicy.policy_status)} /></div>
                 </div>
-              ) : (
-                <EmptyState title="No linked household summary" description="This homeowners policy is not yet connected to a broader household asset summary." />
-              )}
-            </SectionCard>
-          </div>
+              </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
-            <SectionCard title="Linked Property">
-              {propertyLinks.length > 0 ? (
-                <div style={{ display: "grid", gap: "12px" }}>
-                  {propertyLinks.map((link) => {
-                    const propertyRecord = link.properties || {};
-                    return (
-                      <div key={link.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                          <div>
-                            <div style={{ fontWeight: 700, color: "#0f172a" }}>{propertyRecord.property_name || propertyRecord.assets?.asset_name || propertyRecord.property_address || "Property"}</div>
-                            <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
-                              <div><strong>Address:</strong> {propertyRecord.property_address || "Limited visibility"}</div>
-                            <div><strong>Status:</strong> {propertyRecord.property_status || "Limited visibility"}</div>
-                            <div><strong>Link Type:</strong> {link.link_type || "primary_property_coverage"}</div>
-                            <div><strong>Primary:</strong> {link.is_primary ? "Yes" : "No"}</div>
-                            <div><strong>Notes:</strong> {link.notes || "None"}</div>
-                          </div>
-                        </div>
-                          <div style={{ display: "grid", gap: "8px" }}>
-                            <button type="button" onClick={() => onNavigate(`/property/detail/${propertyRecord.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                              Open Property
-                            </button>
-                            <button type="button" onClick={() => beginEditLink(link)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                              Edit Link
-                            </button>
-                            <button type="button" onClick={() => handleRemoveLink(link.id)} disabled={removingLinkId === link.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b" }}>
-                              {removingLinkId === link.id ? "Removing..." : "Remove Link"}
-                            </button>
-                          </div>
-                        </div>
-                        {editingLinkId === link.id ? (
-                          <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
-                            <select value={linkDraft.link_type} onChange={(event) => setLinkDraft((current) => ({ ...current, link_type: event.target.value }))} style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                              <option value="primary_property_coverage">primary_property_coverage</option>
-                              <option value="supplemental_reference">supplemental_reference</option>
-                              <option value="flood_reference">flood_reference</option>
-                              <option value="earthquake_reference">earthquake_reference</option>
-                              <option value="other">other</option>
-                            </select>
-                            <label style={{ color: "#475569", display: "flex", gap: "8px", alignItems: "center" }}>
-                              <input type="checkbox" checked={linkDraft.is_primary} onChange={(event) => setLinkDraft((current) => ({ ...current, is_primary: event.target.checked }))} />
-                              Primary property link
-                            </label>
-                            <textarea value={linkDraft.notes} onChange={(event) => setLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
-                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                              <button onClick={() => handleSaveLink(link.id)} disabled={savingLinkId === link.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                                {savingLinkId === link.id ? "Saving..." : "Save Link"}
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Platform Asset Summary</div>
+                {linkedAsset ? (
+                  <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
+                    <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
+                    <div><strong>Category:</strong> {linkedAsset.asset_category}</div>
+                    <div><strong>Subcategory:</strong> {linkedAsset.asset_subcategory || "Limited visibility"}</div>
+                    <div><strong>Institution:</strong> {linkedAsset.institution_name || "Limited visibility"}</div>
+                    <div><strong>Status:</strong> {linkedAsset.status || "Limited visibility"}</div>
+                    <div style={{ color: "#64748b" }}>
+                      This homeowners record remains linked to the broader platform asset layer so shared documents, portals, alerts, and tasks can continue to coexist cleanly.
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState title="No linked household summary" description="This homeowners policy is not yet connected to a broader household asset summary." />
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Property</div>
+                {propertyLinks.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {propertyLinks.map((link) => {
+                      const propertyRecord = link.properties || {};
+                      return (
+                        <div key={link.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                            <div>
+                              <div style={{ fontWeight: 700, color: "#0f172a" }}>{propertyRecord.property_name || propertyRecord.assets?.asset_name || propertyRecord.property_address || "Property"}</div>
+                              <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
+                                <div><strong>Address:</strong> {propertyRecord.property_address || "Limited visibility"}</div>
+                                <div><strong>Status:</strong> {propertyRecord.property_status || "Limited visibility"}</div>
+                                <div><strong>Link Type:</strong> {link.link_type || "primary_property_coverage"}</div>
+                                <div><strong>Primary:</strong> {link.is_primary ? "Yes" : "No"}</div>
+                                <div><strong>Notes:</strong> {link.notes || "None"}</div>
+                              </div>
+                            </div>
+                            <div style={{ display: "grid", gap: "8px" }}>
+                              <button type="button" onClick={() => onNavigate(`/property/detail/${propertyRecord.id}`)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                                Open Property
                               </button>
-                              <button onClick={() => setEditingLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                                Cancel
+                              <button type="button" onClick={() => beginEditLink(link)} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                                Edit Link
+                              </button>
+                              <button type="button" onClick={() => handleRemoveLink(link.id)} disabled={removingLinkId === link.id} style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #fecaca", background: "#fff1f2", cursor: "pointer", fontWeight: 700, color: "#991b1b" }}>
+                                {removingLinkId === link.id ? "Removing..." : "Remove Link"}
                               </button>
                             </div>
                           </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyState title="No linked property yet" description="Link a property record to make the homeowners relationship visible in the property stack." />
-              )}
-            </SectionCard>
-
-            <SectionCard title="Link Existing Property">
-              <form onSubmit={handleLinkProperty} style={{ display: "grid", gap: "12px" }}>
-                <select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                  <option value="">Select household property</option>
-                  {availableProperties.map((property) => (
-                    <option key={property.id} value={property.id}>
-                      {property.property_name || property.property_address || property.assets?.asset_name || property.id}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" disabled={linkingProperty || !selectedPropertyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                  {linkingProperty ? "Linking Property..." : "Link Property"}
-                </button>
-                <div
-                  style={{
-                    padding: "16px 18px",
-                    borderRadius: "14px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    display: "grid",
-                    gap: "12px",
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Property stack note</div>
-                  <div style={{ color: "#475569", lineHeight: "1.7" }}>
-                    The command center and linked context already explain this policy’s place in the property stack. Shared follow-up is cleaner in Review Workspace once the issue needs tracking or assignment.
+                          {editingLinkId === link.id ? (
+                            <div style={{ marginTop: "12px", display: "grid", gap: "10px" }}>
+                              <select value={linkDraft.link_type} onChange={(event) => setLinkDraft((current) => ({ ...current, link_type: event.target.value }))} style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+                                <option value="primary_property_coverage">primary_property_coverage</option>
+                                <option value="supplemental_reference">supplemental_reference</option>
+                                <option value="flood_reference">flood_reference</option>
+                                <option value="earthquake_reference">earthquake_reference</option>
+                                <option value="other">other</option>
+                              </select>
+                              <label style={{ color: "#475569", display: "flex", gap: "8px", alignItems: "center" }}>
+                                <input type="checkbox" checked={linkDraft.is_primary} onChange={(event) => setLinkDraft((current) => ({ ...current, is_primary: event.target.checked }))} />
+                                Primary property link
+                              </label>
+                              <textarea value={linkDraft.notes} onChange={(event) => setLinkDraft((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Link notes" style={{ padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
+                              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                                <button onClick={() => handleSaveLink(link.id)} disabled={savingLinkId === link.id} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                                  {savingLinkId === link.id ? "Saving..." : "Save Link"}
+                                </button>
+                                <button onClick={() => setEditingLinkId("")} type="button" style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
-                    {topHomeownersReviewItem?.summary || `Current linkage status: ${linkageStatus}`}
-                  </div>
-                </div>
-                {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
-                {linkError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
-              </form>
-            </SectionCard>
-          </div>
+                ) : (
+                  <EmptyState title="No linked property yet" description="Link a property record to make the homeowners relationship visible in the property stack." />
+                )}
+              </div>
 
-          <div style={{ marginTop: "24px" }}>
-            <SectionCard
-              title="Linked Context"
-              subtitle="Read this homeowners policy as part of the broader operating graph across property, liabilities, documents, and access continuity."
-            >
-              <HomeownersLinkedContextCard
-                propertyRows={homeownersLinkedContext.propertyRows}
-                liabilityRows={homeownersLinkedContext.liabilityRows}
-                propertyLinks={propertyLinks}
-                stackCompleteness={linkedStackCompleteness}
-                homeownersDocuments={bundle.homeownersDocuments || []}
-                assetBundle={assetBundle}
-                onNavigate={onNavigate}
-                isMobile={isTablet}
-              />
-            </SectionCard>
-          </div>
-
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
-            <SectionCard title="Homeowners Documents">
-              {bundle.homeownersDocuments.length > 0 ? (
-                <div style={{ display: "grid", gap: "12px" }}>
-                  {bundle.homeownersDocuments.map((document) => (
-                    <div key={document.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                        {document.asset_documents?.file_name || document.document_class_key || "Homeowners document"}
-                      </div>
-                      <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
-                        <div><strong>Document Class:</strong> {getHomeownersDocumentClass(document.document_class_key)?.display_name || document.document_class_key || "Limited visibility"}</div>
-                        <div><strong>Carrier:</strong> {getHomeownersCarrier(document.carrier_key)?.display_name || document.carrier_key || "Limited visibility"}</div>
-                        <div><strong>Document Date:</strong> {formatDate(document.document_date)}</div>
-                        <div><strong>Created:</strong> {formatDate(document.created_at)}</div>
-                        <div><strong>Household Document Link:</strong> {document.asset_document_id || "Not linked yet"}</div>
-                        <div><strong>Asset Document Status:</strong> {document.asset_documents?.processing_status || "Not available"}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="No homeowners documents yet" description="Homeowners-specific document records will appear here as uploads are classified and linked." />
-              )}
-            </SectionCard>
-
-            <SectionCard title="Homeowners Document Intake">
-              <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
-                <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: "20px", background: "#f8fafc" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop homeowners documents here</div>
-                  <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
-                    Upload declarations pages, renewals, billing notices, endorsements, and related homeowners documents into this policy. The original file is saved in the household vault and then linked into the homeowners module.
-                  </p>
-                  <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(event) => enqueueFiles(event.target.files)} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}>
-                    Select Homeowners Documents
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Link Existing Property</div>
+                <form onSubmit={handleLinkProperty} style={{ display: "grid", gap: "12px" }}>
+                  <select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+                    <option value="">Select household property</option>
+                    {availableProperties.map((property) => (
+                      <option key={property.id} value={property.id}>
+                        {property.property_name || property.property_address || property.assets?.asset_name || property.id}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" disabled={linkingProperty || !selectedPropertyId} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                    {linkingProperty ? "Linking Property..." : "Link Property"}
                   </button>
-                </div>
-                <select value={uploadForm.document_class_key} onChange={(event) => setUploadForm((current) => ({ ...current, document_class_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                  {HOMEOWNERS_DOCUMENT_CLASSES.map((documentClass) => (
-                    <option key={documentClass.document_class_key} value={documentClass.document_class_key}>
-                      {documentClass.display_name}
-                    </option>
-                  ))}
-                </select>
-                <select value={uploadForm.carrier_key} onChange={(event) => setUploadForm((current) => ({ ...current, carrier_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
-                  <option value="">No carrier selected</option>
-                  {HOMEOWNERS_CARRIERS.map((carrier) => (
-                    <option key={carrier.carrier_key} value={carrier.carrier_key}>
-                      {carrier.display_name}
-                    </option>
-                  ))}
-                </select>
-                <input type="date" value={uploadForm.document_date} onChange={(event) => setUploadForm((current) => ({ ...current, document_date: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
-                <textarea value={uploadForm.notes} onChange={(event) => setUploadForm((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional intake notes" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
-                <button type="submit" disabled={uploading || uploadQueue.length === 0 || !linkedAsset?.id} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                  {uploading ? "Uploading Homeowners Documents..." : "Upload Homeowners Documents"}
-                </button>
-                {uploadError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{uploadError}</div> : null}
-              </form>
+                  <div
+                    style={{
+                      padding: "16px 18px",
+                      borderRadius: "14px",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gap: "12px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Property stack note</div>
+                    <div style={{ color: "#475569", lineHeight: "1.7" }}>
+                      The command center and linked context already explain this policy's place in the property stack. Shared follow-up is cleaner in Review Workspace once the issue needs tracking or assignment.
+                    </div>
+                    <div style={{ color: "#0f172a", fontWeight: 700, lineHeight: "1.7" }}>
+                      {topHomeownersReviewItem?.summary || `Current linkage status: ${linkageStatus}`}
+                    </div>
+                  </div>
+                  {linkSuccess ? <div style={{ color: "#166534", fontSize: "14px" }}>{linkSuccess}</div> : null}
+                  {linkError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{linkError}</div> : null}
+                </form>
+              </div>
+            </div>
 
-              <div style={{ marginTop: "16px" }}>
-                {uploadQueue.length > 0 ? (
+            <div style={{ marginTop: "24px" }}>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Context</div>
+                  <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Read this homeowners policy as part of the broader operating graph across property, liabilities, documents, and access continuity.</div>
+                </div>
+                <HomeownersLinkedContextCard
+                  propertyRows={homeownersLinkedContext.propertyRows}
+                  liabilityRows={homeownersLinkedContext.liabilityRows}
+                  propertyLinks={propertyLinks}
+                  stackCompleteness={linkedStackCompleteness}
+                  homeownersDocuments={bundle.homeownersDocuments || []}
+                  assetBundle={assetBundle}
+                  onNavigate={onNavigate}
+                  isMobile={isTablet}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Documents</div>
+                {bundle.homeownersDocuments.length > 0 ? (
                   <div style={{ display: "grid", gap: "12px" }}>
-                    {uploadQueue.map((item) => (
-                      <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.file.name}</div>
-                        <div style={{ marginTop: "4px", color: "#64748b" }}>
-                          {uploadForm.document_class_key}
-                          {uploadForm.carrier_key ? ` | ${uploadForm.carrier_key}` : ""}
-                          {uploadForm.document_date ? ` | ${uploadForm.document_date}` : ""}
+                    {bundle.homeownersDocuments.map((document) => (
+                      <div key={document.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                          {document.asset_documents?.file_name || document.document_class_key || "Homeowners document"}
                         </div>
-                        <div style={{ marginTop: "8px", color: "#475569" }}>
-                          Status: {item.status}
-                          {item.duplicate ? " | Existing household upload reused" : ""}
-                          {item.storagePath ? ` | ${item.storagePath}` : ""}
+                        <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
+                          <div><strong>Document Class:</strong> {getHomeownersDocumentClass(document.document_class_key)?.display_name || document.document_class_key || "Limited visibility"}</div>
+                          <div><strong>Carrier:</strong> {getHomeownersCarrier(document.carrier_key)?.display_name || document.carrier_key || "Limited visibility"}</div>
+                          <div><strong>Document Date:</strong> {formatDate(document.document_date)}</div>
+                          <div><strong>Created:</strong> {formatDate(document.created_at)}</div>
+                          <div><strong>Household Document Link:</strong> {document.asset_document_id || "Not linked yet"}</div>
+                          <div><strong>Asset Document Status:</strong> {document.asset_documents?.processing_status || "Not available"}</div>
                         </div>
-                        {item.errorSummary ? <div style={{ marginTop: "6px", color: "#991b1b" }}>{item.errorSummary}</div> : null}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <EmptyState title="No homeowners files queued" description="Add one or more homeowners documents to create linked generic and homeowners-specific document records." />
+                  <EmptyState title="No homeowners documents yet" description="Homeowners-specific document records will appear here as uploads are classified and linked." />
                 )}
               </div>
-            </SectionCard>
-          </div>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
-            <SectionCard title="Homeowners Snapshots">
-              {bundle.homeownersSnapshots.length > 0 ? (
-                <div style={{ display: "grid", gap: "12px" }}>
-                  {bundle.homeownersSnapshots.map((snapshot) => (
-                    <div key={snapshot.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{snapshot.snapshot_type || "homeowners_snapshot"}</div>
-                      <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
-                        <div><strong>Snapshot Date:</strong> {formatDate(snapshot.snapshot_date)}</div>
-                        <div><strong>Completeness:</strong> {snapshot.completeness_assessment?.status || "Not assessed yet"}</div>
-                      </div>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Document Intake</div>
+                <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
+                  <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: "20px", background: "#f8fafc" }}>
+                    <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop homeowners documents here</div>
+                    <p style={{ marginTop: "8px", color: "#64748b", lineHeight: "1.6" }}>
+                      Upload declarations pages, renewals, billing notices, endorsements, and related homeowners documents into this policy. The original file is saved in the household vault and then linked into the homeowners module.
+                    </p>
+                    <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(event) => enqueueFiles(event.target.files)} />
+                    <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 700 }}>
+                      Select Homeowners Documents
+                    </button>
+                  </div>
+                  <select value={uploadForm.document_class_key} onChange={(event) => setUploadForm((current) => ({ ...current, document_class_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+                    {HOMEOWNERS_DOCUMENT_CLASSES.map((documentClass) => (
+                      <option key={documentClass.document_class_key} value={documentClass.document_class_key}>
+                        {documentClass.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={uploadForm.carrier_key} onChange={(event) => setUploadForm((current) => ({ ...current, carrier_key: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#fff" }}>
+                    <option value="">No carrier selected</option>
+                    {HOMEOWNERS_CARRIERS.map((carrier) => (
+                      <option key={carrier.carrier_key} value={carrier.carrier_key}>
+                        {carrier.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  <input type="date" value={uploadForm.document_date} onChange={(event) => setUploadForm((current) => ({ ...current, document_date: event.target.value }))} style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1" }} />
+                  <textarea value={uploadForm.notes} onChange={(event) => setUploadForm((current) => ({ ...current, notes: event.target.value }))} rows={3} placeholder="Optional intake notes" style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }} />
+                  <button type="submit" disabled={uploading || uploadQueue.length === 0 || !linkedAsset?.id} style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                    {uploading ? "Uploading Homeowners Documents..." : "Upload Homeowners Documents"}
+                  </button>
+                  {uploadError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{uploadError}</div> : null}
+                </form>
+
+                <div style={{ marginTop: "16px" }}>
+                  {uploadQueue.length > 0 ? (
+                    <div style={{ display: "grid", gap: "12px" }}>
+                      {uploadQueue.map((item) => (
+                        <div key={item.id} style={{ padding: "12px 14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.file.name}</div>
+                          <div style={{ marginTop: "4px", color: "#64748b" }}>
+                            {uploadForm.document_class_key}
+                            {uploadForm.carrier_key ? ` | ${uploadForm.carrier_key}` : ""}
+                            {uploadForm.document_date ? ` | ${uploadForm.document_date}` : ""}
+                          </div>
+                          <div style={{ marginTop: "8px", color: "#475569" }}>
+                            Status: {item.status}
+                            {item.duplicate ? " | Existing household upload reused" : ""}
+                            {item.storagePath ? ` | ${item.storagePath}` : ""}
+                          </div>
+                          {item.errorSummary ? <div style={{ marginTop: "6px", color: "#991b1b" }}>{item.errorSummary}</div> : null}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <EmptyState title="No homeowners files queued" description="Add one or more homeowners documents to create linked generic and homeowners-specific document records." />
+                  )}
                 </div>
-              ) : (
-                <EmptyState title="No homeowners snapshots yet" description="Homeowners snapshots will land here after later declarations and policy parsing is added." />
-              )}
-            </SectionCard>
-
-            <SectionCard title="Homeowners Analytics">
-              {bundle.homeownersAnalytics.length > 0 ? (
-                <div style={{ display: "grid", gap: "12px" }}>
-                  {bundle.homeownersAnalytics.map((analytics) => (
-                    <div key={analytics.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a" }}>{analytics.analytics_type || "homeowners_analytics"}</div>
-                      <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
-                        <div><strong>Review Flags:</strong> {analytics.review_flags?.length ? analytics.review_flags.join(", ") : "None yet"}</div>
-                        <div><strong>Created:</strong> {formatDate(analytics.created_at)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="No homeowners analytics yet" description="Homeowners intelligence will appear here after future parsing and review passes are added." />
-              )}
-            </SectionCard>
-          </div>
-
-          {shouldShowDevDiagnostics() ? (
-            <SectionCard title="Homeowners Debug">
-              <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
-                homeowners_policy_id={homeownersPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={homeownersPolicy.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | homeownersAssetLinks={homeownersAssetLinks.length} | linkedPropertyAssetLinks={linkedPropertyAssetLinks.length} | documents={bundle.homeownersDocuments.length} | snapshots={bundle.homeownersSnapshots.length} | analytics={bundle.homeownersAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | homeownersDocumentIds={uploadQueue.map((item) => item.homeownersDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
               </div>
-            </SectionCard>
-          ) : null}
+            </div>
+
+            <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Snapshots</div>
+                {bundle.homeownersSnapshots.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {bundle.homeownersSnapshots.map((snapshot) => (
+                      <div key={snapshot.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{snapshot.snapshot_type || "homeowners_snapshot"}</div>
+                        <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
+                          <div><strong>Snapshot Date:</strong> {formatDate(snapshot.snapshot_date)}</div>
+                          <div><strong>Completeness:</strong> {snapshot.completeness_assessment?.status || "Not assessed yet"}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="No homeowners snapshots yet" description="Homeowners snapshots will land here after later declarations and policy parsing is added." />
+                )}
+              </div>
+
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Analytics</div>
+                {bundle.homeownersAnalytics.length > 0 ? (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {bundle.homeownersAnalytics.map((analytics) => (
+                      <div key={analytics.id} style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{analytics.analytics_type || "homeowners_analytics"}</div>
+                        <div style={{ marginTop: "6px", color: "#475569", lineHeight: "1.7" }}>
+                          <div><strong>Review Flags:</strong> {analytics.review_flags?.length ? analytics.review_flags.join(", ") : "None yet"}</div>
+                          <div><strong>Created:</strong> {formatDate(analytics.created_at)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="No homeowners analytics yet" description="Homeowners intelligence will appear here after future parsing and review passes are added." />
+                )}
+              </div>
+            </div>
+
+            {shouldShowDevDiagnostics() ? (
+              <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "8px" })}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Homeowners Debug</div>
+                <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
+                  homeowners_policy_id={homeownersPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={homeownersPolicy.household_id || "none"} | propertyLinkIds={propertyLinks.map((link) => link.id).join(", ") || "none"} | propertyLinkTypes={propertyLinks.map((link) => link.link_type).join(", ") || "none"} | propertyLinkPrimary={propertyLinks.map((link) => String(Boolean(link.is_primary))).join(", ") || "none"} | linkageStatus={linkageStatus} | homeownersAssetLinks={homeownersAssetLinks.length} | linkedPropertyAssetLinks={linkedPropertyAssetLinks.length} | documents={bundle.homeownersDocuments.length} | snapshots={bundle.homeownersSnapshots.length} | analytics={bundle.homeownersAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | homeownersDocumentIds={uploadQueue.map((item) => item.homeownersDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || linkError || "none"}
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </HomeownersDetailRecoveryBoundary>

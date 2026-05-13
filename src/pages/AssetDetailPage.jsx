@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import {
   createPortalProfile,
@@ -22,7 +21,6 @@ import {
 import { buildAssetDetailReviewQueueItems } from "../lib/domain/platformIntelligence/reviewQueue";
 import { buildReviewWorkspaceRoute, deriveReviewWorkspaceCandidateFromQueueItem } from "../lib/reviewWorkspace/workspaceFilters";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const MFA_TYPES = ["sms", "authenticator", "email", "hardware_key", "unknown", "none"];
 const ACCESS_STATUS = ["active", "limited", "locked", "unknown"];
@@ -39,8 +37,27 @@ function formatDate(value) {
   });
 }
 
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
 export default function AssetDetailPage({ assetId, onNavigate }) {
-  const { isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState({
@@ -578,7 +595,11 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
         </div>
       </section>
 
-      <SectionCard title="Continuity Command" subtitle="The clearest blockers and next steps for keeping this asset dependable.">
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Continuity Command</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The clearest blockers and next steps for keeping this asset dependable.</div>
+        </div>
         <div style={{ display: "grid", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
             <div style={{ color: "#475569", lineHeight: "1.7", maxWidth: "820px" }}>{commandCenter.headline}</div>
@@ -795,10 +816,11 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
             />
           )}
         </div>
-      </SectionCard>
+      </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualRailLayout, gap: "18px" }}>
-        <SectionCard title="Asset Summary">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Asset Summary</div>
           {bundle.asset ? (
             <div style={{ display: "grid", gap: "10px", color: "#475569" }}>
               <div><strong>Asset Name:</strong> {bundle.asset.asset_name}</div>
@@ -814,20 +836,22 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           ) : (
             <EmptyState title="Asset not found" description="This asset detail record could not be loaded." />
           )}
-        </SectionCard>
+        </div>
 
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualRailLayout, gap: "18px" }}>
-        <SectionCard title="Documents">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Documents</div>
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
           ) : (
             <EmptyState title="No linked documents" description="No documents are currently linked to this asset." />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Notes">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Notes</div>
           {bundle.asset?.metadata?.notes || bundle.asset?.summary?.notes ? (
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               {bundle.asset.metadata?.notes || bundle.asset.summary?.notes}
@@ -835,11 +859,12 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           ) : (
             <EmptyState title="No notes yet" description="Asset notes will appear here as continuity context is added later." />
           )}
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: splitLayout, gap: "18px" }}>
-        <SectionCard title="Alerts">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Alerts</div>
           {bundle.alerts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {bundle.alerts.map((alert) => (
@@ -855,9 +880,10 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           ) : (
             <EmptyState title="No alerts" description="No open asset-level alerts are currently recorded." />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Tasks">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Tasks</div>
           {bundle.tasks.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {bundle.tasks.map((task) => (
@@ -871,11 +897,12 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
           ) : (
             <EmptyState title="No tasks" description="No open tasks are currently linked to this asset." />
           )}
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: portalLayout, gap: "18px" }}>
-        <SectionCard title="Linked Portals">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Portals</div>
           {bundle.portalLinks.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {bundle.portalLinks.map((link) => {
@@ -941,9 +968,10 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
               description="No linked access portals have been recorded for this asset yet."
             />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Link Existing Portal">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Link Existing Portal</div>
           {existingPortalOptions.length > 0 ? (
             <form onSubmit={handleLinkExistingPortal} style={{ display: "grid", gap: "12px" }}>
               <select
@@ -1016,9 +1044,10 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
               description="Create the first household portal below, then it can be reused across multiple assets."
             />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Create and Link New Portal">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Create and Link New Portal</div>
           <form onSubmit={handleCreatePortal} style={{ display: "grid", gap: "12px" }}>
             <input
               value={portalForm.portal_name}
@@ -1107,7 +1136,7 @@ export default function AssetDetailPage({ assetId, onNavigate }) {
             </button>
             {loadError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{loadError}</div> : null}
           </form>
-        </SectionCard>
+        </div>
       </div>
 
       {shouldShowDevDiagnostics() ? (

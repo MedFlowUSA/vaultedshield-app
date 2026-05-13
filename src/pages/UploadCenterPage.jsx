@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
 import DocumentTable from "../components/shared/DocumentTable";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import { summarizeUploadCenterModule } from "../lib/domain/platformIntelligence/moduleReadiness";
 import { isSupabaseConfigured } from "../lib/supabase/client";
@@ -16,7 +11,6 @@ import {
 } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
 import { convertImageToFile } from "../utils/imageToFile";
 
@@ -191,8 +185,27 @@ function getDocumentScopeLabel(item, assets) {
   return linkedAsset ? `Linked asset: ${linkedAsset.asset_name}` : "Asset-linked document";
 }
 
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
 export default function UploadCenterPage() {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const householdState = usePlatformHousehold();
   const supabaseConfigured = isSupabaseConfigured();
   const fileInputRef = useRef(null);
@@ -403,26 +416,53 @@ export default function UploadCenterPage() {
 
   return (
     <div style={{ display: "grid", gap: "24px", minWidth: 0, maxWidth: "100%", overflowX: "clip" }}>
-      <FriendlyPageHero
-        eyebrow="Upload Center"
-        sectionTitle="Unified Upload Center"
-        headline="Bring household documents in quickly, then add deeper metadata only when it actually helps."
-        summary={uploadRead.headline}
-        transition="This top layer should make intake feel simple: what kind of document this is, whether the queue is healthy, and what to do next. The full upload workflow stays below."
-        actions={[
-          { label: "Select Files", onClick: () => fileInputRef.current?.click(), kind: "primary" },
-          nativeCameraAvailable
-            ? { label: "Use Camera", onClick: handleCameraCapture }
-            : { label: "Review Queue", onClick: () => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }) },
-        ]}
-        score={uploadHeroScore}
-        scoreTone={uploadHeroTone}
-        scoreSubtitle="intake score"
-        scoreIconLabel="upload"
-        asideHeadline={queue.length > 0 ? "Upload work is in motion" : "Start with the first useful document"}
-        asideSummary={uploadRead.notes[0] || "You can keep this simple and still strengthen the household file quickly."}
-        glanceItems={uploadHeroGlanceItems}
-      />
+      <div
+        style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #0c4a6e 100%)",
+          color: "#ffffff",
+          display: "grid",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>Upload Center</div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>Unified Upload Center</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{uploadRead.headline}</div>
+          </div>
+          <div style={{ padding: "16px 20px", borderRadius: "18px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", gap: "4px", textAlign: "center", minWidth: "100px", flexShrink: 0 }}>
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#7dd3fc" }}>{uploadHeroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>intake score</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {uploadHeroGlanceItems.map((item) => (
+            <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#0c4a6e", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+            Select Files
+          </button>
+          {nativeCameraAvailable ? (
+            <button type="button" onClick={handleCameraCapture} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+              Use Camera
+            </button>
+          ) : (
+            <button type="button" onClick={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+              Review Queue
+            </button>
+          )}
+          <button type="button" onClick={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+            Open Queue
+          </button>
+        </div>
+      </div>
 
       <div
         style={{
@@ -431,36 +471,51 @@ export default function UploadCenterPage() {
           gap: "14px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={uploadRead.status === "Ready" ? "Intake pipeline looks usable" : "Intake pipeline is still building"}
-          detail={uploadRead.headline}
-          metric={`${queue.length} queued`}
-          tone={uploadHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="Select Files"
-          onAction={() => fileInputRef.current?.click()}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title={queue.length > 0 ? "Finish the current upload queue" : "Choose the document category first"}
-          detail={uploadRead.notes[0] || "A clean category choice makes the rest of the upload feel much easier."}
-          metric={`${queueReadyCount} ready`}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="Review Queue"
-          onAction={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title="Advanced metadata can come later"
-          detail="Start with the file and the closest category. VaultedShield can deepen the record after intake."
-          metric={`${queueSavedCount} saved`}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="Open Queue"
-          onAction={() => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        {[
+          {
+            kicker: "Simple Read",
+            title: uploadRead.status === "Ready" ? "Intake pipeline looks usable" : "Intake pipeline is still building",
+            detail: uploadRead.headline,
+            metric: `${queue.length} queued`,
+            tone: uploadHeroTone,
+            statusLabel: "Simple Read",
+            actionLabel: "Select Files",
+            onAction: () => fileInputRef.current?.click(),
+          },
+          {
+            kicker: "Best First Step",
+            title: queue.length > 0 ? "Finish the current upload queue" : "Choose the document category first",
+            detail: uploadRead.notes[0] || "A clean category choice makes the rest of the upload feel much easier.",
+            metric: `${queueReadyCount} ready`,
+            tone: "warning",
+            statusLabel: "Guided Focus",
+            actionLabel: "Review Queue",
+            onAction: () => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "What Can Wait",
+            title: "Advanced metadata can come later",
+            detail: "Start with the file and the closest category. VaultedShield can deepen the record after intake.",
+            metric: `${queueSavedCount} saved`,
+            tone: "info",
+            statusLabel: "Building",
+            actionLabel: "Open Queue",
+            onAction: () => document.querySelector('[data-upload-queue="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+        ].map((tile) => (
+          <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       <div
@@ -471,7 +526,8 @@ export default function UploadCenterPage() {
           minWidth: 0,
         }}
       >
-        <SectionCard title="Upload Pipeline Readiness">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Upload Pipeline Readiness</div>
           <div style={{ display: "grid", gap: "12px", minWidth: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ color: "#475569", lineHeight: "1.7" }}>{uploadRead.headline}</div>
@@ -483,16 +539,17 @@ export default function UploadCenterPage() {
               ))}
             </ul>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Upload Metrics">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Upload Metrics</div>
           <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
             <div><strong>Asset-linked docs:</strong> {uploadRead.metrics.assetLinkedDocuments}</div>
             <div><strong>Queued:</strong> {uploadRead.metrics.queued}</div>
             <div><strong>Queue failures:</strong> {uploadRead.metrics.failedQueue}</div>
             <div><strong>Saved this session:</strong> {uploadRead.metrics.savedQueue}</div>
           </div>
-        </SectionCard>
+        </div>
       </div>
 
       <div
@@ -503,7 +560,11 @@ export default function UploadCenterPage() {
           minWidth: 0,
         }}
       >
-        <SectionCard title="Guided Document Intake" subtitle="Start with what you are uploading, then add deeper metadata only if you need it.">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Guided Document Intake</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Start with what you are uploading, then add deeper metadata only if you need it.</div>
+          </div>
           <div style={{ display: "grid", gap: "18px", minWidth: 0 }}>
             <div
               style={{
@@ -747,13 +808,16 @@ export default function UploadCenterPage() {
               </button>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard
+        <div
           data-upload-queue="true"
-          title="Ready For Upload"
-          subtitle="Selected files, current status, and what will happen next."
+          style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}
         >
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Ready For Upload</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Selected files, current status, and what will happen next.</div>
+          </div>
           <div
             style={{
               display: "grid",
@@ -858,10 +922,14 @@ export default function UploadCenterPage() {
               </div>
             </EmptyState>
           )}
-        </SectionCard>
+        </div>
       </div>
 
-      <SectionCard title="Recent Household Uploads" subtitle="These documents will appear in the Vault view on refresh or navigation.">
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Recent Household Uploads</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>These documents will appear in the Vault view on refresh or navigation.</div>
+        </div>
         {documentRows.length > 0 ? (
           <DocumentTable rows={documentRows} />
         ) : (
@@ -874,7 +942,7 @@ export default function UploadCenterPage() {
               </div>
             </EmptyState>
           )}
-        </SectionCard>
+      </div>
 
       {loadError ? (
         <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>{loadError}</div>

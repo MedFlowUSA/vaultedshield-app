@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import SectionCard from "../components/shared/SectionCard";
 import EmptyState from "../components/shared/EmptyState";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-  SuggestedActionsRow,
-} from "../components/shared/FriendlyIntelligenceUI";
+import { SuggestedActionsRow } from "../components/shared/FriendlyIntelligenceUI";
 import {
   buildReviewWorkflowStateEntry,
   buildHouseholdReviewDigest,
@@ -38,6 +33,24 @@ function actionStyle(primary = false) {
     color: primary ? "#ffffff" : "#0f172a",
     cursor: "pointer",
     fontWeight: 700,
+  };
+}
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
   };
 }
 
@@ -757,41 +770,78 @@ export default function ReviewWorkspacePage({ onNavigate }) {
         padding: "8px 0 32px",
       }}
     >
-      <FriendlyPageHero
-        eyebrow="Household Operations"
-        sectionTitle="Review Workspace"
-        headline={reviewWorkspaceWelcomeGuide.title}
-        summary={reviewWorkspaceWelcomeGuide.summary}
-        transition={reviewWorkspaceWelcomeGuide.transition}
-        actions={[
-          {
-            label: activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress",
-            onClick: () => scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory"),
-            kind: "primary",
-          },
-          {
-            label: "Refresh Status",
-            onClick: handleRefreshSnapshot,
-            kind: "secondary",
-          },
-          {
-            label: "View Dashboard",
-            onClick: () => onNavigate?.("/dashboard"),
-            kind: "secondary",
-          },
-        ]}
-        score={activeQueueItems.length}
-        scoreTone={activeQueueItems.length > 2 ? "alert" : activeQueueItems.length > 0 ? "warning" : "good"}
-        scoreSubtitle="active"
-        asideHeadline={workspaceVerdict.headline}
-        asideSummary={workflowSummary.summary}
-        glanceItems={[
-          { label: "Active work", value: activeQueueItems.length },
-          { label: "Completed reviews", value: resolvedQueueItems.length },
-          { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
-          { label: "Best focus", value: topVisibleCluster?.summaryLabels?.[1] || "Progress memory" },
-        ]}
-      />
+      <div
+        style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #14532d 100%)",
+          color: "#ffffff",
+          display: "grid",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Household Operations
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>{reviewWorkspaceWelcomeGuide.title}</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{reviewWorkspaceWelcomeGuide.summary}</div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#86efac" }}>{activeQueueItems.length}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>active</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+          {[
+            { label: "Active work", value: activeQueueItems.length },
+            { label: "Completed reviews", value: resolvedQueueItems.length },
+            { label: "Readiness lift", value: scoreLift > 0 ? `+${scoreLift}` : "0" },
+            { label: "Best focus", value: topVisibleCluster?.summaryLabels?.[1] || "Progress memory" },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+              <div style={{ fontSize: "20px", fontWeight: 800, marginTop: "4px" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => scrollToWorkspaceSection(activeQueueItems.length > 0 ? "review-work-queue" : "review-progress-memory")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#15803d", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            {activeQueueItems.length > 0 ? "Open Active Review Work" : "See Completed Progress"}
+          </button>
+          <button
+            type="button"
+            onClick={handleRefreshSnapshot}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Refresh Status
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/dashboard")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            View Dashboard
+          </button>
+        </div>
+      </div>
 
       <section style={{ display: "grid", gap: "10px" }}>
         <div style={{ fontSize: "12px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 800 }}>
