@@ -1,7 +1,22 @@
 import { useMemo } from "react";
-import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function actionStyle(primary = false) {
   return {
@@ -33,91 +48,128 @@ export default function LifePolicyDetailPage({ onNavigate }) {
       ? `${sortedPolicies.length} saved life polic${sortedPolicies.length === 1 ? "y is" : "ies are"} available for review, comparison, and deeper evidence-backed analysis.`
       : "This guide keeps life-policy intake simple: begin with the baseline policy file, add annual statements, then open the saved policy for deeper review.";
 
+  const heroScore = sortedPolicies.length > 0 ? 82 : 46;
+
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <FriendlyPageHero
-        eyebrow="Life Policy Intelligence"
-        sectionTitle="Life Policy Intake Guide"
-        headline={heroHeadline}
-        summary={heroSummary}
-        transition="Use this as the plain-English entry point into the life-policy workflow. The specialized intake page, policy detail pages, and reports still hold the technical depth underneath."
-        actions={[
-          {
-            label: "Open Insurance Intelligence",
-            onClick: () => onNavigate?.("/insurance"),
-            kind: "primary",
-          },
-          {
-            label: "Open Life Policy Intake",
-            onClick: () => onNavigate?.("/insurance/life/upload"),
-          },
-          {
-            label: "Open Reports",
-            onClick: () => onNavigate?.("/reports"),
-          },
-        ]}
-        score={sortedPolicies.length > 0 ? 82 : 46}
-        scoreTone={heroTone}
-        scoreSubtitle="workflow"
-        scoreIconLabel="life policy"
-        asideHeadline={sortedPolicies.length > 0 ? "Clear next step" : "Simple starting point"}
-        asideSummary={
-          sortedPolicies.length > 0
-            ? "Open the intake when you need more document support, or open a saved policy when you are ready for deeper analysis."
-            : "Bring in the baseline policy file first, then layer annual statements on top so the deeper technical read has enough support."
-        }
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          { label: "Saved policies", value: sortedPolicies.length },
-          { label: "Guide purpose", value: "Life-policy intake path" },
-          { label: "Best first move", value: sortedPolicies.length > 0 ? "Open saved policy" : "Start intake" },
-          { label: "Technical depth", value: "Available underneath" },
-        ]}
-      />
-
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #312e81 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Start Here"
-          title="Open the intake workflow"
-          detail="Use the dedicated life-policy intake when you need to add the baseline policy file, scan pages, or upload annual statements."
-          metric="Baseline first"
-          tone="info"
-          statusLabel="Guided Action"
-          actionLabel="Open Intake"
-          onAction={() => onNavigate?.("/insurance/life/upload")}
-        />
-        <FriendlyActionTile
-          kicker="What This Produces"
-          title="Build a saved policy you can reopen"
-          detail="Once intake is complete, VaultedShield saves the policy into the main insurance workflow for ranking, comparison, and evidence review."
-          metric={`${sortedPolicies.length} saved`}
-          tone={sortedPolicies.length > 0 ? "good" : "warning"}
-          statusLabel={sortedPolicies.length > 0 ? "Well Supported" : "Needs Review"}
-          actionLabel="Open Insurance"
-          onAction={() => onNavigate?.("/insurance")}
-        />
-        <FriendlyActionTile
-          kicker="When You Want Depth"
-          title="Use reports after the packet is built"
-          detail="Reports and policy detail pages still hold the technical comparison, timeline, and evidence layers once the intake is complete."
-          metric="Deep detail"
-          tone="neutral"
-          statusLabel="Simple Read"
-          actionLabel="Open Reports"
-          onAction={() => onNavigate?.("/reports")}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Life Policy Intelligence
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>{heroHeadline}</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{heroSummary}</div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#a5b4fc" }}>{heroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>workflow</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/insurance")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#4338ca", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Insurance Intelligence
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/insurance/life/upload")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Life Policy Intake
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/reports")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Open Reports
+          </button>
+        </div>
       </div>
 
-      <SectionCard
-        title="Start Here"
-        subtitle="Use the modern shell pages below. This guide explains the path, but the real working surfaces are Insurance Intelligence, Life Policy Intake, and Reports."
-      >
+      {/* Action Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Start Here",
+            title: "Open the intake workflow",
+            detail: "Use the dedicated life-policy intake when you need to add the baseline policy file, scan pages, or upload annual statements.",
+            metric: "Baseline first",
+            tone: "info",
+            statusLabel: "Guided Action",
+            actionLabel: "Open Intake",
+            onAction: () => onNavigate?.("/insurance/life/upload"),
+          },
+          {
+            kicker: "What This Produces",
+            title: "Build a saved policy you can reopen",
+            detail: "Once intake is complete, VaultedShield saves the policy into the main insurance workflow for ranking, comparison, and evidence review.",
+            metric: `${sortedPolicies.length} saved`,
+            tone: sortedPolicies.length > 0 ? "good" : "warning",
+            statusLabel: sortedPolicies.length > 0 ? "Well Supported" : "Needs Review",
+            actionLabel: "Open Insurance",
+            onAction: () => onNavigate?.("/insurance"),
+          },
+          {
+            kicker: "When You Want Depth",
+            title: "Use reports after the packet is built",
+            detail: "Reports and policy detail pages still hold the technical comparison, timeline, and evidence layers once the intake is complete.",
+            metric: "Deep detail",
+            tone: "neutral",
+            statusLabel: "Simple Read",
+            actionLabel: "Open Reports",
+            onAction: () => onNavigate?.("/reports"),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Start Here</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The real working surfaces are Insurance Intelligence, Life Policy Intake, and Reports.</div>
+        </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <button type="button" onClick={() => onNavigate?.("/insurance")} style={actionStyle(true)}>
             Open Insurance Intelligence
@@ -129,19 +181,14 @@ export default function LifePolicyDetailPage({ onNavigate }) {
             Open Reports
           </button>
         </div>
-      </SectionCard>
+      </div>
 
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: "18px",
-        }}
-      >
-        <SectionCard
-          title="1. Initial Policy / Illustration Upload"
-          subtitle="Start with the original illustration or baseline policy PDF so the system can establish carrier, product, issue date, death benefit, and original design assumptions."
-        >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>1. Initial Policy / Illustration Upload</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Start with the original illustration or baseline policy PDF so the system can establish carrier, product, issue date, death benefit, and original design assumptions.</div>
+          </div>
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               Use this first when starting a new life policy file. Best pages usually include the policy summary, illustration summary, and any ledger pages that show policy-year values.
@@ -160,12 +207,13 @@ export default function LifePolicyDetailPage({ onNavigate }) {
               </button>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard
-          title="2. Annual Statement History Upload"
-          subtitle="Upload yearly statements separately after the initial policy file so VaultedShield can build trend history, charge visibility, and current performance context."
-        >
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>2. Annual Statement History Upload</div>
+            <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Upload yearly statements separately after the initial policy file so VaultedShield can build trend history, charge visibility, and current performance context.</div>
+          </div>
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ color: "#475569", lineHeight: "1.7" }}>
               Add all annual statements you have, oldest to newest if possible. This is what improves policy health reads, cash-value trends, COI visibility, and projected-vs-actual support.
@@ -184,13 +232,14 @@ export default function LifePolicyDetailPage({ onNavigate }) {
               </button>
             </div>
           </div>
-        </SectionCard>
-      </section>
+        </div>
+      </div>
 
-      <SectionCard
-        title="Saved Life Policies"
-        subtitle="Open a specific saved policy detail page from the current VaultedShield beta shell."
-      >
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Saved Life Policies</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Open a specific saved policy detail page from the current VaultedShield beta shell.</div>
+        </div>
         {loading ? (
           <div style={{ color: "#475569" }}>Loading saved life policies...</div>
         ) : error ? (
@@ -204,12 +253,7 @@ export default function LifePolicyDetailPage({ onNavigate }) {
                 key={policy.id}
                 type="button"
                 onClick={() => onNavigate?.(`/insurance/${policy.id}`)}
-                style={{
-                  ...actionStyle(false),
-                  display: "grid",
-                  gap: "6px",
-                  textAlign: "left",
-                }}
+                style={{ ...actionStyle(false), display: "grid", gap: "6px", textAlign: "left" }}
               >
                 <div style={{ fontSize: "16px", fontWeight: 700 }}>
                   {policy.product_name || policy.carrier_name || "Saved life policy"}
@@ -224,7 +268,7 @@ export default function LifePolicyDetailPage({ onNavigate }) {
             ))}
           </div>
         )}
-      </SectionCard>
+      </div>
     </div>
   );
 }

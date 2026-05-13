@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
-import {
-  CalmEmptyState,
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import {
   getAutoCarrier,
@@ -43,6 +37,24 @@ const DEFAULT_UPLOAD_FORM = {
   document_date: "",
   notes: "",
 };
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function formatDate(value) {
   if (!value) return "Unknown";
@@ -359,95 +371,109 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
   return (
     <div style={{ display: "grid", gap: "24px" }}>
       {loading ? (
-        <CalmEmptyState
-          title="Loading auto policy detail"
-          description="VaultedShield is pulling together the policy, declarations, and supporting auto evidence."
-          icon="Car"
-          tone="info"
-        />
+        <div style={{ padding: "40px 24px", borderRadius: "20px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", textAlign: "center" }}>
+          <div style={{ fontWeight: 800, fontSize: "18px" }}>Loading auto policy detail</div>
+          <div style={{ marginTop: "8px", color: "#334155" }}>VaultedShield is pulling together the policy, declarations, and supporting auto evidence.</div>
+        </div>
       ) : !autoPolicy ? (
-        <CalmEmptyState
-          title="Auto policy not found"
-          description={loadError || "This auto policy detail page could not load a matching policy record."}
-          icon="Missing"
-          tone="warning"
-          actionLabel="Back To Auto Hub"
-          onAction={() => onNavigate("/insurance/auto")}
-        />
+        <div style={{ padding: "40px 24px", borderRadius: "20px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", textAlign: "center", display: "grid", gap: "16px" }}>
+          <div style={{ fontWeight: 800, fontSize: "18px" }}>Auto policy not found</div>
+          <div style={{ color: "#78350f" }}>{loadError || "This auto policy detail page could not load a matching policy record."}</div>
+          <button type="button" onClick={() => onNavigate("/insurance/auto")} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#92400e", color: "#ffffff", fontWeight: 700, cursor: "pointer", justifySelf: "center" }}>
+            Back To Auto Hub
+          </button>
+        </div>
       ) : (
         <>
           <div style={{ display: "grid", gap: "20px" }}>
-            <FriendlyPageHero
-              eyebrow="Insurance"
-              sectionTitle={autoPolicy.policy_name || linkedAsset?.asset_name || "Auto Policy Detail"}
-              headline={plainLanguageGuide.title}
-              summary={plainLanguageGuide.summary}
-              transition={plainLanguageGuide.transition}
-              actions={[
-                {
-                  label: "Back To Auto Hub",
-                  onClick: () => onNavigate("/insurance/auto"),
-                },
-                {
-                  label: "Open Review Workspace",
-                  onClick: () => onNavigate(autoReviewWorkspaceRoute),
-                },
-                {
-                  label: "See Supporting Details",
-                  onClick: scrollToAutoTechnicalAnalysis,
-                },
-                {
-                  label: "Upload Policy Files",
-                  onClick: () => fileInputRef.current?.click(),
-                  kind: "primary",
-                },
-              ]}
-              score={Math.min(100, Math.max(0, 42 + (bundle?.autoDocuments?.length || 0) * 8 + (bundle?.autoSnapshots?.length || 0) * 6))}
-              scoreTone={autoCommandCenter.metrics.critical > 0 ? "alert" : autoCommandCenter.metrics.warning > 0 ? "warning" : "good"}
-              scoreSubtitle="support score"
-              scoreIconLabel="auto"
-              asideHeadline={plainLanguageGuide.cards[0]?.value || "Auto picture is forming"}
-              asideSummary={autoCommandCenter.headline}
-              glanceItems={autoHeroGlanceItems}
-            />
-
             <div
               style={{
+                padding: "32px 36px",
+                borderRadius: "24px",
+                background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)",
+                color: "#ffffff",
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "14px",
+                gap: "20px",
               }}
             >
-              <FriendlyActionTile
-                kicker="Simple Read"
-                title={plainLanguageGuide.cards[0]?.value || "Read the policy status first"}
-                detail={plainLanguageGuide.cards[0]?.detail || autoCommandCenter.headline}
-                metric={`${bundle?.autoDocuments?.length || 0} document${bundle?.autoDocuments?.length === 1 ? "" : "s"}`}
-                tone={autoCommandCenter.metrics.critical > 0 ? "alert" : autoCommandCenter.metrics.warning > 0 ? "warning" : "good"}
-                statusLabel="Simple Read"
-                actionLabel="See Supporting Details"
-                onAction={scrollToAutoTechnicalAnalysis}
-              />
-              <FriendlyActionTile
-                kicker="Best First Step"
-                title={plainLanguageGuide.cards[1]?.value || "Open the review workspace"}
-                detail={plainLanguageGuide.cards[1]?.detail || topAutoReviewItem?.summary || "Take the next auto step."}
-                metric={`${autoReviewQueueItems.length} review item${autoReviewQueueItems.length === 1 ? "" : "s"}`}
-                tone="warning"
-                statusLabel="Guided Focus"
-                actionLabel="Open Review Workspace"
-                onAction={() => onNavigate(autoReviewWorkspaceRoute)}
-              />
-              <FriendlyActionTile
-                kicker="Evidence Support"
-                title={plainLanguageGuide.cards[2]?.value || "Confidence is still forming"}
-                detail={plainLanguageGuide.cards[2]?.detail || "The read strengthens as declarations and evidence become more visible."}
-                metric={`${bundle?.autoSnapshots?.length || 0} snapshot${bundle?.autoSnapshots?.length === 1 ? "" : "s"}`}
-                tone={bundle?.autoDocuments?.length ? "good" : "warning"}
-                statusLabel={bundle?.autoDocuments?.length ? "Well Supported" : "Missing Information"}
-                actionLabel="Upload Files"
-                onAction={() => fileInputRef.current?.click()}
-              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>Insurance</div>
+                  <div style={{ fontSize: "24px", fontWeight: 900, lineHeight: "1.2" }}>{autoPolicy.policy_name || linkedAsset?.asset_name || "Auto Policy Detail"}</div>
+                  <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{plainLanguageGuide.summary}</div>
+                </div>
+                <div style={{ padding: "16px 20px", borderRadius: "18px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", gap: "4px", textAlign: "center", minWidth: "100px", flexShrink: 0 }}>
+                  <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#93c5fd" }}>{Math.min(100, Math.max(0, 42 + (bundle?.autoDocuments?.length || 0) * 8 + (bundle?.autoSnapshots?.length || 0) * 6))}</div>
+                  <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>support</div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+                {autoHeroGlanceItems.map((item) => (
+                  <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                    <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+                    <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px" }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#1d4ed8", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                  Upload Policy Files
+                </button>
+                <button type="button" onClick={() => onNavigate(autoReviewWorkspaceRoute)} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                  Open Review Workspace
+                </button>
+                <button type="button" onClick={() => onNavigate("/insurance/auto")} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                  Back To Auto Hub
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+              {[
+                {
+                  kicker: "Simple Read",
+                  title: plainLanguageGuide.cards[0]?.value || "Read the policy status first",
+                  detail: plainLanguageGuide.cards[0]?.detail || autoCommandCenter.headline,
+                  metric: `${bundle?.autoDocuments?.length || 0} document${bundle?.autoDocuments?.length === 1 ? "" : "s"}`,
+                  tone: autoCommandCenter.metrics.critical > 0 ? "alert" : autoCommandCenter.metrics.warning > 0 ? "warning" : "good",
+                  statusLabel: "Simple Read",
+                  actionLabel: "See Supporting Details",
+                  onAction: scrollToAutoTechnicalAnalysis,
+                },
+                {
+                  kicker: "Best First Step",
+                  title: plainLanguageGuide.cards[1]?.value || "Open the review workspace",
+                  detail: plainLanguageGuide.cards[1]?.detail || topAutoReviewItem?.summary || "Take the next auto step.",
+                  metric: `${autoReviewQueueItems.length} review item${autoReviewQueueItems.length === 1 ? "" : "s"}`,
+                  tone: "warning",
+                  statusLabel: "Guided Focus",
+                  actionLabel: "Open Review Workspace",
+                  onAction: () => onNavigate(autoReviewWorkspaceRoute),
+                },
+                {
+                  kicker: "Evidence Support",
+                  title: plainLanguageGuide.cards[2]?.value || "Confidence is still forming",
+                  detail: plainLanguageGuide.cards[2]?.detail || "The read strengthens as declarations and evidence become more visible.",
+                  metric: `${bundle?.autoSnapshots?.length || 0} snapshot${bundle?.autoSnapshots?.length === 1 ? "" : "s"}`,
+                  tone: bundle?.autoDocuments?.length ? "good" : "warning",
+                  statusLabel: bundle?.autoDocuments?.length ? "Well Supported" : "Missing Information",
+                  actionLabel: "Upload Files",
+                  onAction: () => fileInputRef.current?.click(),
+                },
+              ].map((tile) => (
+                <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+                    <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+                  </div>
+                  <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+                  <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+                  <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+                    {tile.actionLabel}
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -456,11 +482,11 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
             </div>
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={technicalAnalysisRef}>
-            <SectionCard
-              title="Auto Command"
-              subtitle="The strongest auto protection blockers, why they matter, and what to do next on this policy."
-            >
+          <div ref={technicalAnalysisRef} style={{ ...surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" }), marginTop: "24px" }}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Command</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The strongest auto protection blockers, why they matter, and what to do next on this policy.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <AIInsightPanel
                   title="Coverage Command"
@@ -577,11 +603,11 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
                   />
                 )}
               </div>
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
-            <SectionCard title="Auto Policy Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Policy Summary</div>
               <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Policy Name:</strong> {autoPolicy.policy_name || linkedAsset?.asset_name || "Limited visibility"}</div>
                 <div><strong>Policy Type:</strong> {autoPolicyType?.display_name || autoPolicy.auto_policy_type_key}</div>
@@ -591,9 +617,10 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
                 <div><strong>Expiration:</strong> {formatDate(autoPolicy.expiration_date)}</div>
                 <div><strong>Status:</strong> <StatusBadge label={autoPolicy.policy_status || "unknown"} tone={getStatusTone(autoPolicy.policy_status)} /></div>
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Linked Platform Asset Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Platform Asset Summary</div>
               {linkedAsset ? (
                 <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                   <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
@@ -608,11 +635,12 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               ) : (
                 <EmptyState title="No linked household summary" description="This auto policy is not yet connected to a broader household asset summary." />
               )}
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }}>
-            <SectionCard title="Auto Documents">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Documents</div>
               {bundle.autoDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.autoDocuments.map((document) => (
@@ -634,9 +662,10 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               ) : (
                 <EmptyState title="No auto documents yet" description="Auto-specific document records will appear here as uploads are classified and linked." />
               )}
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Auto Document Intake">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Document Intake</div>
               <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
                 <div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); enqueueFiles(event.dataTransfer.files); }} style={{ border: "1px dashed #94a3b8", borderRadius: "16px", padding: "20px", background: "#f8fafc" }}>
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>Drop auto documents here</div>
@@ -695,11 +724,12 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
                   <EmptyState title="No auto files queued" description="Add one or more auto documents to create linked generic and auto-specific document records." />
                 )}
               </div>
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-            <SectionCard title="Auto Snapshots">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Snapshots</div>
               {bundle.autoSnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.autoSnapshots.map((snapshot) => (
@@ -715,9 +745,10 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               ) : (
                 <EmptyState title="No auto snapshots yet" description="Auto snapshots will land here after later auto-policy parsing is added." />
               )}
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Auto Analytics">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Analytics</div>
               {bundle.autoAnalytics.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.autoAnalytics.map((analytics) => (
@@ -733,11 +764,12 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               ) : (
                 <EmptyState title="No auto analytics yet" description="Auto intelligence will appear here after future parsing and review passes are added." />
               )}
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-            <SectionCard title="Linked Portals">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Portals</div>
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {assetBundle.portalLinks.map((link) => {
@@ -756,16 +788,17 @@ export default function AutoPolicyDetailPage({ autoPolicyId, onNavigate }) {
               ) : (
                 <EmptyState title="No linked portals yet" description="Portal continuity records will surface here through the linked platform asset when auto carrier access continuity is mapped." />
               )}
-            </SectionCard>
+            </div>
 
           </div>
 
           {shouldShowDevDiagnostics() ? (
-            <SectionCard title="Auto Debug">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "8px" })}>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Auto Debug</div>
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 auto_policy_id={autoPolicy.id} | asset_id={linkedAsset?.id || "none"} | household_id={autoPolicy.household_id || "none"} | documents={bundle.autoDocuments.length} | snapshots={bundle.autoSnapshots.length} | analytics={bundle.autoAnalytics.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | autoDocumentIds={uploadQueue.map((item) => item.autoDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || "none"}
               </div>
-            </SectionCard>
+            </div>
           ) : null}
         </>
       )}
