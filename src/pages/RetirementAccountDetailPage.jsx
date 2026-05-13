@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AIInsightPanel from "../components/shared/AIInsightPanel";
 import EmptyState from "../components/shared/EmptyState";
-import {
-  CalmEmptyState,
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import RetirementActionFeedCard from "../components/retirement/RetirementActionFeedCard";
 import RetirementAIChatBox from "../components/retirement/RetirementAIChatBox";
@@ -120,6 +114,24 @@ function formatFlagLabel(value) {
   return String(value || "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
 }
 
 export default function RetirementAccountDetailPage({ retirementAccountId, onNavigate }) {
@@ -787,45 +799,77 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   return (
     <div style={{ display: "grid", gap: "24px" }}>
       {loading ? (
-        <CalmEmptyState
-          title="Loading retirement detail"
-          description="VaultedShield is gathering the account, document, and position records into one readable retirement view."
-          icon="Retirement"
-          tone="info"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8" }}>Loading retirement account...</div>
       ) : !retirementAccount ? (
-        <CalmEmptyState
-          title="Retirement account not found"
-          description={loadError || "This retirement detail page could not load a matching account record."}
-          icon="Missing"
-          tone="warning"
-        />
+        <div style={{ padding: "22px 24px", borderRadius: "20px", background: "#fef3c7", border: "1px solid #fde68a", display: "grid", gap: "12px" }}>
+          <div style={{ fontWeight: 700, color: "#92400e" }}>Retirement account not found</div>
+          <div style={{ color: "#92400e" }}>{loadError || "This retirement detail page could not load a matching account record."}</div>
+          <button type="button" onClick={() => onNavigate?.("/retirement")} style={{ padding: "10px 14px", borderRadius: "10px", border: "1px solid #fde68a", background: "#ffffff", fontWeight: 700, cursor: "pointer", width: "fit-content" }}>Back To Retirement</button>
+        </div>
       ) : (
         <>
-          <FriendlyPageHero
-            eyebrow={retirementPlainEnglishGuide.eyebrow}
-            sectionTitle={retirementAccount?.plan_name || linkedAsset?.asset_name || "Retirement Account Detail"}
-            headline={retirementPlainEnglishGuide.title}
-            summary={retirementPlainEnglishGuide.summary}
-            transition={retirementPlainEnglishGuide.transition}
-            actions={[
-              { label: "Back To Retirement Hub", onClick: () => onNavigate?.("/retirement") },
-              topRetirementReviewItem
-                ? {
-                    label: "Open Review Workspace",
-                    onClick: () => onNavigate?.(retirementReviewWorkspaceRoute),
-                  }
-                : null,
-            ].filter(Boolean)}
-            score={retirementHeroScore}
-            scoreTone={retirementHeroTone}
-            scoreSubtitle="confidence"
-            scoreIconLabel="retirement"
-            asideHeadline={retirementActionTiles[0]?.title || "Account read still forming"}
-            asideSummary={retirementActionTiles[0]?.detail || retirementPlainEnglishGuide.summary}
-            glanceEyebrow="At A Glance"
-            glanceItems={retirementHeroGlanceItems}
-          />
+          <div
+            style={{
+              padding: "32px 36px",
+              borderRadius: "24px",
+              background: "linear-gradient(135deg, #0f172a 0%, #4c1d95 100%)",
+              color: "#ffffff",
+              display: "grid",
+              gap: "20px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: "8px" }}>
+                <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+                  Retirement Intelligence
+                </div>
+                <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>{retirementPlainEnglishGuide.title}</div>
+                <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{retirementPlainEnglishGuide.summary}</div>
+              </div>
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderRadius: "18px",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  display: "grid",
+                  gap: "4px",
+                  textAlign: "center",
+                  minWidth: "100px",
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#c4b5fd" }}>{retirementHeroScore}</div>
+                <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>confidence</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+              {retirementHeroGlanceItems.map((item) => (
+                <div key={item.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                  <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "4px", lineHeight: "1.3" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/retirement")}
+                style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#6d28d9", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+              >
+                Back To Retirement Hub
+              </button>
+              {topRetirementReviewItem ? (
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.(retirementReviewWorkspaceRoute)}
+                  style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+                >
+                  Open Review Workspace
+                </button>
+              ) : null}
+            </div>
+          </div>
 
           <div style={{ marginTop: "4px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {derivedFlags.map((flag) => (
@@ -841,27 +885,35 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             }}
           >
             {retirementActionTiles.map((tile) => (
-              <FriendlyActionTile
+              <div
                 key={tile.key}
-                kicker={tile.kicker}
-                title={tile.title}
-                detail={tile.detail}
-                metric={tile.metric}
-                tone={tile.tone}
-                statusLabel={tile.statusLabel}
-                actionLabel={tile.actionLabel}
-                onAction={() => {
-                  if (tile.actionKey === "next-step") {
-                    if (retirementPageFascia?.primaryAction) {
-                      handleRetirementFasciaAction(retirementPageFascia.primaryAction);
+                style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+                  <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+                </div>
+                <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+                <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+                <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tile.actionKey === "next-step") {
+                      if (retirementPageFascia?.primaryAction) {
+                        handleRetirementFasciaAction(retirementPageFascia.primaryAction);
+                        return;
+                      }
+                      onNavigate?.(retirementReviewWorkspaceRoute);
                       return;
                     }
-                    onNavigate?.(retirementReviewWorkspaceRoute);
-                    return;
-                  }
-                  scrollToRetirementTechnicalAnalysis();
-                }}
-              />
+                    scrollToRetirementTechnicalAnalysis();
+                  }}
+                  style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}
+                >
+                  {tile.actionLabel}
+                </button>
+              </div>
             ))}
           </div>
 
@@ -1042,11 +1094,11 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
             />
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.signals = node; }}>
-            <SectionCard
-              title="Retirement Command"
-              subtitle="The strongest blockers on this account, what they put at risk, and the best next move."
-            >
+          <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.signals = node; }}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Command</div>
+              <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>The strongest blockers on this account, what they put at risk, and the best next move.</div>
+            </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <AIInsightPanel
                   title="Account Command"
@@ -1193,11 +1245,13 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   />
                 )}
               </div>
-            </SectionCard>
-          </div>
+            </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "18px" }}>
-            <SectionCard title="Retirement Account Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Account Summary</div>
+              </div>
               <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                 <div><strong>Plan / Account:</strong> {retirementAccount.plan_name || linkedAsset?.asset_name || "Limited visibility"}</div>
                 <div><strong>Retirement Type:</strong> {retirementType?.display_name || retirementAccount.retirement_type_key}</div>
@@ -1211,9 +1265,12 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                 </div>
                 <div><strong>Account Number:</strong> {retirementAccount.account_number_masked || "Not recorded"}</div>
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Linked Platform Asset Summary">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Platform Asset Summary</div>
+              </div>
               {linkedAsset ? (
                 <div style={{ display: "grid", gap: "10px", color: "#475569", lineHeight: "1.7" }}>
                   <div><strong>Asset Name:</strong> {linkedAsset.asset_name}</div>
@@ -1231,14 +1288,15 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   description="This retirement account is not yet connected to a broader household asset summary."
                 />
               )}
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "18px" }}>
-            <SectionCard
-              title="Retirement Read Signals"
-              subtitle="A practical first-pass read of retirement statement quality, balance visibility, contribution support, and planning readiness."
-            >
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Read Signals</div>
+                <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A practical first-pass read of retirement statement quality, balance visibility, contribution support, and planning readiness.</div>
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -1293,11 +1351,14 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   )}
                 </div>
               </div>
-            </SectionCard>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: "18px" }} ref={(node) => { sectionRefs.current.documents = node; }}>
-            <SectionCard title="Retirement Documents">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Documents</div>
+              </div>
               {bundle.retirementDocuments.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.retirementDocuments.map((document) => (
@@ -1339,9 +1400,12 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   description="Retirement-specific document records will appear here as uploads are classified and linked."
                 />
               )}
-            </SectionCard>
+            </div>
 
-            <SectionCard title="Retirement Document Intake">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Document Intake</div>
+              </div>
               <form onSubmit={handleUploadDocuments} style={{ display: "grid", gap: "12px" }}>
                 <div
                   onDragOver={(event) => event.preventDefault()}
@@ -1478,11 +1542,13 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   />
                 )}
               </div>
-            </SectionCard>
+            </div>
           </div>
 
-          <div style={{ marginTop: "24px" }} ref={(node) => { sectionRefs.current.snapshots = node; }}>
-            <SectionCard title="Retirement Snapshots">
+          <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.snapshots = node; }}>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Snapshots</div>
+            </div>
               {bundle.retirementSnapshots.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {bundle.retirementSnapshots.map((snapshot) => (
@@ -1524,12 +1590,13 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   description="Parsed retirement snapshots will land here after a retirement document is analyzed."
                 />
               )}
-            </SectionCard>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-            <div ref={(node) => { sectionRefs.current.analytics = node; }}>
-            <SectionCard title="Retirement Analytics">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.analytics = node; }}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Analytics</div>
+              </div>
               {bundle.retirementAnalytics.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {latestAnalytics?.normalized_intelligence?.summary?.account_summary ? (
@@ -1578,11 +1645,12 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   />
                 </div>
               )}
-            </SectionCard>
             </div>
 
-            <div ref={(node) => { sectionRefs.current.positions = node; }}>
-            <SectionCard title="Retirement Positions">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })} ref={(node) => { sectionRefs.current.positions = node; }}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Positions</div>
+              </div>
               {bundle.retirementPositions.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   <div style={{ padding: "14px", borderRadius: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.7" }}>
@@ -1629,12 +1697,14 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   />
                 </div>
               )}
-            </SectionCard>
             </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-            <SectionCard title="Linked Portals">
+            <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Linked Portals</div>
+              </div>
               {assetBundle?.portalLinks?.length > 0 ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   {assetBundle.portalLinks.map((link) => {
@@ -1660,12 +1730,15 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   description="Portal continuity records will surface here through the linked platform asset when access continuity is mapped."
                 />
               )}
-            </SectionCard>
+            </div>
 
           </div>
 
           {shouldShowDevDiagnostics() ? (
-            <SectionCard title="Retirement Debug">
+            <div style={surfaceCard({ marginTop: "24px", padding: "22px 24px", display: "grid", gap: "14px" })}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Debug</div>
+              </div>
               <div style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.7" }}>
                 retirement_account_id={retirementAccount.id} | asset_id={linkedAsset?.id || "none"} | household_id={retirementAccount.household_id || "none"} | documents={bundle.retirementDocuments.length} | snapshots={bundle.retirementSnapshots.length} | analytics={bundle.retirementAnalytics.length} | positions={bundle.retirementPositions.length} | uploadAttempts={uploadQueue.length} | assetDocumentIds={uploadQueue.map((item) => item.assetDocumentId).filter(Boolean).join(", ") || "none"} | retirementDocumentIds={uploadQueue.map((item) => item.retirementDocumentId).filter(Boolean).join(", ") || "none"} | storageConfigured={isSupabaseConfigured() ? "yes" : "no"} | error={loadError || uploadError || parseError || "none"}
               </div>
@@ -1685,7 +1758,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
                   {JSON.stringify(parseDebug, null, 2)}
                 </pre>
               ) : null}
-            </SectionCard>
+            </div>
           ) : null}
         </>
       )}
