@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import EmptyState from "../components/shared/EmptyState";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
-import SectionCard from "../components/shared/SectionCard";
 import { analyzeCollegePlanReadiness, summarizeCollegeHousehold } from "../lib/domain/college/collegeIntelligence";
 import { scoreCollegeGoal } from "../lib/domain/college/collegeGoalScore";
 import { loadCollegeGoalState, saveCollegeGoalState } from "../lib/domain/college/collegeGoalStorage";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const DEFAULT_PLAN = {
   childLabel: "Child Plan",
@@ -26,6 +19,24 @@ function formatCurrency(value) {
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "alert") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
 function inputStyle() {
   return {
     width: "100%",
@@ -34,18 +45,18 @@ function inputStyle() {
     border: "1px solid #cbd5e1",
     background: "#ffffff",
     boxSizing: "border-box",
+    fontSize: "14px",
   };
 }
 
-function getStatusTone(status) {
-  if (status === "On Track") return { background: "#dcfce7", color: "#166534" };
-  if (status === "Slightly Behind") return { background: "#fef3c7", color: "#92400e" };
-  if (status === "Behind") return { background: "#ffedd5", color: "#c2410c" };
-  return { background: "#fee2e2", color: "#991b1b" };
+function getScoreTone(score) {
+  if (score >= 80) return "good";
+  if (score >= 60) return "info";
+  if (score >= 45) return "warning";
+  return "alert";
 }
 
 export default function CollegePlanningPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
   const { debug } = usePlatformShellData();
   const storageScope = useMemo(
     () => ({
@@ -116,23 +127,17 @@ export default function CollegePlanningPage({ onNavigate }) {
     if (!hydrated) return;
     const safeKey = String(form.childLabel || activePlanKey || "Child Plan").trim() || "Child Plan";
     const nextPlan = { ...form, childLabel: safeKey };
-    const nextPlans = {
-      ...plans,
-      [safeKey]: nextPlan,
-    };
+    const nextPlans = { ...plans, [safeKey]: nextPlan };
     if (activePlanKey && activePlanKey !== safeKey && nextPlans[activePlanKey]) {
       delete nextPlans[activePlanKey];
     }
     setPlans(nextPlans);
-    if (activePlanKey !== safeKey) {
-      setActivePlanKey(safeKey);
-    }
+    if (activePlanKey !== safeKey) setActivePlanKey(safeKey);
     saveCollegeGoalState(storageScope, {
       plans: nextPlans,
       activePlanKey: safeKey,
       updatedAt: new Date().toISOString(),
     });
-    // We intentionally persist on form change to make this feel like an ongoing plan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, hydrated, storageScope]);
 
@@ -162,379 +167,338 @@ export default function CollegePlanningPage({ onNavigate }) {
 
   const whatChangesThis = useMemo(() => {
     const items = [];
-    if (score.inputs.monthlyContribution < 500) items.push("Increasing monthly contributions improves projected college savings the fastest.");
-    if (score.inputs.collegeStartAge <= score.inputs.currentAge + 8) items.push("A later college start age gives the savings more time to compound.");
+    if (score.inputs.monthlyContribution < 500) items.push("Increasing monthly contributions improves projected savings the fastest.");
+    if (score.inputs.collegeStartAge <= score.inputs.currentAge + 8) items.push("A later college start age gives savings more time to compound.");
     if (score.inputs.targetSavings > 150000) items.push("A lower target savings goal reduces the amount the plan needs to fully fund.");
     if (score.inputs.currentSavings < score.inputs.targetSavings * 0.25) items.push("Adding to current savings now can meaningfully improve the plan's starting position.");
     return items.slice(0, 4);
   }, [score]);
-  const collegeHeroTone =
-    score.readinessScore >= 80 ? "good" : score.readinessScore >= 60 ? "info" : score.readinessScore >= 45 ? "warning" : "alert";
-  const collegeHeroGlanceItems = [
-    { label: "Active Child Plan", value: score.childLabel },
-    { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings) },
-    { label: "Projected Savings", value: formatCurrency(score.projectedSavings) },
-    { label: "Readiness", value: `${score.readinessScore}/100` },
-  ];
+
+  const scoreTone = getScoreTone(score.readinessScore);
 
   return (
-    <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="College Planning"
-        sectionTitle="Kids' College Planning Tracker"
-        headline="Make college planning easy to understand first, then adjust the assumptions only when they matter."
-        summary={collegeRead.headline}
-        transition="This top layer should answer whether the plan looks on track, what changes it most, and where to go next. The assumptions and detailed projection stay below."
-        actions={[
-          {
-            label: "Back To Guidance",
-            onClick: () => onNavigate?.("/guidance"),
-          },
-          {
-            label: "Edit College Goal",
-            onClick: () => document.querySelector('[data-college-goal="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
-            kind: "primary",
-          },
-        ]}
-        score={score.readinessScore}
-        scoreTone={collegeHeroTone}
-        scoreSubtitle="readiness score"
-        scoreIconLabel="college"
-        asideHeadline={collegeRead.planStatus}
-        asideSummary={householdCollegeRead.headline || "This read reflects the currently active child plan and its visible assumptions."}
-        glanceItems={collegeHeroGlanceItems}
-      />
-
+    <div style={{ display: "grid", gap: "28px" }}>
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #78350f 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={score.readinessStatus === "On Track" ? "College plan looks on track" : "College plan needs review"}
-          detail={collegeRead.headline}
-          metric={`${score.readinessScore}/100`}
-          tone={collegeHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="Edit Goal"
-          onAction={() => document.querySelector('[data-college-goal="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title="Adjust the most important savings lever"
-          detail={whatChangesThis[0] || "A small change in contribution pace or time horizon can shift the college picture quickly."}
-          metric={formatCurrency(score.inputs.monthlyContribution)}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="See Readiness"
-          onAction={() => document.querySelector('[data-college-summary="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title="Perfect assumptions can come later"
-          detail="Start with a realistic target and contribution pace. The more detailed optimization can follow once the basic plan is visible."
-          metric={`${planKeys.length} saved`}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="View Assumptions"
-          onAction={() => document.querySelector('[data-college-assumptions="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-      </div>
-
-      <SectionCard
-        data-college-goal="true"
-        title="College Goal"
-        subtitle="Enter a practical savings target for one child at a time. This estimate is designed for planning clarity, not certainty."
-      >
-        <div style={{ display: "grid", gap: "14px" }}>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-            {planKeys.length > 0 ? (
-              <select value={activePlanKey} onChange={handlePlanSelection} style={{ ...inputStyle(), width: isMobile ? "100%" : "280px" }}>
-                {planKeys.map((key) => (
-                  <option key={key} value={key}>
-                    {key}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleCreateNewPlan}
-              style={{
-                padding: "12px 14px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Add Child Plan
-            </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              College Planning
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>
+              {score.readinessStatus === "On Track" ? "College plan looks on track for the target" : "College plan needs a closer look"}
+            </div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "560px" }}>
+              {collegeRead.headline}
+            </div>
           </div>
-
           <div
             style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "repeat(2, minmax(0, 1fr))",
-              gap: "14px 16px",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
             }}
           >
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Child name or label</span>
-              <input value={form.childLabel} onChange={(event) => updateField("childLabel", event.target.value)} style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Child current age</span>
-              <input value={form.currentAge} onChange={(event) => updateField("currentAge", event.target.value)} inputMode="numeric" style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>College start age</span>
-              <input value={form.collegeStartAge} onChange={(event) => updateField("collegeStartAge", event.target.value)} inputMode="numeric" style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Target college savings amount</span>
-              <input value={form.targetSavings} onChange={(event) => updateField("targetSavings", event.target.value)} inputMode="decimal" style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Current college savings</span>
-              <input value={form.currentSavings} onChange={(event) => updateField("currentSavings", event.target.value)} inputMode="decimal" placeholder="Optional if starting from zero" style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Monthly contribution</span>
-              <input value={form.monthlyContribution} onChange={(event) => updateField("monthlyContribution", event.target.value)} inputMode="decimal" style={inputStyle()} />
-            </label>
-            <label style={{ display: "grid", gap: "6px", gridColumn: isMobile ? "auto" : "1 / -1" }}>
-              <span style={{ fontWeight: 700, color: "#0f172a" }}>Expected annual growth rate (%)</span>
-              <input value={form.annualGrowthRate} onChange={(event) => updateField("annualGrowthRate", event.target.value)} inputMode="decimal" style={inputStyle()} />
-            </label>
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#fcd34d" }}>{score.readinessScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>readiness</div>
           </div>
         </div>
-      </SectionCard>
-
-      <SectionCard
-        data-college-summary="true"
-        title="College Readiness Summary"
-        subtitle="A simple first-pass estimate of how the current savings plan compares with the target."
-      >
-        <div style={{ display: "grid", gap: "18px" }}>
-          <div
-            style={{
-              padding: "16px 18px",
-              borderRadius: "16px",
-              background: "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(255,255,255,1) 100%)",
-              border: "1px solid rgba(147, 197, 253, 0.28)",
-              color: "#0f172a",
-              lineHeight: "1.8",
-              fontWeight: 600,
-            }}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {[
+            { label: "Active Plan", value: score.childLabel },
+            { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings) },
+            { label: "Projected Savings", value: formatCurrency(score.projectedSavings) },
+            { label: "Plans Saved", value: planKeys.length },
+          ].map((stat) => (
+            <div key={stat.label} style={{ padding: "12px 14px", borderRadius: "14px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#fde68a", lineHeight: "1.2", wordBreak: "break-word" }}>{stat.value}</div>
+              <div style={{ fontSize: "11px", opacity: 0.6, marginTop: "2px" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => document.querySelector("[data-college-goal]")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#ffffff", color: "#0f172a", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
-            {collegeRead.headline}
-          </div>
+            Edit College Goal
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("/guidance")}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Back to Guidance
+          </button>
+        </div>
+      </div>
 
+      {/* Action Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Plan Status",
+            title: score.readinessStatus === "On Track" ? "College plan looks on track" : "College plan needs review",
+            detail: collegeRead.headline,
+            metric: `${score.readinessScore}/100`,
+            tone: scoreTone,
+            statusLabel: score.readinessStatus,
+            actionLabel: "See Summary",
+            onAction: () => document.querySelector("[data-college-summary]")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Biggest Lever",
+            title: "Adjust the most important savings driver",
+            detail: whatChangesThis[0] || "A small change in contribution pace or time horizon can shift the college picture quickly.",
+            metric: `${formatCurrency(score.inputs.monthlyContribution)}/month`,
+            tone: "warning",
+            statusLabel: "Review",
+            actionLabel: "Edit Goal",
+            onAction: () => document.querySelector("[data-college-goal]")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Household View",
+            title: `${planKeys.length} child plan${planKeys.length === 1 ? "" : "s"} saved`,
+            detail: householdCollegeRead.headline || "Start with a realistic target. Optimization can follow once the basic plan is visible.",
+            metric: `${planKeys.length} saved`,
+            tone: "info",
+            statusLabel: "Building",
+            actionLabel: "Add Child Plan",
+            onAction: handleCreateNewPlan,
+          },
+        ].map((tile) => (
           <div
+            key={tile.kicker}
             style={{
+              padding: "20px",
+              borderRadius: "18px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
               display: "grid",
-              gridTemplateColumns: isTablet ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))",
               gap: "12px",
+              alignContent: "start",
             }}
           >
-            {[
-              { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings) },
-              { label: "Monthly Contribution", value: formatCurrency(score.inputs.monthlyContribution) },
-              { label: "Target Goal", value: formatCurrency(score.inputs.targetSavings) },
-              { label: "Projected Savings", value: formatCurrency(score.projectedSavings) },
-              {
-                label: score.fundingDifference >= 0 ? "Projected Surplus" : "Funding Gap",
-                value: formatCurrency(Math.abs(score.fundingDifference)),
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: "14px",
-                  background: "#f8fafc",
-                  border: "1px solid rgba(148, 163, 184, 0.18)",
-                  display: "grid",
-                  gap: "6px",
-                }}
-              >
-                <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
-                <div style={{ fontWeight: 800, fontSize: "20px", color: "#0f172a" }}>{item.value}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* College Goal Form */}
+      <div data-college-goal style={surfaceCard({ padding: "26px 28px", display: "grid", gap: "20px" })}>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 800, color: "#78350f", textTransform: "uppercase", letterSpacing: "0.1em" }}>College Goal</div>
+          <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>Plan assumptions for {score.childLabel}</div>
+          <div style={{ color: "#64748b", lineHeight: "1.6" }}>Enter a practical savings target for one child at a time. This estimate is designed for planning clarity, not certainty.</div>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          {planKeys.length > 0 ? (
+            <select
+              value={activePlanKey}
+              onChange={handlePlanSelection}
+              style={{ ...inputStyle(), width: "auto", minWidth: "200px", flex: "1 1 200px", maxWidth: "320px" }}
+            >
+              {planKeys.map((key) => (
+                <option key={key} value={key}>{key}</option>
+              ))}
+            </select>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleCreateNewPlan}
+            style={{ padding: "12px 16px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Add Child Plan
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px 16px" }}>
+          {[
+            { field: "childLabel", label: "Child name or label", type: "text", placeholder: "" },
+            { field: "currentAge", label: "Child current age", type: "text", inputMode: "numeric" },
+            { field: "collegeStartAge", label: "College start age", type: "text", inputMode: "numeric" },
+            { field: "targetSavings", label: "Target college savings amount", type: "text", inputMode: "decimal" },
+            { field: "currentSavings", label: "Current college savings", type: "text", inputMode: "decimal", placeholder: "Optional if starting from zero" },
+            { field: "monthlyContribution", label: "Monthly contribution", type: "text", inputMode: "decimal" },
+          ].map(({ field, label, type, inputMode, placeholder }) => (
+            <label key={field} style={{ display: "grid", gap: "6px" }}>
+              <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>{label}</span>
+              <input
+                value={form[field]}
+                onChange={(event) => updateField(field, event.target.value)}
+                type={type}
+                inputMode={inputMode}
+                placeholder={placeholder || ""}
+                style={inputStyle()}
+              />
+            </label>
+          ))}
+          <label style={{ display: "grid", gap: "6px", gridColumn: "1 / -1" }}>
+            <span style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>Expected annual growth rate (%)</span>
+            <input
+              value={form.annualGrowthRate}
+              onChange={(event) => updateField("annualGrowthRate", event.target.value)}
+              inputMode="decimal"
+              style={{ ...inputStyle(), maxWidth: "240px" }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* College Readiness Summary */}
+      <div data-college-summary style={surfaceCard({ padding: "26px 28px", display: "grid", gap: "20px" })}>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 800, color: "#78350f", textTransform: "uppercase", letterSpacing: "0.1em" }}>College Readiness Summary</div>
+          <div style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>How does the current plan compare to the target?</div>
+        </div>
+
+        <div style={{ padding: "16px 18px", borderRadius: "16px", background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)", border: "1px solid #fde68a", color: "#0f172a", lineHeight: "1.8", fontWeight: 600 }}>
+          {collegeRead.headline}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+          {[
+            { label: "Current Savings", value: formatCurrency(score.inputs.currentSavings) },
+            { label: "Monthly Contribution", value: formatCurrency(score.inputs.monthlyContribution) },
+            { label: "Target Goal", value: formatCurrency(score.inputs.targetSavings) },
+            { label: "Projected Savings", value: formatCurrency(score.projectedSavings) },
+            {
+              label: score.fundingDifference >= 0 ? "Projected Surplus" : "Funding Gap",
+              value: formatCurrency(Math.abs(score.fundingDifference)),
+            },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+              <div style={{ fontWeight: 800, fontSize: "20px", color: "#0f172a" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ ...pillStyle(scoreTone), padding: "6px 12px", borderRadius: "999px", fontWeight: 800, fontSize: "13px" }}>
+            {score.readinessStatus}
+          </div>
+          <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{score.readinessScore}/100</div>
+          <div style={{ color: "#64748b" }}>Projected by age {score.inputs.collegeStartAge}</div>
+        </div>
+
+        {score.validationMessages.length > 0 ? (
+          <div style={{ padding: "14px 16px", borderRadius: "14px", background: "#fff7ed", border: "1px solid #fde68a", color: "#92400e", display: "grid", gap: "8px" }}>
+            <div style={{ fontWeight: 700 }}>Planning guardrails</div>
+            <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "6px" }}>
+              {score.validationMessages.map((item) => (
+                <li key={item} style={{ lineHeight: "1.6", fontSize: "14px" }}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", lineHeight: "1.8", fontSize: "14px" }}>
+          {score.explanation}
+        </div>
+
+        <div data-college-assumptions style={{ padding: "14px 16px", borderRadius: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "8px" }}>
+          <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>Assumptions Used</div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {score.assumptionLines.map((item) => (
+              <div key={item} style={{ padding: "5px 10px", borderRadius: "999px", background: "#ffffff", border: "1px solid #e2e8f0", color: "#475569", fontSize: "12px" }}>
+                {item}
               </div>
             ))}
           </div>
-
-          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-            <div
-              style={{
-                padding: "8px 12px",
-                borderRadius: "999px",
-                background: getStatusTone(score.readinessStatus).background,
-                color: getStatusTone(score.readinessStatus).color,
-                fontWeight: 800,
-                fontSize: "13px",
-              }}
-            >
-              {score.readinessStatus}
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a" }}>{score.readinessScore}/100</div>
-            <div style={{ color: "#64748b" }}>
-              Projected by age {score.inputs.collegeStartAge}
-            </div>
-            <div style={{ color: "#64748b" }}>
-              Plan read: {collegeRead.planStatus} ({Math.round((collegeRead.confidence || 0) * 100)}% confidence)
-            </div>
-          </div>
-
-          {score.validationMessages.length > 0 ? (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: "14px",
-                background: "#fff7ed",
-                border: "1px solid rgba(251, 191, 36, 0.35)",
-                color: "#92400e",
-                display: "grid",
-                gap: "8px",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>Planning guardrails</div>
-              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "6px" }}>
-                {score.validationMessages.map((item) => (
-                  <li key={item} style={{ lineHeight: "1.6" }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              padding: "16px 18px",
-              borderRadius: "16px",
-              background: "#ffffff",
-              border: "1px solid rgba(148, 163, 184, 0.18)",
-              color: "#475569",
-              lineHeight: "1.8",
-            }}
-          >
-            {score.explanation}
-          </div>
-
-          <div
-            data-college-assumptions="true"
-            style={{
-              padding: "14px 16px",
-              borderRadius: "14px",
-              background: "#f8fafc",
-              border: "1px solid rgba(148, 163, 184, 0.18)",
-              display: "grid",
-              gap: "8px",
-            }}
-          >
-            <div style={{ fontWeight: 700, color: "#0f172a" }}>Assumptions Used</div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              {score.assumptionLines.map((item) => (
-                <div
-                  key={item}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: "999px",
-                    background: "#ffffff",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    color: "#475569",
-                    fontSize: "13px",
-                  }}
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {collegeRead.notes.length > 0 ? (
-            <div
-              style={{
-                padding: "16px 18px",
-                borderRadius: "16px",
-                background: "#f8fafc",
-                border: "1px solid rgba(148, 163, 184, 0.18)",
-                display: "grid",
-                gap: "10px",
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "#0f172a" }}>Plan Read Notes</div>
-              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569" }}>
-                {collegeRead.notes.map((item) => (
-                  <li key={item} style={{ lineHeight: "1.7" }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {whatChangesThis.length > 0 ? (
-            <div
-              style={{
-                padding: "16px 18px",
-                borderRadius: "16px",
-                background: "#f8fafc",
-                border: "1px solid rgba(148, 163, 184, 0.18)",
-                display: "grid",
-                gap: "10px",
-              }}
-            >
-              <div style={{ fontWeight: 700, color: "#0f172a" }}>What Changes This Result?</div>
-              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569" }}>
-                {whatChangesThis.map((item) => (
-                  <li key={item} style={{ lineHeight: "1.7" }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </div>
-      </SectionCard>
 
-      <SectionCard title="College Planning Notes" subtitle="Starter family-planning context for this v1 tracker.">
-        <div style={{ display: "grid", gap: "14px" }}>
-          <div
-            style={{
-              padding: "16px 18px",
-              borderRadius: "16px",
-              background: "#f8fafc",
-              border: "1px solid rgba(148, 163, 184, 0.18)",
-              display: "grid",
-              gap: "8px",
-            }}
-          >
-            <div style={{ fontWeight: 700, color: "#0f172a" }}>Household College Read</div>
-            <div style={{ color: "#475569", lineHeight: "1.7" }}>{householdCollegeRead.headline}</div>
-            {householdCollegeRead.notes.length > 0 ? (
-              <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "6px", color: "#64748b" }}>
-                {householdCollegeRead.notes.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : null}
+        {collegeRead.notes.length > 0 ? (
+          <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+            <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>Plan Read Notes</div>
+            <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569", fontSize: "14px" }}>
+              {collegeRead.notes.map((item) => <li key={item} style={{ lineHeight: "1.7" }}>{item}</li>)}
+            </ul>
           </div>
-          <div style={{ color: "#475569", lineHeight: "1.7" }}>
-            This planner is intentionally simple. It does not yet model tuition inflation, scholarships, grants, tax treatment, or multiple education phases. It is meant to help a household see whether the current savings pace feels close to the stated target.
+        ) : null}
+
+        {whatChangesThis.length > 0 ? (
+          <div style={{ padding: "16px 18px", borderRadius: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+            <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px" }}>What Changes This Result?</div>
+            <ul style={{ margin: "0 0 0 18px", padding: 0, display: "grid", gap: "8px", color: "#475569", fontSize: "14px" }}>
+              {whatChangesThis.map((item) => <li key={item} style={{ lineHeight: "1.7" }}>{item}</li>)}
+            </ul>
           </div>
-          <EmptyState
-            title="Household summary card deferred"
-            description="This v1 includes light multi-child support on the page itself through saved child labels. A household-level dashboard card can be added next once we decide where the shared planning surface should live."
-          />
+        ) : null}
+      </div>
+
+      {/* Household Notes */}
+      {householdCollegeRead.headline || householdCollegeRead.notes?.length > 0 ? (
+        <div style={surfaceCard({ padding: "26px 28px", display: "grid", gap: "16px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Household College Picture</div>
+          <div style={{ color: "#475569", lineHeight: "1.7" }}>{householdCollegeRead.headline}</div>
+          {householdCollegeRead.notes?.length > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "#64748b", fontSize: "14px" }}>
+              {householdCollegeRead.notes.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          ) : null}
+          <div style={{ fontSize: "13px", color: "#94a3b8", lineHeight: "1.7" }}>
+            This planner does not model tuition inflation, scholarships, grants, or tax treatment. It shows whether the current savings pace feels close to the stated target.
+          </div>
         </div>
-      </SectionCard>
+      ) : null}
+
+      {/* Why This Matters */}
+      <div
+        style={{
+          padding: "24px 26px",
+          borderRadius: "20px",
+          background: "linear-gradient(135deg, #0f172a 0%, #78350f 100%)",
+          color: "#ffffff",
+          display: "grid",
+          gap: "16px",
+        }}
+      >
+        <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.6 }}>
+          Why College Planning Matters Now
+        </div>
+        <div style={{ fontSize: "20px", fontWeight: 800, lineHeight: "1.3" }}>
+          The best time to start a college savings plan was 10 years ago. The second best is now.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+          {[
+            { stat: "$137K", label: "average 4-year college cost at a public university in 2024 — up 15% from five years ago" },
+            { stat: "10 yrs", label: "of consistent monthly contributions doubles a typical family's starting savings position through compounding" },
+            { stat: "67%", label: "of parents report college savings as their biggest missed financial planning gap" },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "16px 18px", borderRadius: "16px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "28px", fontWeight: 800, color: "#fcd34d", lineHeight: 1 }}>{item.stat}</div>
+              <div style={{ marginTop: "8px", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.6" }}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
