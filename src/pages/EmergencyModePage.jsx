@@ -4,18 +4,30 @@ import ContactCard from "../components/shared/ContactCard";
 import DocumentTable from "../components/shared/DocumentTable";
 import EmptyState from "../components/shared/EmptyState";
 import ExportModal from "../components/shared/ExportModal";
-import {
-  FriendlyActionTile,
-  FriendlyPageHero,
-} from "../components/shared/FriendlyIntelligenceUI";
 import NotesPanel from "../components/shared/NotesPanel";
-import SectionCard from "../components/shared/SectionCard";
 import StatusBadge from "../components/shared/StatusBadge";
 import { buildHouseholdIntelligence } from "../lib/domain/platformIntelligence";
 import { createAssetTask, getEmergencyModeBundle, updateHousehold } from "../lib/supabase/platformData";
 import { usePlatformHousehold } from "../lib/supabase/usePlatformHousehold";
 import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function formatDate(value) {
   if (!value) return "Unknown";
@@ -29,7 +41,7 @@ function formatDate(value) {
 }
 
 export default function EmergencyModePage() {
-  const { isTablet } = useResponsiveLayout();
+  const isTablet = false;
   const householdState = usePlatformHousehold();
   const [bundle, setBundle] = useState({
     household: null,
@@ -206,77 +218,125 @@ export default function EmergencyModePage() {
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Emergency Mode"
-        sectionTitle="Emergency Continuity Mode"
-        headline="Make the household handoff readable in an urgent moment before anyone has to dig through the full record."
-        summary={intelligence.emergency_readiness.notes[0] || "This view combines contacts, key assets, documents, portal continuity, and open work into one emergency read."}
-        transition="The top layer should answer whether the household is usable in a real handoff, what is missing, and where to focus first. The deeper emergency details stay below."
-        actions={[
-          {
-            label: "Review Emergency Notes",
-            onClick: () => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
-            kind: "primary",
-          },
-          {
-            label: "See Key Contacts",
-            onClick: () => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
-          },
-        ]}
-        score={emergencyHeroScore}
-        scoreTone={emergencyHeroTone}
-        scoreSubtitle="continuity score"
-        scoreIconLabel="urgent"
-        asideHeadline={intelligence.emergency_readiness.score_label}
-        asideSummary={intelligence.portal_continuity.notes[0] || "Portal continuity and document readiness are both part of the emergency read."}
-        glanceItems={emergencyHeroGlanceItems}
-      />
-
+      {/* Hero */}
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #881337 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Simple Read"
-          title={
-            intelligence.emergency_readiness.score_label === "Strong"
-              ? "Emergency handoff looks usable"
-              : "Emergency handoff still needs support"
-          }
-          detail={intelligence.emergency_readiness.notes[0] || "This read is based on the current household contacts, records, and open continuity work."}
-          metric={intelligence.emergency_readiness.score_label}
-          tone={emergencyHeroTone}
-          statusLabel="Simple Read"
-          actionLabel="See Contacts"
-          onAction={() => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="Best First Step"
-          title="Clear the biggest missing continuity blocker"
-          detail={intelligence.missing_item_prompts[0] || "Use the key contacts, documents, and portal gaps below to strengthen the emergency picture."}
-          metric={`${bundle.openTasks.length} open`}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="Open Notes"
-          onAction={() => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What Can Wait"
-          title="Deeper review can follow after the first handoff"
-          detail="The most important goal is making the household understandable in a stressful moment. Additional optimization can come afterward."
-          metric={`${bundle.portalReadiness.portalCount} portals`}
-          tone="info"
-          statusLabel="Building"
-          actionLabel="See Documents"
-          onAction={() => document.querySelector('[data-emergency-documents="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>
+              Emergency Mode
+            </div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>Emergency Continuity Mode</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>
+              {intelligence.emergency_readiness.notes[0] || "This view combines contacts, key assets, documents, portal continuity, and open work into one emergency read."}
+            </div>
+          </div>
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "grid",
+              gap: "4px",
+              textAlign: "center",
+              minWidth: "100px",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#fca5a5" }}>{emergencyHeroScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>continuity</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {emergencyHeroGlanceItems.map((item) => (
+            <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#be123c", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            Review Emergency Notes
+          </button>
+          <button
+            type="button"
+            onClick={() => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
+          >
+            See Key Contacts
+          </button>
+        </div>
+      </div>
+
+      {/* Action Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Simple Read",
+            title: intelligence.emergency_readiness.score_label === "Strong" ? "Emergency handoff looks usable" : "Emergency handoff still needs support",
+            detail: intelligence.emergency_readiness.notes[0] || "This read is based on the current household contacts, records, and open continuity work.",
+            metric: intelligence.emergency_readiness.score_label,
+            tone: emergencyHeroTone,
+            statusLabel: "Simple Read",
+            actionLabel: "See Contacts",
+            onAction: () => document.querySelector('[data-emergency-contacts="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "Best First Step",
+            title: "Clear the biggest missing continuity blocker",
+            detail: intelligence.missing_item_prompts[0] || "Use the key contacts, documents, and portal gaps below to strengthen the emergency picture.",
+            metric: `${bundle.openTasks.length} open`,
+            tone: "warning",
+            statusLabel: "Guided Focus",
+            actionLabel: "Open Notes",
+            onAction: () => document.querySelector('[data-emergency-notes="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "What Can Wait",
+            title: "Deeper review can follow after the first handoff",
+            detail: "The most important goal is making the household understandable in a stressful moment. Additional optimization can come afterward.",
+            metric: `${bundle.portalReadiness.portalCount} portals`,
+            tone: "info",
+            statusLabel: "Building",
+            actionLabel: "See Documents",
+            onAction: () => document.querySelector('[data-emergency-documents="true"]')?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+        ].map((tile) => (
+          <div
+            key={tile.kicker}
+            style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: summaryRailLayout, gap: "18px" }}>
-        <SectionCard title="Emergency Readiness Summary">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Emergency Readiness Summary</div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
             <StatusBadge
               label={intelligence.emergency_readiness.score_label}
@@ -292,7 +352,7 @@ export default function EmergencyModePage() {
               Readiness is based on contacts, assets, documents, alerts, open tasks, and portal continuity visibility.
             </div>
           </div>
-          <div style={{ marginTop: "16px", display: "grid", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "10px" }}>
             {intelligence.emergency_readiness.notes.map((reason) => (
               <div key={reason} style={{ color: "#475569", lineHeight: "1.6" }}>{reason}</div>
             ))}
@@ -300,9 +360,10 @@ export default function EmergencyModePage() {
               {intelligence.portal_continuity.notes[0] || "Portal continuity notes are not yet available."}
             </div>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Missing Item Prompts">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Missing Item Prompts</div>
           {intelligence.missing_item_prompts.length > 0 ? (
             <NotesPanel notes={intelligence.missing_item_prompts} />
           ) : (
@@ -311,19 +372,21 @@ export default function EmergencyModePage() {
               description="Current emergency continuity inputs are reasonably populated for a first-pass household view."
             />
           )}
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
-        <SectionCard title="Document Completeness">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Document Completeness</div>
           <AIInsightPanel
             title={intelligence.document_completeness.score_label}
             summary={intelligence.document_completeness.notes[0] || "Document completeness notes are not yet available."}
             bullets={intelligence.document_completeness.notes.slice(1, 4)}
           />
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Portal Continuity">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Portal Continuity</div>
           <AIInsightPanel
             title={intelligence.portal_continuity.score_label}
             summary={intelligence.portal_continuity.notes[0] || "Portal continuity notes are not yet available."}
@@ -333,11 +396,12 @@ export default function EmergencyModePage() {
               `Portals missing recovery hints: ${intelligence.portal_continuity.missing_recovery_count}`,
             ]}
           />
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: dualLayout, gap: "18px" }}>
-        <SectionCard data-emergency-contacts="true" title="Key Contacts">
+        <div data-emergency-contacts="true" style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Key Contacts</div>
           {prioritizedContacts.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {prioritizedContacts.slice(0, 8).map((contact) => (
@@ -362,9 +426,10 @@ export default function EmergencyModePage() {
               description="Add household or professional contacts to improve continuity readiness."
             />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Key Assets">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Key Assets</div>
           {keyAssets.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {keyAssets.map((asset) => (
@@ -386,11 +451,12 @@ export default function EmergencyModePage() {
               description="Insurance, banking, retirement, estate, or property assets will strengthen emergency continuity visibility."
             />
           )}
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: documentRailLayout, gap: "18px" }}>
-        <SectionCard data-emergency-documents="true" title="Key Documents">
+        <div data-emergency-documents="true" style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Key Documents</div>
           {documentRows.length > 0 ? (
             <DocumentTable rows={documentRows} />
           ) : (
@@ -399,9 +465,10 @@ export default function EmergencyModePage() {
               description="Generic household documents will appear here as platform records are added. Specialized life-policy documents remain in the deep insurance workflow."
             />
           )}
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Open Alerts and Tasks">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Open Alerts and Tasks</div>
           {bundle.openAlerts.length > 0 || bundle.openTasks.length > 0 ? (
             <div style={{ display: "grid", gap: "12px" }}>
               {bundle.openAlerts.map((alert) => (
@@ -423,11 +490,12 @@ export default function EmergencyModePage() {
               description="This household currently has no open platform alerts or emergency-related tasks."
             />
           )}
-        </SectionCard>
+        </div>
       </div>
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: notesRailLayout, gap: "18px" }}>
-        <SectionCard data-emergency-notes="true" title="Emergency Notes">
+        <div data-emergency-notes="true" style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Emergency Notes</div>
           <div style={{ display: "grid", gap: "12px" }}>
             <textarea
               value={notes}
@@ -437,6 +505,7 @@ export default function EmergencyModePage() {
               style={{ padding: "12px", borderRadius: "10px", border: "1px solid #cbd5e1", resize: "vertical" }}
             />
             <button
+              type="button"
               onClick={handleSaveNotes}
               disabled={!bundle.household?.id}
               style={{ padding: "12px 16px", borderRadius: "10px", border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 700 }}
@@ -445,9 +514,10 @@ export default function EmergencyModePage() {
             </button>
             {saveError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{saveError}</div> : null}
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Emergency Follow-Up Task">
+        <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Emergency Follow-Up Task</div>
           <form onSubmit={handleCreateEmergencyTask} style={{ display: "grid", gap: "12px" }}>
             <input
               value={taskTitle}
@@ -466,7 +536,7 @@ export default function EmergencyModePage() {
           <div style={{ marginTop: "18px" }}>
             <ExportModal />
           </div>
-        </SectionCard>
+        </div>
       </div>
 
       {shouldShowDevDiagnostics() ? (
