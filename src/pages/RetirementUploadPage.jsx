@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "../components/shared/EmptyState";
-import SectionCard from "../components/shared/SectionCard";
-import { FriendlyActionTile, FriendlyPageHero } from "../components/shared/FriendlyIntelligenceUI";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 import { extractRetirementSummary } from "../lib/domain/retirement/retirementExtraction";
 import { analyzeRetirementReadiness } from "../lib/domain/retirement/retirementIntelligence";
 import { scoreRetirementGoal } from "../lib/domain/retirement/retirementGoalScore";
 import { loadRetirementGoalSnapshot, saveRetirementGoalSnapshot } from "../lib/domain/retirement/retirementGoalStorage";
 import { extractPdfTextSafe } from "../utils/pdf/safePdfExtraction";
+
+function pillStyle(tone = "neutral") {
+  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
+  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
+}
+
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "Not detected";
@@ -86,7 +101,8 @@ const DEFAULT_GOAL_FORM = {
 };
 
 export default function RetirementUploadPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const { debug } = usePlatformShellData();
   const uploadSectionRef = useRef(null);
   const goalSectionRef = useRef(null);
@@ -242,86 +258,106 @@ export default function RetirementUploadPage({ onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      <FriendlyPageHero
-        eyebrow="Retirement"
-        sectionTitle="Retirement Intake"
-        headline={retirementUploadHeadline}
-        summary={retirementUploadSummary}
-        transition="Start with the PDF intake and simple planning target first. The extracted values, assumptions, and deeper retirement math remain available underneath when you want them."
-        actions={[
-          {
-            label: "Add Retirement PDFs",
-            onClick: () => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-            kind: "primary",
-          },
-          {
-            label: "Adjust Planning Target",
-            onClick: () => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-          },
-          {
-            label: "Back To Retirement Hub",
-            onClick: () => onNavigate?.("/retirement"),
-          },
-        ]}
-        score={readiness.readinessScore}
-        scoreTone={readinessTone}
-        scoreSubtitle="readiness"
-        scoreIconLabel="retirement"
-        asideHeadline={readiness.readinessStatus}
-        asideSummary={readiness.explanation}
-        glanceEyebrow="At A Glance"
-        glanceItems={[
-          { label: "PDFs processed", value: results.length },
-          { label: "Successful reads", value: successful.length },
-          { label: "Current assets", value: extractedCurrentAssets > 0 ? formatCurrency(extractedCurrentAssets) : "Not detected" },
-          { label: "Latest statement", value: latestStatement },
-        ]}
-      />
-
       <div
         style={{
+          padding: "32px 36px",
+          borderRadius: "24px",
+          background: "linear-gradient(135deg, #0f172a 0%, #7c3aed 100%)",
+          color: "#ffffff",
           display: "grid",
-          gridTemplateColumns: isTablet ? "1fr" : "repeat(3, minmax(0, 1fr))",
-          gap: "14px",
+          gap: "20px",
         }}
       >
-        <FriendlyActionTile
-          kicker="Start Here"
-          title={successful.length > 0 ? "Add more statements if you have them" : "Upload the first retirement statements"}
-          detail="Use exported 401(k), IRA, pension, or brokerage retirement PDFs. Even a small set is enough to start a useful first read."
-          metric={`${results.length} file${results.length === 1 ? "" : "s"}`}
-          tone={successful.length > 0 ? "good" : "info"}
-          statusLabel="Simple Read"
-          actionLabel="Open Intake"
-          onAction={() => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What To Adjust"
-          title="Set the planning target in plain language"
-          detail="If the extracted values are incomplete, you can still enter your retirement age, income target, and contribution pace manually."
-          metric={`${goalForm.retirementAge || "65"} target age`}
-          tone="warning"
-          statusLabel="Guided Focus"
-          actionLabel="Open Goal Inputs"
-          onAction={() => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
-        <FriendlyActionTile
-          kicker="What This Produces"
-          title="See a first-pass readiness result"
-          detail="VaultedShield translates the current records and assumptions into one retirement readiness read before the deeper planning details."
-          metric={`${readiness.readinessScore}/100`}
-          tone={readinessTone}
-          statusLabel="Needs Review"
-          actionLabel="See Readiness"
-          onAction={() => readinessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "8px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6 }}>Retirement</div>
+            <div style={{ fontSize: "28px", fontWeight: 900, lineHeight: "1.2" }}>Retirement Intake</div>
+            <div style={{ fontSize: "15px", opacity: 0.75, lineHeight: "1.6", maxWidth: "520px" }}>{retirementUploadSummary}</div>
+          </div>
+          <div style={{ padding: "16px 20px", borderRadius: "18px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", gap: "4px", textAlign: "center", minWidth: "100px", flexShrink: 0 }}>
+            <div style={{ fontSize: "32px", fontWeight: 900, lineHeight: 1, color: "#c4b5fd" }}>{readiness.readinessScore}</div>
+            <div style={{ fontSize: "11px", opacity: 0.6, fontWeight: 700, textTransform: "uppercase" }}>readiness</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px" }}>
+          {[
+            { label: "PDFs processed", value: results.length },
+            { label: "Successful reads", value: successful.length },
+            { label: "Current assets", value: extractedCurrentAssets > 0 ? formatCurrency(extractedCurrentAssets) : "Not detected" },
+            { label: "Latest statement", value: latestStatement },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "10px 14px", borderRadius: "12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <div style={{ fontSize: "11px", opacity: 0.55, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, marginTop: "2px" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#6d28d9", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+            Add Retirement PDFs
+          </button>
+          <button type="button" onClick={() => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+            Adjust Planning Target
+          </button>
+          <button type="button" onClick={() => onNavigate?.("/retirement")} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+            Back To Retirement Hub
+          </button>
+        </div>
       </div>
 
-      <div ref={uploadSectionRef}>
-        <SectionCard
-        title="Retirement PDF Intake"
-        subtitle="Upload 401(k), IRA, pension, or brokerage retirement statements. Files are parsed locally and are not saved yet."
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+        {[
+          {
+            kicker: "Start Here",
+            title: successful.length > 0 ? "Add more statements if you have them" : "Upload the first retirement statements",
+            detail: "Use exported 401(k), IRA, pension, or brokerage retirement PDFs. Even a small set is enough to start a useful first read.",
+            metric: `${results.length} file${results.length === 1 ? "" : "s"}`,
+            tone: successful.length > 0 ? "good" : "info",
+            statusLabel: "Simple Read",
+            actionLabel: "Open Intake",
+            onAction: () => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "What To Adjust",
+            title: "Set the planning target in plain language",
+            detail: "If the extracted values are incomplete, you can still enter your retirement age, income target, and contribution pace manually.",
+            metric: `${goalForm.retirementAge || "65"} target age`,
+            tone: "warning",
+            statusLabel: "Guided Focus",
+            actionLabel: "Open Goal Inputs",
+            onAction: () => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+          {
+            kicker: "What This Produces",
+            title: "See a first-pass readiness result",
+            detail: "VaultedShield translates the current records and assumptions into one retirement readiness read before the deeper planning details.",
+            metric: `${readiness.readinessScore}/100`,
+            tone: readinessTone,
+            statusLabel: "Needs Review",
+            actionLabel: "See Readiness",
+            onAction: () => readinessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          },
+        ].map((tile) => (
+          <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{tile.kicker}</div>
+              <div style={{ ...pillStyle(tile.tone), padding: "3px 8px", borderRadius: "999px", fontSize: "11px", fontWeight: 800, whiteSpace: "nowrap" }}>{tile.statusLabel}</div>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
+            <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
+            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+              {tile.actionLabel}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div ref={uploadSectionRef} style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement PDF Intake</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Upload 401(k), IRA, pension, or brokerage retirement statements. Files are parsed locally and are not saved yet.</div>
+        </div>
         <div style={{ display: "grid", gap: "14px" }}>
           <label
             htmlFor="retirement-upload-input"
@@ -359,14 +395,13 @@ export default function RetirementUploadPage({ onNavigate }) {
           </div>
           {error ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{error}</div> : null}
         </div>
-        </SectionCard>
       </div>
 
-      <div ref={goalSectionRef}>
-        <SectionCard
-        title="Retirement Goal"
-        subtitle="Enter your planning target in plain terms. This is a practical estimate, not financial advice."
-      >
+      <div ref={goalSectionRef} style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Goal</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Enter your planning target in plain terms. This is a practical estimate, not financial advice.</div>
+        </div>
         <div
           style={{
             display: "grid",
@@ -456,14 +491,13 @@ export default function RetirementUploadPage({ onNavigate }) {
             ))}
           </div>
         </div>
-        </SectionCard>
       </div>
 
-      <div ref={readinessSectionRef}>
-        <SectionCard
-        title="Retirement Readiness Summary"
-        subtitle="A practical first-pass view of how your current savings pace compares with your target."
-      >
+      <div ref={readinessSectionRef} style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Readiness Summary</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>A practical first-pass view of how your current savings pace compares with your target.</div>
+        </div>
         <div style={{ display: "grid", gap: "18px" }}>
           <div
             style={{
@@ -582,10 +616,13 @@ export default function RetirementUploadPage({ onNavigate }) {
               </div>
             ) : null}
           </div>
-        </SectionCard>
       </div>
 
-      <SectionCard title="Retirement Extraction Results" subtitle="Each file shows extraction status, page count, and a starter retirement summary.">
+      <div style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}>
+        <div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Retirement Extraction Results</div>
+          <div style={{ color: "#64748b", marginTop: "4px", fontSize: "14px" }}>Each file shows extraction status, page count, and a starter retirement summary.</div>
+        </div>
         {results.length === 0 ? (
           <EmptyState
             title="No retirement PDFs added yet"
@@ -676,7 +713,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             ))}
           </div>
         )}
-      </SectionCard>
+      </div>
     </div>
   );
 }
