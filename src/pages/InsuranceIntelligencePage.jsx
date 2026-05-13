@@ -9,7 +9,6 @@ import PortfolioAIChatBox from "../components/policy/PortfolioAIChatBox";
 import PortfolioActionFeedCard from "../components/policy/PortfolioActionFeedCard";
 import PortfolioSignalsSummaryCard from "../components/policy/PortfolioSignalsSummaryCard";
 import InsightExplanationPanel from "../components/shared/InsightExplanationPanel";
-import { FriendlyActionTile, ScoreRing, friendlySurfaceCardStyle } from "../components/shared/FriendlyIntelligenceUI";
 import { analyzePolicyBasics, detectInsuranceGaps } from "../lib/domain/insurance/insuranceIntelligence";
 import buildInsurancePageFascia from "../lib/intelligence/fascia/buildInsurancePageFascia";
 import { usePlatformShellData } from "../lib/intelligence/PlatformShellDataContext";
@@ -26,7 +25,6 @@ import {
 } from "../lib/presentation/readinessVerdicts";
 import { buildReviewWorkspaceRoute } from "../lib/reviewWorkspace/workspaceFilters";
 import { getHouseholdInsuranceSummary } from "../lib/supabase/vaultedPolicies";
-import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
 
 const EMPTY_VALUE = "-";
 const METRIC_GRID_COLUMNS = "repeat(auto-fit, minmax(180px, 1fr))";
@@ -216,6 +214,41 @@ function renderReportSection(section) {
   );
 }
 
+function surfaceCard(extra = {}) {
+  return {
+    background: "#ffffff",
+    borderRadius: "20px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+    ...extra,
+  };
+}
+
+function ScoreDisplay({ value, size = "md", tone = "info", subtitle }) {
+  const palette = getReadinessPalette(tone);
+  const isLg = size === "lg";
+  return (
+    <div style={{ display: "grid", placeItems: "center", gap: "4px" }}>
+      <div
+        style={{
+          width: isLg ? "80px" : "60px",
+          height: isLg ? "80px" : "60px",
+          borderRadius: "50%",
+          background: palette.soft,
+          color: palette.text,
+          display: "grid",
+          placeItems: "center",
+          fontSize: isLg ? "22px" : "16px",
+          fontWeight: 900,
+        }}
+      >
+        {value}
+      </div>
+      {subtitle ? <div style={{ fontSize: "11px", color: "#94a3b8" }}>{subtitle}</div> : null}
+    </div>
+  );
+}
+
 function renderSignalCard({ label, value, detail }) {
   return (
     <div
@@ -293,7 +326,8 @@ function insuranceStatusScore(status = "", fallback = 52) {
 }
 
 export default function InsuranceIntelligencePage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const isMobile = false;
+  const isTablet = false;
   const comparisonRef = useRef(null);
   const protectionSignalsRef = useRef(null);
   const technicalAnalysisRef = useRef(null);
@@ -1487,7 +1521,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       }}
     >
       <section
-        style={friendlySurfaceCardStyle({
+        style={surfaceCard({
           padding: isMobile ? "24px 20px" : isTablet ? "28px 24px" : "34px 30px",
           display: "grid",
           gap: "24px",
@@ -1539,7 +1573,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
           </div>
 
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <ScoreRing value={portfolioReadinessScore} size="lg" tone={insuranceVerdict.tone} subtitle="of 100" iconLabel="IN" />
+            <ScoreDisplay value={portfolioReadinessScore} size="lg" tone={insuranceVerdict.tone} subtitle="of 100" />
           </div>
 
           <div style={{ display: "grid", gap: "16px" }}>
@@ -1605,7 +1639,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
               technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             style={{
-                ...friendlySurfaceCardStyle({
+                ...surfaceCard({
                 padding: "22px 18px 20px",
                 display: "grid",
                 gap: "12px",
@@ -1617,7 +1651,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
             }}
           >
             <div style={{ display: "flex", justifyContent: "center" }}>
-              <ScoreRing value={item.score} size="md" tone={item.tone} subtitle="%" iconLabel={item.iconLabel} />
+              <ScoreDisplay value={item.score} size="md" tone={item.tone} subtitle="%" />
             </div>
             <div style={{ display: "grid", gap: "5px", justifyItems: "center" }}>
               <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{item.label}</div>
@@ -1640,7 +1674,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       </section>
 
       <section
-        style={friendlySurfaceCardStyle({
+        style={surfaceCard({
           padding: isMobile ? "22px 20px" : "24px 24px 26px",
           display: "grid",
           gap: "18px",
@@ -1706,7 +1740,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
 
       <section
         ref={technicalAnalysisRef}
-        style={friendlySurfaceCardStyle({
+        style={surfaceCard({
           padding: isMobile ? "22px 20px" : "24px 26px",
           display: "grid",
           gap: "14px",
@@ -2337,6 +2371,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
                         {getPolicyEntryLabel(policy)}
                       </button>
                       <button
+                        type="button"
                         onClick={() =>
                           setExpandedPolicyId(isExpanded ? null : policy.policy_id)
                         }
