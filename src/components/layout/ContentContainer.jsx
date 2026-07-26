@@ -1,6 +1,8 @@
 export default function ContentContainer({ children }) {
   return (
     <main
+      id="main-content"
+      tabIndex="-1"
       style={{
         flex: 1,
         width: "100%",

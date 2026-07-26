@@ -361,6 +361,18 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
     technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function handleHealthTileAction(action) {
+    if (action === "review_workspace") {
+      onNavigate(healthReviewWorkspaceRoute);
+      return;
+    }
+    if (action === "upload") {
+      fileInputRef.current?.click();
+      return;
+    }
+    scrollToHealthTechnicalAnalysis();
+  }
+
   const healthHeroGlanceItems = [
     { label: "Plan Status", value: healthPlan?.plan_status || "Unknown" },
     { label: "Documents", value: bundle?.healthDocuments?.length || 0 },
@@ -438,7 +450,7 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
                   tone: healthCommandCenter.metrics.critical > 0 ? "alert" : healthCommandCenter.metrics.warning > 0 ? "warning" : "good",
                   statusLabel: "Simple Read",
                   actionLabel: "See Supporting Details",
-                  onAction: scrollToHealthTechnicalAnalysis,
+                  action: "technical",
                 },
                 {
                   kicker: "Best First Step",
@@ -448,7 +460,7 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
                   tone: "warning",
                   statusLabel: "Guided Focus",
                   actionLabel: "Open Review Workspace",
-                  onAction: () => onNavigate(healthReviewWorkspaceRoute),
+                  action: "review_workspace",
                 },
                 {
                   kicker: "Evidence Support",
@@ -458,7 +470,7 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
                   tone: bundle?.healthDocuments?.length ? "good" : "warning",
                   statusLabel: bundle?.healthDocuments?.length ? "Well Supported" : "Missing Information",
                   actionLabel: "Upload Files",
-                  onAction: () => fileInputRef.current?.click(),
+                  action: "upload",
                 },
               ].map((tile) => (
                 <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
@@ -469,7 +481,7 @@ export default function HealthPlanDetailPage({ healthPlanId, onNavigate }) {
                   <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
                   <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
                   <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-                  <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+                  <button type="button" onClick={() => handleHealthTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
                     {tile.actionLabel}
                   </button>
                 </div>

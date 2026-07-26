@@ -1,3 +1,4 @@
+-- Ordered migration: auto platform tables.
 create table if not exists public.auto_policies (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

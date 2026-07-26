@@ -203,7 +203,7 @@ function EmptyPropertiesPanel({ onScrollToForm }) {
   );
 }
 
-function CommandRow({ item, onNavigate }) {
+function CommandRow({ item }) {
   const tone = item.urgency === "critical" ? "alert" : "warning";
   return (
     <div

@@ -261,7 +261,7 @@ export default function RetirementHubPage({ onNavigate }) {
   const retirementHouseholdRead = useMemo(() => summarizeRetirementHousehold({ accounts, readinessSnapshot }), [accounts, readinessSnapshot]);
   const retirementHubCommand = useMemo(() => buildRetirementHubCommand({ accounts, readinessSnapshot, retirementHouseholdRead }), [accounts, readinessSnapshot, retirementHouseholdRead]);
 
-  const { activeCount, rolloverCandidates, pensionStyle } = useMemo(() => {
+  const { activeCount, rolloverCandidates, pensionStyle: _pensionStyle } = useMemo(() => {
     return accounts.reduce((acc, account) => {
       const retirementType = getRetirementType(account.retirement_type_key);
       const status = String(account.plan_status || "").toLowerCase();

@@ -796,7 +796,7 @@ function ScanReview({
 }
 
 export default function LifePolicyUploadPage({ onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const { isMobile } = useResponsiveLayout();
   const { debug } = usePlatformShellData();
   const nativeCameraAvailable = isNativeCameraAvailable();
   const illustrationCameraInputRef = useRef(null);
@@ -1384,7 +1384,7 @@ export default function LifePolicyUploadPage({ onNavigate }) {
     : hasBaselineInput
       ? "The baseline file is in place, and you can now add annual statements to strengthen the current read before analysis."
       : "This page keeps the life-policy path simple: add the baseline file first, layer in annual statements second, then analyze the packet when it is ready.";
-  const intakeScore = Math.min(
+  const _intakeScore = Math.min(
     96,
     (hasBaselineInput ? 42 : 18) +
       Math.min(statementInputCount, 4) * 11 +

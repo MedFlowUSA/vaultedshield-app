@@ -88,6 +88,18 @@ export default function ContactsPage() {
   );
   const scoreTone = heroScore >= 80 ? "good" : heroScore >= 60 ? "info" : heroScore >= 44 ? "warning" : "alert";
   const emergencyCount = contacts.filter((c) => ["family", "executor"].includes(c.contact_type)).length;
+  const scrollToDirectory = () => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const openAddContactForm = () => {
+    setShowAddForm(true);
+    setTimeout(scrollToDirectory, 50);
+  };
+  const handleTileAction = (action) => {
+    if (action === "add_contact") {
+      openAddContactForm();
+      return;
+    }
+    scrollToDirectory();
+  };
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
@@ -151,14 +163,14 @@ export default function ContactsPage() {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={() => { setShowAddForm(true); setTimeout(() => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+            onClick={openAddContactForm}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#ffffff", color: "#0f172a", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             Add Contact
           </button>
           <button
             type="button"
-            onClick={() => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={scrollToDirectory}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             See Directory
@@ -177,7 +189,7 @@ export default function ContactsPage() {
             tone: scoreTone,
             statusLabel: contactRead.status,
             actionLabel: "See Directory",
-            onAction: () => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "directory",
           },
           {
             kicker: "Best First Step",
@@ -187,7 +199,7 @@ export default function ContactsPage() {
             tone: "warning",
             statusLabel: "Guided Focus",
             actionLabel: "Add Contact",
-            onAction: () => { setShowAddForm(true); setTimeout(() => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); },
+            action: "add_contact",
           },
           {
             kicker: "What Can Wait",
@@ -197,7 +209,7 @@ export default function ContactsPage() {
             tone: "info",
             statusLabel: "Building",
             actionLabel: "Review Contacts",
-            onAction: () => directoryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "directory",
           },
         ].map((tile) => (
           <div
@@ -219,7 +231,7 @@ export default function ContactsPage() {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

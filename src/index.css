@@ -1,4 +1,18 @@
 :root {
+  --vs-color-navy-950: #0f172a;
+  --vs-color-blue-700: #1d4ed8;
+  --vs-color-slate-50: #f8fafc;
+  --vs-color-slate-200: #e2e8f0;
+  --vs-color-slate-600: #475569;
+  --vs-color-white: #ffffff;
+  --vs-space-1: 8px;
+  --vs-space-2: 16px;
+  --vs-space-3: 24px;
+  --vs-space-4: 32px;
+  --vs-radius-sm: 8px;
+  --vs-radius-md: 16px;
+  --vs-radius-lg: 24px;
+  --vs-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
   font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -51,6 +65,57 @@ button {
   border-radius: 8px;
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[tabindex]:not([tabindex="-1"]) {
+  min-height: 44px;
+}
+
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  box-shadow: var(--vs-focus-ring);
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 700;
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (max-width: 600px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 input,

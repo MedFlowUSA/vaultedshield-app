@@ -38,7 +38,7 @@ export default function LifePolicyDetailPage({ onNavigate }) {
     () => [...savedPolicies].sort((left, right) => String(right.last_saved_at || "").localeCompare(String(left.last_saved_at || ""))),
     [savedPolicies]
   );
-  const heroTone = sortedPolicies.length > 0 ? "good" : loading ? "info" : "warning";
+  const _heroTone = sortedPolicies.length > 0 ? "good" : loading ? "info" : "warning";
   const heroHeadline =
     sortedPolicies.length > 0
       ? "Your life-policy workflow is ready to use"

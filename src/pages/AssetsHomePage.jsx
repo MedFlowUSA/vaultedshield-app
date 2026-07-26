@@ -220,6 +220,18 @@ export default function AssetsHomePage({ onNavigate }) {
   );
   const scoreTone =
     assetHeroScore >= 80 ? "good" : assetHeroScore >= 60 ? "info" : assetHeroScore >= 44 ? "warning" : "alert";
+  const scrollToAssetRegistry = () => assetRegistryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const openAddAssetForm = () => {
+    setShowAddForm(true);
+    setTimeout(() => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+  const handleTileAction = (action) => {
+    if (action === "add_asset") {
+      openAddAssetForm();
+      return;
+    }
+    scrollToAssetRegistry();
+  };
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
@@ -285,14 +297,14 @@ export default function AssetsHomePage({ onNavigate }) {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={() => { setShowAddForm(true); setTimeout(() => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+            onClick={openAddAssetForm}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#ffffff", color: "#0f172a", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             {assets.length > 0 ? "Add Another Asset" : "Add First Asset"}
           </button>
           <button
             type="button"
-            onClick={() => assetRegistryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={scrollToAssetRegistry}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             See Registry
@@ -311,7 +323,7 @@ export default function AssetsHomePage({ onNavigate }) {
             tone: scoreTone,
             statusLabel: assetRead.status,
             actionLabel: "See Readiness",
-            onAction: () => assetRegistryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "registry",
           },
           {
             kicker: "Best First Step",
@@ -323,7 +335,7 @@ export default function AssetsHomePage({ onNavigate }) {
             tone: "warning",
             statusLabel: "Guided Focus",
             actionLabel: assets.length > 0 ? "Add Asset" : "Get Started",
-            onAction: () => { setShowAddForm(true); setTimeout(() => createAssetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); },
+            action: "add_asset",
           },
           {
             kicker: "What Can Wait",
@@ -333,7 +345,7 @@ export default function AssetsHomePage({ onNavigate }) {
             tone: "info",
             statusLabel: "Building",
             actionLabel: "Open Registry",
-            onAction: () => assetRegistryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "registry",
           },
         ].map((tile) => (
           <div
@@ -355,7 +367,7 @@ export default function AssetsHomePage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

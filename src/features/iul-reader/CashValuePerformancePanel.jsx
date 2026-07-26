@@ -215,7 +215,7 @@ function RetirementVehicleContext() {
 export function CashValuePerformancePanel({ performanceModel }) {
   if (!performanceModel) return null;
 
-  const { metrics, timeline, vehicles, vehicleDimensions, summaryHeadline, hasData, statementCount } = performanceModel;
+  const { metrics, timeline, vehicles, vehicleDimensions, summaryHeadline, statementCount } = performanceModel;
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>

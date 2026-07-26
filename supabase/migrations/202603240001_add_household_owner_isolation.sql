@@ -1,3 +1,4 @@
+-- Ordered migration: household ownership column.
 alter table if exists public.households
   add column if not exists owner_user_id uuid null;
 

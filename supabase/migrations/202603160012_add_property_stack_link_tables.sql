@@ -1,3 +1,4 @@
+-- Ordered migration: property linkage tables.
 create table if not exists public.property_mortgage_links (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

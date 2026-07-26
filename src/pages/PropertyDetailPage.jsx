@@ -1358,14 +1358,14 @@ export default function PropertyDetailPage({ propertyId, onNavigate }) {
     label: item.label,
     value: item.value,
   }));
-  const propertyHeroScore = Math.round(
+  const _propertyHeroScore = Math.round(
     Number.isFinite(Number(propertyStackAnalytics?.completeness_score))
       ? Number(propertyStackAnalytics?.completeness_score)
       : Number.isFinite(Number(latestPropertyValuation?.confidence_score))
         ? Number(latestPropertyValuation?.confidence_score) * 100
         : 54
   );
-  const propertyHeroTone =
+  const _propertyHeroTone =
     propertyPageFascia?.status === "Strong"
       ? "good"
       : propertyPageFascia?.status === "Stable"

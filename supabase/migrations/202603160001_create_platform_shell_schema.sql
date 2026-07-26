@@ -1,3 +1,4 @@
+-- Ordered migration: foundational platform schema.
 create extension if not exists pgcrypto;
 
 create or replace function public.set_updated_at()

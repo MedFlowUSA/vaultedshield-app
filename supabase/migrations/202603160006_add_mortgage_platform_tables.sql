@@ -1,3 +1,4 @@
+-- Ordered migration: mortgage platform tables.
 create table if not exists public.mortgage_loans (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

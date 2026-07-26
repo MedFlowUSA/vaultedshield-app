@@ -14,6 +14,7 @@ import { shouldShowDevDiagnostics } from "../lib/ui/devDiagnostics";
 import { captureDocumentPhoto, isNativeCameraAvailable } from "../utils/cameraCapture";
 import { convertImageToFile } from "../utils/imageToFile";
 import useResponsiveLayout from "../lib/ui/useResponsiveLayout";
+import { DOCUMENT_ACCEPT, validateDocumentFile } from "../lib/uploads/fileValidation";
 
 const DOCUMENT_TYPES = [
   "statement",
@@ -173,7 +174,7 @@ function formatFriendlyLoadError(error) {
 
 function getQueueStatusTone(status) {
   if (status === "saved") return { background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0" };
-  if (status === "failed") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (status === "failed" || status === "rejected") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
   if (status === "uploading") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
   return { background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" };
 }
@@ -288,10 +289,12 @@ export default function UploadCenterPage() {
   }
 
   function enqueueFiles(fileList) {
-    const newEntries = Array.from(fileList || []).map((file) => ({
+    const newEntries = Array.from(fileList || []).map((file) => {
+      const validation = validateDocumentFile(file);
+      return {
       id: `${file.name}-${file.size}-${file.lastModified}`,
       file,
-      status: "queued",
+      status: validation.ok ? "queued" : "rejected",
       assetId,
       documentType,
       documentRole,
@@ -299,9 +302,10 @@ export default function UploadCenterPage() {
       notes,
       storagePath: "",
       documentId: null,
-      errorSummary: "",
+      errorSummary: validation.message,
       duplicate: false,
-    }));
+      };
+    });
     setQueue((current) => [...newEntries, ...current]);
   }
 
@@ -398,7 +402,7 @@ export default function UploadCenterPage() {
   const queueReadyCount = queue.filter((item) => item.status === "queued").length;
   const queueUploadingCount = queue.filter((item) => item.status === "uploading").length;
   const queueSavedCount = queue.filter((item) => item.status === "saved").length;
-  const queueFailedCount = queue.filter((item) => item.status === "failed").length;
+  const queueFailedCount = queue.filter((item) => item.status === "failed" || item.status === "rejected").length;
   const uploadHeroScore = Math.round(
     Math.max(
       26,
@@ -641,10 +645,14 @@ export default function UploadCenterPage() {
               <p style={{ marginTop: "8px", marginBottom: "14px", color: "#64748b", lineHeight: "1.6" }}>
                 Upload a {selectedCategory.label.toLowerCase()} document to the household vault. Use Insurance {" > "} Life Policy Intake only when you want deeper life-policy illustration and annual-statement analysis.
               </p>
+              <p style={{ marginTop: 0, color: "#475569", fontSize: "13px", lineHeight: "1.6" }}>
+                Supported: PDF, JPEG, PNG, WebP, HEIC, and HEIF. Maximum 25 MB per file.
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
+                accept={DOCUMENT_ACCEPT}
                 style={{ display: "none" }}
                 onChange={(event) => enqueueFiles(event.target.files)}
               />
@@ -812,6 +820,8 @@ export default function UploadCenterPage() {
 
         <div
           data-upload-queue="true"
+          aria-live="polite"
+          aria-atomic="false"
           style={surfaceCard({ padding: "22px 24px", display: "grid", gap: "14px" })}
         >
           <div>
@@ -897,9 +907,18 @@ export default function UploadCenterPage() {
                       ) : null}
                     </div>
                     {item.errorSummary ? (
-                      <div style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>
+                      <div role="alert" style={{ color: "#991b1b", lineHeight: "1.65", overflowWrap: "anywhere" }}>
                         {item.errorSummary}
                       </div>
+                    ) : null}
+                    {item.status !== "uploading" ? (
+                      <button
+                        type="button"
+                        onClick={() => setQueue((current) => current.filter((entry) => entry.id !== item.id))}
+                        style={{ width: "fit-content", padding: "9px 12px", borderRadius: "10px", border: "1px solid #cbd5e1", background: "#ffffff", color: "#334155", cursor: "pointer", fontWeight: 700 }}
+                      >
+                        Remove file
+                      </button>
                     ) : null}
                   </div>
                 );

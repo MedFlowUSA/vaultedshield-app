@@ -47,6 +47,13 @@ export function getAuthLandingState() {
       params.get("access_token")
   );
 
+  if (type === "recovery") {
+    return {
+      status: "password_recovery",
+      message: "Choose a new password for your VaultedShield account.",
+    };
+  }
+
   if (type === "signup" || type === "invite" || hasVerificationMarkers) {
     return {
       status: "verification_complete",

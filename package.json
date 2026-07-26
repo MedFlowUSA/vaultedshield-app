@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node tests/iul-regression.test.js",
+    "test": "node tests/iul-regression.test.js && node tests/ux-routing.test.js && node tests/security-hardening.test.js",
     "test:fascia-contract": "node tests/fascia-contract.test.js",
     "test:insurance-fascia": "node tests/insurance-page-fascia.test.js",
     "test:mortgage-fascia": "node tests/mortgage-page-fascia.test.js",

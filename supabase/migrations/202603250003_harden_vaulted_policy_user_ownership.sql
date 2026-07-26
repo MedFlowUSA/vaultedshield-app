@@ -1,3 +1,4 @@
+-- Ordered migration: vaulted-policy ownership.
 do $$
 begin
   if exists (

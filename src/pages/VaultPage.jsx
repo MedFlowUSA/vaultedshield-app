@@ -87,6 +87,22 @@ export default function VaultPage({ onNavigate }) {
   const storedCount = documents.filter((d) => d.storage_path).length;
   const reviewCount = documents.filter((d) => d.processing_status === "needs_review").length;
 
+  function scrollToRegistry() {
+    registryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleVaultTileAction(action) {
+    if (action === "registry") {
+      scrollToRegistry();
+      return;
+    }
+    if (action === "life-upload") {
+      onNavigate?.("/insurance/life/upload");
+      return;
+    }
+    onNavigate?.("/upload-center");
+  }
+
   return (
     <div style={{ display: "grid", gap: "28px" }}>
       {/* Hero */}
@@ -157,7 +173,7 @@ export default function VaultPage({ onNavigate }) {
           </button>
           <button
             type="button"
-            onClick={() => registryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={scrollToRegistry}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             See Registry
@@ -176,7 +192,7 @@ export default function VaultPage({ onNavigate }) {
             tone: scoreTone,
             statusLabel: vaultRead.status,
             actionLabel: "See Registry",
-            onAction: () => registryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "registry",
           },
           {
             kicker: "Next Step",
@@ -186,7 +202,7 @@ export default function VaultPage({ onNavigate }) {
             tone: "warning",
             statusLabel: documents.length > 0 ? "Keep Going" : "Get Started",
             actionLabel: "Upload Document",
-            onAction: () => onNavigate?.("/upload-center"),
+            action: "upload",
           },
           {
             kicker: "Policy Intelligence",
@@ -196,7 +212,7 @@ export default function VaultPage({ onNavigate }) {
             tone: "info",
             statusLabel: "Separate Path",
             actionLabel: "Open IUL Upload",
-            onAction: () => onNavigate?.("/insurance/life/upload"),
+            action: "life-upload",
           },
         ].map((tile) => (
           <div
@@ -218,7 +234,7 @@ export default function VaultPage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleVaultTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

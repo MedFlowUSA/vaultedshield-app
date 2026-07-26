@@ -111,6 +111,7 @@ export default function TopNav({
   onToggleSidebar,
   showSidebarToggle = false,
   isCompact = false,
+  menuButtonRef,
 }) {
   const [compactPanelRouteKey, setCompactPanelRouteKey] = useState("");
   const { householdState, debug, intelligenceBundle, insuranceRows } = usePlatformShellData();
@@ -242,6 +243,7 @@ export default function TopNav({
       <div style={{ display: "flex", alignItems: isCompact ? "flex-start" : "center", gap: isCompact ? "12px" : "14px", minWidth: 0, flex: "1 1 320px" }}>
         {showSidebarToggle ? (
           <button
+            ref={menuButtonRef}
             type="button"
             onClick={() => onToggleSidebar?.()}
             aria-label="Open navigation"

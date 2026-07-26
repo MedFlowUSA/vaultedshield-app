@@ -1,3 +1,4 @@
+-- Ordered migration: retirement platform tables.
 create table if not exists public.retirement_accounts (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

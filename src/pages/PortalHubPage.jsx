@@ -326,6 +326,22 @@ export default function PortalHubPage({ onNavigate }) {
 
   const readyCount = checkpoints.filter((c) => c.status === "ready").length;
 
+  function scrollToPortalCommand() {
+    portalCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handlePortalTileAction(action) {
+    if (action === "command") {
+      scrollToPortalCommand();
+      return;
+    }
+    if (action === "missing") {
+      setActiveFilter("missing_verification");
+      return;
+    }
+    onNavigate?.("/assets");
+  }
+
   return (
     <div style={{ display: "grid", gap: "28px" }}>
       {/* Hero */}
@@ -388,7 +404,7 @@ export default function PortalHubPage({ onNavigate }) {
           ))}
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <ActionButton label="Open Command Center" primary onClick={() => portalCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+          <ActionButton label="Open Command Center" primary onClick={scrollToPortalCommand} />
           <button
             type="button"
             onClick={() => setActiveFilter("missing_verification")}
@@ -417,7 +433,7 @@ export default function PortalHubPage({ onNavigate }) {
             tone: readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert",
             statusLabel: readyCount === 3 ? "All Clear" : "Needs Work",
             actionLabel: "See Checkpoints",
-            onAction: () => portalCommandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "command",
           },
           {
             kicker: "Recovery Gaps",
@@ -429,7 +445,7 @@ export default function PortalHubPage({ onNavigate }) {
             tone: bundle.readiness.missingRecoveryCount > 0 ? "warning" : "good",
             statusLabel: bundle.readiness.missingRecoveryCount > 0 ? "Needs Attention" : "Complete",
             actionLabel: "Filter by Missing",
-            onAction: () => setActiveFilter("missing_verification"),
+            action: "missing",
           },
           {
             kicker: "Asset Links",
@@ -441,7 +457,7 @@ export default function PortalHubPage({ onNavigate }) {
             tone: bundle.readiness.criticalAssetsWithoutLinkedPortals.length > 0 ? "warning" : "good",
             statusLabel: bundle.readiness.criticalAssetsWithoutLinkedPortals.length > 0 ? "Gaps Exist" : "Well Linked",
             actionLabel: "View Assets",
-            onAction: () => onNavigate?.("/assets"),
+            action: "assets",
           },
         ].map((tile) => (
           <div
@@ -463,7 +479,7 @@ export default function PortalHubPage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handlePortalTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

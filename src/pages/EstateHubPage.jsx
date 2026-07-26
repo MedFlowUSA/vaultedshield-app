@@ -253,7 +253,7 @@ export default function EstateHubPage({ onNavigate }) {
   const documentRef = useRef(null);
   const [bundle, setBundle] = useState({ contacts: [], assets: [] });
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [, setLoadError] = useState("");
 
   useEffect(() => {
     if (householdState.loading) return;
@@ -316,7 +316,6 @@ export default function EstateHubPage({ onNavigate }) {
   );
 
   const heroScore = readiness.status === "Ready" ? 84 : readiness.status === "Building" ? 62 : successorContacts.length > 0 ? 48 : 34;
-  const heroTone = heroScore >= 80 ? "good" : heroScore >= 60 ? "info" : heroScore >= 45 ? "warning" : "alert";
 
   const checkpoints = useMemo(() => {
     const hasExecutor = successorContacts.some((c) =>
@@ -357,6 +356,19 @@ export default function EstateHubPage({ onNavigate }) {
 
   const readyCount = checkpoints.filter((item) => item.status === "ready").length;
   const partialCount = checkpoints.filter((item) => item.status === "partial").length;
+  const scrollToSuccessorContacts = () => successorContactsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToDocuments = () => documentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const handleTileAction = (action) => {
+    if (action === "insurance") {
+      onNavigate?.("/insurance");
+      return;
+    }
+    if (action === "emergency") {
+      onNavigate?.("/emergency");
+      return;
+    }
+    scrollToSuccessorContacts();
+  };
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
@@ -423,7 +435,7 @@ export default function EstateHubPage({ onNavigate }) {
           <ActionButton label="Add Successor Contact" primary onClick={() => onNavigate?.("/contacts")} />
           <button
             type="button"
-            onClick={() => documentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={scrollToDocuments}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             See Documents
@@ -448,7 +460,7 @@ export default function EstateHubPage({ onNavigate }) {
             tone: readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert",
             statusLabel: readyCount === 3 ? "Complete" : "Gaps Exist",
             actionLabel: "See Checkpoints",
-            onAction: () => successorContactsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "successors",
           },
           {
             kicker: "Biggest Risk",
@@ -458,7 +470,7 @@ export default function EstateHubPage({ onNavigate }) {
             tone: "warning",
             statusLabel: "Review Required",
             actionLabel: "Check Policies",
-            onAction: () => onNavigate?.("/insurance"),
+            action: "insurance",
           },
           {
             kicker: "Emergency Access",
@@ -468,7 +480,7 @@ export default function EstateHubPage({ onNavigate }) {
             tone: "info",
             statusLabel: "Set Up Now",
             actionLabel: "Open Emergency Mode",
-            onAction: () => onNavigate?.("/emergency"),
+            action: "emergency",
           },
         ].map((tile) => (
           <div
@@ -490,7 +502,7 @@ export default function EstateHubPage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

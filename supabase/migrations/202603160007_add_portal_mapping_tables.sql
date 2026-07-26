@@ -1,3 +1,4 @@
+-- Ordered migration: portal mapping tables.
 create table if not exists public.portal_profiles (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { APP_NAVIGATION, ROUTES } from "../../lib/navigation/routes";
 import logo from "../../assets/vaultedshield-logo.png";
 import { hasTierAccess } from "../../lib/auth/accessPortal";
@@ -13,11 +14,45 @@ export default function Sidebar({
   onClose,
 }) {
   const isDrawer = isCompact;
+  const drawerRef = useRef(null);
   const drawerTopInset = "max(12px, calc(env(safe-area-inset-top, 0px) + 8px))";
   const drawerBottomInset = "max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px))";
 
+  useEffect(() => {
+    if (!isDrawer || !isOpen) return undefined;
+    const drawer = drawerRef.current;
+    const focusable = drawer?.querySelectorAll(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    focusable?.[0]?.focus();
+    const trapFocus = (event) => {
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    drawer?.addEventListener("keydown", trapFocus);
+    return () => drawer?.removeEventListener("keydown", trapFocus);
+  }, [isDrawer, isOpen]);
+
+  const activeAliases = {
+    financialLife: ["/assets", "/insurance", "/banking", "/mortgage", "/property", "/retirement", "/college-planning", "/warranties", "/estate"],
+    documents: ["/vault", "/upload-center"],
+    actionPlan: ["/review-workspace", "/guidance", "/household-goals"],
+  };
+
   return (
     <aside
+      ref={drawerRef}
+      aria-label="Primary navigation"
+      role={isDrawer ? "dialog" : undefined}
+      aria-modal={isDrawer && isOpen ? "true" : undefined}
       style={{
         width: isDrawer ? "min(78vw, 292px)" : "260px",
         maxWidth: "100%",
@@ -147,10 +182,15 @@ export default function Sidebar({
                 .filter((item) => hasTierAccess(currentTier, ROUTES[item.routeKey]?.minimumTier || "free"))
                 .map((item) => {
                   const route = ROUTES[item.routeKey];
-                  const active = currentPath === route.path;
+                  const active =
+                    currentPath === route.path ||
+                    (activeAliases[item.routeKey] || []).some(
+                      (path) => currentPath === path || currentPath.startsWith(`${path}/`)
+                    );
                   return (
                     <button
                       key={item.routeKey}
+                      aria-current={active ? "page" : undefined}
                       onClick={() => {
                         onNavigate(route.path);
                         onClose?.();

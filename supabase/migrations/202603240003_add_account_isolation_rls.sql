@@ -1,3 +1,4 @@
+-- Ordered migration: account isolation RLS.
 create or replace function public.vs_can_access_household(target_household_id uuid)
 returns boolean
 language sql
@@ -165,6 +166,9 @@ begin
     'warranties'
   ]
   loop
+    if to_regclass(format('public.%I', household_table)) is null then
+      continue;
+    end if;
     policy_prefix := household_table || ' account';
 
     if not exists (

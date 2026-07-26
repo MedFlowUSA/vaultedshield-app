@@ -40,6 +40,18 @@ function getPriorityLevel(overallStatus, risks = [], recommendations = []) {
   return recommendations.some((item) => item.impact === "high") ? "medium" : "low";
 }
 
+function getRecommendationPriority(item = {}) {
+  if (item.title === "Improve comparison support") return 0;
+  if (item.type === "loan") return 10;
+  if (item.type === "funding" && item.impact === "high") return 20;
+  if (item.type === "efficiency") return 30;
+  if (item.title === "Maintain current funding discipline") return 40;
+  if (item.type === "strategy") return 60;
+  if (item.type === "data") return 70;
+  if (item.type === "funding") return 80;
+  return 90;
+}
+
 function buildConfidenceContext({ policyType, illustrationComparison, iulV2, missingData }) {
   if (illustrationComparison?.confidenceExplanation) {
     return illustrationComparison.confidenceExplanation;
@@ -321,9 +333,9 @@ export function buildPolicyOptimizationEngine({
     }
   }
 
-  const uniqueRecommendations = recommendations.filter(
-    (item, index, array) => array.findIndex((candidate) => candidate.title === item.title) === index
-  );
+  const uniqueRecommendations = recommendations
+    .filter((item, index, array) => array.findIndex((candidate) => candidate.title === item.title) === index)
+    .sort((left, right) => getRecommendationPriority(left) - getRecommendationPriority(right));
   const uniqueRisks = risks.filter(
     (item, index, array) => array.findIndex((candidate) => candidate.type === item.type) === index
   );

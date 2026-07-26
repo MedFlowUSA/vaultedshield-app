@@ -1,3 +1,4 @@
+-- Ordered migration: property platform tables.
 create table if not exists public.properties (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

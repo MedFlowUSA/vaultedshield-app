@@ -359,6 +359,18 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
     technicalAnalysisRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function handleWarrantyTileAction(action) {
+    if (action === "review_workspace") {
+      onNavigate(warrantyReviewWorkspaceRoute);
+      return;
+    }
+    if (action === "upload") {
+      fileInputRef.current?.click();
+      return;
+    }
+    scrollToWarrantyTechnicalAnalysis();
+  }
+
   const warrantyHeroGlanceItems = [
     { label: "Contract Status", value: warranty?.contract_status || "Unknown" },
     { label: "Documents", value: bundle?.warrantyDocuments?.length || 0 },
@@ -436,7 +448,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   tone: warrantyCommandCenter.metrics.critical > 0 ? "alert" : warrantyCommandCenter.metrics.warning > 0 ? "warning" : "good",
                   statusLabel: "Simple Read",
                   actionLabel: "See Supporting Details",
-                  onAction: scrollToWarrantyTechnicalAnalysis,
+                  action: "technical",
                 },
                 {
                   kicker: "Best First Step",
@@ -446,7 +458,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   tone: "warning",
                   statusLabel: "Guided Focus",
                   actionLabel: "Open Review Workspace",
-                  onAction: () => onNavigate(warrantyReviewWorkspaceRoute),
+                  action: "review_workspace",
                 },
                 {
                   kicker: "Evidence Support",
@@ -456,7 +468,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   tone: bundle?.warrantyDocuments?.length ? "good" : "warning",
                   statusLabel: bundle?.warrantyDocuments?.length ? "Well Supported" : "Missing Information",
                   actionLabel: "Upload Files",
-                  onAction: () => fileInputRef.current?.click(),
+                  action: "upload",
                 },
               ].map((tile) => (
                 <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
@@ -467,7 +479,7 @@ export default function WarrantyDetailPage({ warrantyId, onNavigate }) {
                   <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
                   <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
                   <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-                  <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+                  <button type="button" onClick={() => handleWarrantyTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
                     {tile.actionLabel}
                   </button>
                 </div>

@@ -250,7 +250,7 @@ function ScoreDisplay({ value, size = "md", tone = "info", subtitle }) {
   );
 }
 
-function renderSignalCard({ label, value, detail }) {
+function _renderSignalCard({ label, value, detail }) {
   return (
     <div
       style={{
@@ -450,7 +450,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const topPolicyReportSection = portfolioReport.sections.find((section) => section.id === "top_policy_verdict") || null;
   const carrierSupportReportSection = portfolioReport.sections.find((section) => section.id === "carrier_support") || null;
   const advisorHandoffReportSection = portfolioReport.sections.find((section) => section.id === "advisor_handoff") || null;
-  const portfolioBottomLineSection = portfolioReport.sections.find((section) => section.id === "portfolio_bottom_line") || null;
+  const _portfolioBottomLineSection = portfolioReport.sections.find((section) => section.id === "portfolio_bottom_line") || null;
 
   const totalCoverage = rankedPolicies
     .map((row) => parseDisplayNumber(row.death_benefit))
@@ -487,7 +487,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
   const strongContinuityPolicies = rankedPolicies.filter((row) => row.ranking.status === "Strong");
   const gapPolicies = rankedPolicies.filter((row) => row.gapAnalysis?.coverageGap);
   const missingStatementPolicies = rankedPolicies.filter((row) => !row.latest_statement_date);
-  const systemInsight = useMemo(() => {
+  const _systemInsight = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return {
         summary: "No saved vaulted policies are available for comparison yet.",
@@ -750,7 +750,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       route: topPriority?.policy_id ? getPolicyDetailRoute(topPriority) : "/insurance/life/upload",
     };
   }, [portfolioBrief, rankedPolicies]);
-  const portfolioSignalStrip = useMemo(() => {
+  const _portfolioSignalStrip = useMemo(() => {
     if (rankedPolicies.length === 0) {
       return [
         {
@@ -1032,7 +1032,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     portfolioBrief.priority_policies,
     rankedPolicies,
   ]);
-  const insuranceActionTiles = useMemo(
+  const _insuranceActionTiles = useMemo(
     () => [
       {
         key: "insurance-status",
@@ -1202,7 +1202,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
       },
     ];
   }, [portfolioBrief.priority_policies]);
-  const insuranceReadRows = useMemo(
+  const _insuranceReadRows = useMemo(
     () => [
       {
         id: "status",
@@ -1225,7 +1225,7 @@ export default function InsuranceIntelligencePage({ onNavigate }) {
     ],
     [insurancePageFascia.status, plainEnglishGuide.cards, plainEnglishGuide.summary]
   );
-  const transitionGuide = useMemo(() => {
+  const _transitionGuide = useMemo(() => {
     const topPriority = portfolioBrief.priority_policies?.[0] || rankedPolicies[0] || null;
     const confidencePercent = Math.round((protectionSummary.confidence || 0) * 100);
 

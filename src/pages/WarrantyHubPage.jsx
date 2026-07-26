@@ -423,7 +423,7 @@ export default function WarrantyHubPage({ onNavigate }) {
     setShowAddForm(false);
   }
 
-  const warrantyRead = useMemo(() => summarizeWarrantyModule(warranties), [warranties]);
+  const _warrantyRead = useMemo(() => summarizeWarrantyModule(warranties), [warranties]);
 
   const { activeCount, expiringCount, missingExpirationCount } = useMemo(() => {
     const now = new Date();

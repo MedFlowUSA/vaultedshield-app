@@ -5,7 +5,10 @@ export const ROUTES = {
   accountCenter: { path: "/account", title: "Account", section: "System", minimumTier: "free" },
   privacyPolicy: { path: "/privacy-policy", title: "Privacy Policy", section: "Legal", minimumTier: "free" },
   termsOfService: { path: "/terms-of-service", title: "Terms of Service", section: "Legal", minimumTier: "free" },
-  dashboard: { path: "/dashboard", title: "Dashboard", section: "Core", minimumTier: "free" },
+  dashboard: { path: "/dashboard", title: "Home", section: "Core", minimumTier: "free" },
+  financialLife: { path: "/my-financial-life", title: "My Financial Life", section: "Core", minimumTier: "free" },
+  documents: { path: "/documents", title: "Documents", section: "Core", minimumTier: "free" },
+  actionPlan: { path: "/action-plan", title: "Action Plan", section: "Core", minimumTier: "free" },
   reviewWorkspace: { path: "/review-workspace", title: "Review Workspace", section: "Core", minimumTier: "free" },
   guidance: { path: "/guidance", title: "Guidance Center", section: "Core", minimumTier: "free" },
   householdGoals: { path: "/household-goals", title: "Household Goals", section: "Core", minimumTier: "professional" },
@@ -47,36 +50,21 @@ export const ROUTES = {
 
 export const APP_NAVIGATION = [
   {
-    label: "Core",
+    label: "Your household",
     items: [
-      { routeKey: "dashboard", label: "Dashboard" },
-      { routeKey: "reviewWorkspace", label: "Review Workspace" },
-      { routeKey: "guidance", label: "Guidance" },
-      { routeKey: "householdGoals", label: "Goals" },
-      { routeKey: "vault", label: "Vault" },
-      { routeKey: "uploadCenter", label: "Upload Center" },
-    ],
-  },
-  {
-    label: "Asset Modules",
-    items: [
-      { routeKey: "assetsHome", label: "Asset Map" },
-      { routeKey: "insuranceHub", label: "Insurance" },
-      { routeKey: "bankingHub", label: "Banking" },
-      { routeKey: "mortgageHub", label: "Mortgage" },
-      { routeKey: "propertyHub", label: "Property" },
-      { routeKey: "retirementHub", label: "Retirement" },
-      { routeKey: "warrantyHub", label: "Warranties" },
-      { routeKey: "estateHub", label: "Estate" },
-    ],
-  },
-  {
-    label: "Continuity",
-    items: [
-      { routeKey: "emergencyMode", label: "Emergency" },
-      { routeKey: "portals", label: "Portals" },
+      { routeKey: "dashboard", label: "Home" },
+      { routeKey: "financialLife", label: "My Financial Life" },
+      { routeKey: "documents", label: "Documents" },
+      { routeKey: "actionPlan", label: "Action Plan" },
       { routeKey: "reports", label: "Reports" },
+    ],
+  },
+  {
+    label: "More",
+    items: [
       { routeKey: "contacts", label: "Contacts" },
+      { routeKey: "portals", label: "Portals" },
+      { routeKey: "emergencyMode", label: "Emergency Access" },
       { routeKey: "accountCenter", label: "Account" },
       { routeKey: "settings", label: "Settings" },
     ],

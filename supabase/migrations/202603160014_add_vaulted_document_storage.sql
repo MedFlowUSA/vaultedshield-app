@@ -1,3 +1,4 @@
+-- Ordered migration: policy document storage.
 alter table if exists public.vaulted_policy_documents
   add column if not exists storage_bucket text null,
   add column if not exists storage_path text null,

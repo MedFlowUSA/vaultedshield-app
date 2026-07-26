@@ -1,3 +1,4 @@
+-- Ordered migration: policy intelligence schema.
 create extension if not exists pgcrypto;
 
 create or replace function public.set_updated_at()
@@ -130,7 +131,9 @@ create table if not exists public.carrier_strategy_versions (
   metadata jsonb not null default '{}'::jsonb
 );
 
-create unique index if not exists vaulted_policies_policy_number_carrier_key_idx
+-- Policy numbers are not globally unique across customer accounts. A later
+-- ownership migration adds the correct user-scoped unique index.
+create index if not exists vaulted_policies_policy_number_carrier_key_idx
   on public.vaulted_policies(policy_number, carrier_key);
 create index if not exists vaulted_policy_documents_policy_id_idx on public.vaulted_policy_documents(policy_id);
 create index if not exists vaulted_policy_documents_statement_date_idx on public.vaulted_policy_documents(statement_date);
@@ -143,7 +146,8 @@ create index if not exists vaulted_policy_analytics_analytics_type_idx on public
 create index if not exists vaulted_policy_statements_policy_id_idx on public.vaulted_policy_statements(policy_id);
 create index if not exists vaulted_policy_statements_statement_date_idx on public.vaulted_policy_statements(statement_date);
 create index if not exists vaulted_policy_statements_current_index_strategy_idx on public.vaulted_policy_statements(current_index_strategy);
-create index if not exists carrier_profiles_carrier_key_idx on public.carrier_profiles(carrier_key);
+drop index if exists public.carrier_profiles_carrier_key_idx;
+create unique index carrier_profiles_carrier_key_idx on public.carrier_profiles(carrier_key);
 create index if not exists carrier_strategy_versions_carrier_key_idx on public.carrier_strategy_versions(carrier_key);
 create index if not exists carrier_strategy_versions_product_key_idx on public.carrier_strategy_versions(product_key);
 

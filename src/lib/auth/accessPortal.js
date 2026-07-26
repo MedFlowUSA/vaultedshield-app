@@ -352,6 +352,23 @@ async function signOutFromSupabase() {
   await supabase.auth.signOut();
 }
 
+async function requestPasswordResetWithSupabase(email) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { ok: false, error: "Supabase is not configured." };
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { ok: false, error: "Enter your email address first." };
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}#/login`
+      : undefined;
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
+  if (error) return { ok: false, error: error.message };
+  return {
+    ok: true,
+    message: "If an account exists for that email, a password-reset link has been sent.",
+  };
+}
+
 export function useAccessPortal() {
   const [session, setSession] = useState(() =>
     sanitizeStoredSession(safeReadStorage(SESSION_STORAGE_KEY, buildSignedOutSession()))
@@ -480,6 +497,26 @@ export function useAccessPortal() {
     setSession(buildSignedOutSession());
   }
 
+  async function requestPasswordReset(email) {
+    if (!isSupabaseConfigured()) {
+      return { ok: false, error: "Password recovery requires a configured secure account service." };
+    }
+    return requestPasswordResetWithSupabase(email);
+  }
+
+  async function updatePassword(password) {
+    if (!isSupabaseConfigured()) {
+      return { ok: false, error: "Password updates require a configured secure account service." };
+    }
+    if (String(password || "").length < 8) {
+      return { ok: false, error: "Use a password with at least 8 characters." };
+    }
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.updateUser({ password: String(password) });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, message: "Your password has been updated. You can continue to your workspace." };
+  }
+
   async function reauthenticate({ password } = {}) {
     if (!isSupabaseConfigured()) {
       return { ok: false, error: "Reauthentication is only required for Supabase-backed accounts." };
@@ -571,6 +608,8 @@ export function useAccessPortal() {
     signUp,
     signIn,
     signOut,
+    requestPasswordReset,
+    updatePassword,
     reauthenticate,
     deleteAccount,
     upgradePlan,

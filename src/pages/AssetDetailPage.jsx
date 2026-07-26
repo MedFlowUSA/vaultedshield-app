@@ -38,14 +38,6 @@ function formatDate(value) {
   });
 }
 
-function pillStyle(tone = "neutral") {
-  if (tone === "good") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
-  if (tone === "warning") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" };
-  if (tone === "info") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
-  if (tone === "alert") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
-  return { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" };
-}
-
 function surfaceCard(extra = {}) {
   return {
     background: "#ffffff",
@@ -57,7 +49,7 @@ function surfaceCard(extra = {}) {
 }
 
 export default function AssetDetailPage({ assetId, onNavigate }) {
-  const { isMobile, isTablet } = useResponsiveLayout();
+  const { isTablet } = useResponsiveLayout();
   const { householdState, debug: shellDebug, intelligenceBundle } = usePlatformShellData();
   const technicalAnalysisRef = useRef(null);
   const [bundle, setBundle] = useState({

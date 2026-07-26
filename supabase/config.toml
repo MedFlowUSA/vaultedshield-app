@@ -230,7 +230,7 @@ otp_expiry = 3600
 # Customize signup confirmation email for the VaultedShield brand experience.
 [auth.email.template.confirmation]
 subject = "Confirm your VaultedShield account"
-content_path = "./templates/confirm_signup.html"
+content_path = "./supabase/templates/confirm_signup.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

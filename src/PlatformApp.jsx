@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useRef, useState } from "react";
 import DemoOverlay from "./components/demo/DemoOverlay";
 import ContentContainer from "./components/layout/ContentContainer";
 import Sidebar from "./components/layout/Sidebar";
@@ -19,6 +19,7 @@ const AuthLoginPage = lazy(() => import("./pages/AuthLoginPage"));
 const AuthSignupPage = lazy(() => import("./pages/AuthSignupPage"));
 const TermsOfServicePage = lazy(() => import("./pages/TermsOfServicePage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const FinancialLifePage = lazy(() => import("./pages/FinancialLifePage"));
 const ReviewWorkspacePage = lazy(() => import("./pages/ReviewWorkspacePage"));
 const GuidanceCenterPage = lazy(() => import("./pages/GuidanceCenterPage"));
 const HouseholdGoalsDashboardPage = lazy(() => import("./pages/HouseholdGoalsDashboardPage"));
@@ -236,6 +237,12 @@ function renderRoute(pathname, navigate, accessPortal, returnPath = "/dashboard"
       return <TermsOfServicePage />;
     case "/dashboard":
       return <DashboardPage onNavigate={navigate} />;
+    case "/my-financial-life":
+      return <FinancialLifePage onNavigate={navigate} />;
+    case "/documents":
+      return <VaultPage onNavigate={navigate} />;
+    case "/action-plan":
+      return <ReviewWorkspacePage onNavigate={navigate} />;
     case "/review-workspace":
       return <ReviewWorkspacePage onNavigate={navigate} />;
     case "/guidance":
@@ -298,8 +305,16 @@ export default function PlatformApp() {
   const { isMobile, isTablet } = useResponsiveLayout();
   const accessPortal = useAccessPortal();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const menuButtonRef = useRef(null);
   const [pricingReturnPath, setPricingReturnPath] = useState("/dashboard");
-  const postAuthHome = "/insurance";
+  const rememberedWorkspaceRoute =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("vaultedshield_last_workspace_route")
+      : "";
+  const postAuthHome =
+    rememberedWorkspaceRoute && rememberedWorkspaceRoute.startsWith("/")
+      ? rememberedWorkspaceRoute
+      : "/dashboard";
   const isPublicRoute =
     pathname === "/login" ||
     pathname === "/signup" ||
@@ -318,6 +333,10 @@ export default function PlatformApp() {
     setPricingReturnPath(resolvedPathname === "/pricing" ? pricingReturnPath : resolvedPathname || "/dashboard");
     navigate("/pricing");
   };
+  const closeSidebarAndRestoreFocus = () => {
+    setSidebarOpen(false);
+    window.setTimeout(() => menuButtonRef.current?.focus(), 0);
+  };
   const resolvedPricingReturnPath =
     resolvedPathname === "/pricing" && accessPortal.isAuthenticated
       ? pricingReturnPath || postAuthHome
@@ -335,6 +354,17 @@ export default function PlatformApp() {
   }, [resolvedPathname, useCompactShell]);
 
   useEffect(() => {
+    if (
+      accessPortal.isAuthenticated &&
+      !isPublicRoute &&
+      resolvedPathname !== "/pricing" &&
+      typeof window !== "undefined"
+    ) {
+      window.sessionStorage.setItem("vaultedshield_last_workspace_route", resolvedPathname);
+    }
+  }, [accessPortal.isAuthenticated, isPublicRoute, resolvedPathname]);
+
+  useEffect(() => {
     if (!useCompactShell || !sidebarOpen || typeof document === "undefined") {
       return undefined;
     }
@@ -343,7 +373,7 @@ export default function PlatformApp() {
     document.body.style.overflow = "hidden";
     const handleEscape = (event) => {
       if (event.key === "Escape") {
-        setSidebarOpen(false);
+        closeSidebarAndRestoreFocus();
       }
     };
     document.addEventListener("keydown", handleEscape);
@@ -375,7 +405,7 @@ export default function PlatformApp() {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)" }}>
         <Suspense fallback={<RouteLoadingFallback />}>
-          <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={postAuthHome} />
+          <AuthLoginPage onNavigate={navigate} accessPortal={accessPortal} returnPath={resolvedPathname} />
         </Suspense>
       </div>
     );
@@ -408,11 +438,12 @@ export default function PlatformApp() {
     <PlatformShellDataProvider accessSession={accessPortal.session} authReady={accessPortal.authReady}>
       <DemoModeProvider pathname={resolvedPathname} navigate={navigate}>
         <div style={{ minHeight: "100vh", background: "#e2e8f0", position: "relative", overflowX: "clip" }}>
+          <a className="skip-link" href="#main-content">Skip to main content</a>
           {useCompactShell && sidebarOpen ? (
             <button
               type="button"
               aria-label="Close navigation overlay"
-              onClick={() => setSidebarOpen(false)}
+              onClick={closeSidebarAndRestoreFocus}
               style={{
                 position: "fixed",
                 inset: 0,
@@ -436,7 +467,7 @@ export default function PlatformApp() {
               onUpgrade={handleOpenPricing}
               isCompact
               isOpen={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
+              onClose={closeSidebarAndRestoreFocus}
             />
           ) : null}
           <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -467,6 +498,7 @@ export default function PlatformApp() {
                 showSidebarToggle={useCompactShell}
                 onToggleSidebar={() => setSidebarOpen((current) => !current)}
                 isCompact={isMobile}
+                menuButtonRef={menuButtonRef}
               />
               <div
                 style={{

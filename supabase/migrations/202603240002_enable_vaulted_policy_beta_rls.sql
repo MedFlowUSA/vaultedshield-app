@@ -1,3 +1,4 @@
+-- Ordered migration: transitional policy RLS.
 alter table if exists public.vaulted_policies enable row level security;
 alter table if exists public.vaulted_policy_documents enable row level security;
 alter table if exists public.vaulted_policy_snapshots enable row level security;

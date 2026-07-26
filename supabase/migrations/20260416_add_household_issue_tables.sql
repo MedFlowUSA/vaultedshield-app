@@ -57,7 +57,7 @@ create unique index if not exists household_issues_identity_idx
     issue_type,
     issue_key,
     coalesce(asset_id, '00000000-0000-0000-0000-000000000000'::uuid),
-    coalesce(record_id, '')
+    coalesce(record_id, '00000000-0000-0000-0000-000000000000'::uuid)
   );
 
 create index if not exists household_issues_household_id_idx

@@ -1,3 +1,4 @@
+-- Ordered migration: property valuation fields.
 alter table if exists public.properties
   add column if not exists street_1 text null,
   add column if not exists street_2 text null,

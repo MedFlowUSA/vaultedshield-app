@@ -16,6 +16,8 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
     email: accessPortal?.session?.email || "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [recoveryForm, setRecoveryForm] = useState({ password: "", confirmPassword: "" });
 
   useEffect(() => {
     if (landingState.status === "verification_complete" || landingState.status === "error") {
@@ -24,6 +26,10 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
   }, [landingState.status]);
 
   async function handleEnterPlatform() {
+    if (!form.email.trim() || !form.password) {
+      setRefreshError("Enter both your email address and password.");
+      return;
+    }
     const loginResult = await accessPortal?.signIn({
       email: form.email,
       password: form.password,
@@ -41,7 +47,35 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
     setEntering(false);
   }
 
+  async function handleForgotPassword() {
+    setRefreshError("");
+    setRefreshNote("");
+    const result = await accessPortal?.requestPasswordReset?.(form.email);
+    if (!result?.ok) {
+      setRefreshError(result?.error || "Password recovery could not be started.");
+      return;
+    }
+    setRefreshNote(result.message);
+  }
+
+  async function handlePasswordUpdate() {
+    if (recoveryForm.password !== recoveryForm.confirmPassword) {
+      setRefreshError("The passwords do not match.");
+      return;
+    }
+    const result = await accessPortal?.updatePassword?.(recoveryForm.password);
+    if (!result?.ok) {
+      setRefreshError(result?.error || "The password could not be updated.");
+      return;
+    }
+    clearAuthLandingStateFromUrl();
+    setLandingState({ status: "idle", message: "" });
+    setRefreshError("");
+    setRefreshNote(result.message);
+  }
+
   const showVerificationLanding = landingState.status === "verification_complete";
+  const showPasswordRecovery = landingState.status === "password_recovery";
 
   return (
     <AuthPortalLayout
@@ -53,14 +87,48 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
       left={
         <>
           <AuthPrimaryShell
-            title={showVerificationLanding ? "Email Confirmed" : "Account Login"}
+            title={showPasswordRecovery ? "Choose A New Password" : showVerificationLanding ? "Email Confirmed" : "Account Login"}
             subtitle={
-              showVerificationLanding
+              showPasswordRecovery
+                ? "Use a new, unique password with at least 8 characters."
+                : showVerificationLanding
                 ? "Your VaultedShield account is verified. Open the protected workspace whenever you're ready."
                 : "Enter the platform and continue where you left off."
             }
           >
-            {showVerificationLanding ? (
+            {showPasswordRecovery ? (
+              <form onSubmit={(event) => { event.preventDefault(); handlePasswordUpdate(); }} style={{ display: "grid", gap: "14px" }}>
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  New password
+                  <input
+                    value={recoveryForm.password}
+                    onChange={(event) => setRecoveryForm((current) => ({ ...current, password: event.target.value }))}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  Confirm new password
+                  <input
+                    value={recoveryForm.confirmPassword}
+                    onChange={(event) => setRecoveryForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <button type="button" onClick={() => setShowPassword((current) => !current)} style={authActionStyle(false)}>
+                  {showPassword ? "Hide passwords" : "Show passwords"}
+                </button>
+                <button type="submit" style={authActionStyle(true)}>Update Password</button>
+                {refreshError ? <div role="alert" style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
+              </form>
+            ) : showVerificationLanding ? (
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
                   style={{
@@ -147,19 +215,36 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                   >
                     Sign in to open your protected workspace, policy review flow, and cross-module operating queue.
                   </div>
-                  <input
-                    value={form.email}
-                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                    placeholder="Email address"
-                    style={authInputStyle()}
-                  />
-                  <input
-                    value={form.password}
-                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                    placeholder="Password"
-                    type="password"
-                    style={authInputStyle()}
-                  />
+                  <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                    Email address
+                    <input
+                      value={form.email}
+                      onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                      type="email"
+                      autoComplete="email"
+                      required
+                      style={authInputStyle()}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                    Password
+                    <input
+                      value={form.password}
+                      onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      required
+                      style={authInputStyle()}
+                    />
+                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => setShowPassword((current) => !current)} style={authActionStyle(false)}>
+                      {showPassword ? "Hide password" : "Show password"}
+                    </button>
+                    <button type="button" onClick={handleForgotPassword} style={authActionStyle(false)}>
+                      Forgot password?
+                    </button>
+                  </div>
                   <button
                     type="submit"
                     disabled={entering}
@@ -174,8 +259,8 @@ export default function AuthLoginPage({ onNavigate, accessPortal, returnPath = "
                   <button type="button" onClick={() => onNavigate("/signup")} style={authActionStyle(false)}>
                     Create Account
                   </button>
-                  {refreshNote ? <div style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
-                  {refreshError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
+                  {refreshNote ? <div role="status" aria-live="polite" style={{ color: "#166534", fontSize: "14px" }}>{refreshNote}</div> : null}
+                  {refreshError ? <div role="alert" style={{ color: "#991b1b", fontSize: "14px" }}>{refreshError}</div> : null}
               </form>
             )}
           </AuthPrimaryShell>

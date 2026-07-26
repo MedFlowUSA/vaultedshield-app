@@ -1,3 +1,4 @@
+-- Ordered migration: property analytics.
 create table if not exists public.property_stack_analytics (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references public.households(id) on delete cascade,

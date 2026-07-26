@@ -1,3 +1,4 @@
+-- Ordered migration: household upload scope.
 alter table if exists public.asset_documents
   alter column asset_id drop not null;
 

@@ -346,7 +346,6 @@ export default function BankingHubPage({ onNavigate }) {
   );
 
   const heroScore = readiness.status === "Ready" ? 84 : readiness.status === "Building" ? 62 : bankingAssets.length > 0 ? 48 : 34;
-  const heroTone = heroScore >= 80 ? "good" : heroScore >= 60 ? "info" : heroScore >= 45 ? "warning" : "alert";
 
   const checkpoints = useMemo(() => {
     const hasAccounts = bankingAssets.length > 0;
@@ -385,6 +384,19 @@ export default function BankingHubPage({ onNavigate }) {
   }, [bankingAssets.length, bankingContacts.length, connectedPortals.length, readiness.metrics.emergencyPortals]);
 
   const readyCount = checkpoints.filter((item) => item.status === "ready").length;
+  const scrollToCommand = () => commandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToAccounts = () => accountsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const handleTileAction = (action) => {
+    if (action === "portals") {
+      onNavigate?.("/portals");
+      return;
+    }
+    if (action === "contacts") {
+      onNavigate?.("/contacts");
+      return;
+    }
+    scrollToCommand();
+  };
 
   return (
     <div style={{ display: "grid", gap: "28px" }}>
@@ -451,7 +463,7 @@ export default function BankingHubPage({ onNavigate }) {
           <ActionButton label="Connect Portal" primary onClick={() => onNavigate?.("/portals")} />
           <button
             type="button"
-            onClick={() => accountsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={scrollToAccounts}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             See Accounts
@@ -476,7 +488,7 @@ export default function BankingHubPage({ onNavigate }) {
             tone: readyCount === 3 ? "good" : readyCount >= 1 ? "warning" : "alert",
             statusLabel: readyCount === 3 ? "All Clear" : "Needs Work",
             actionLabel: "See Checkpoints",
-            onAction: () => commandRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "command",
           },
           {
             kicker: "Emergency Scenario",
@@ -486,7 +498,7 @@ export default function BankingHubPage({ onNavigate }) {
             tone: connectedPortals.length > 0 ? "good" : "alert",
             statusLabel: connectedPortals.length > 0 ? "Mapped" : "Critical Gap",
             actionLabel: "Map Portals",
-            onAction: () => onNavigate?.("/portals"),
+            action: "portals",
           },
           {
             kicker: "Institution Support",
@@ -496,7 +508,7 @@ export default function BankingHubPage({ onNavigate }) {
             tone: bankingContacts.length > 0 ? "good" : "warning",
             statusLabel: bankingContacts.length > 0 ? "Covered" : "Building",
             actionLabel: "Manage Contacts",
-            onAction: () => onNavigate?.("/contacts"),
+            action: "contacts",
           },
         ].map((tile) => (
           <div
@@ -518,7 +530,7 @@ export default function BankingHubPage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

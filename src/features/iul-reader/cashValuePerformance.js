@@ -5,12 +5,6 @@ function formatCurrency(value) {
   return `$${Math.abs(num).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function formatPercent(value) {
-  const num = Number(value);
-  if (value === null || value === undefined || isNaN(num)) return null;
-  return `${(num * 100).toFixed(1)}%`;
-}
-
 const VEHICLE_REFERENCE = [
   {
     key: "iul",
@@ -131,8 +125,6 @@ function buildPerformanceMetrics(results) {
   const chargeSummary = results.normalizedAnalytics?.charge_summary || {};
   const performanceSummary = results.normalizedAnalytics?.performance_summary || {};
   const trend = results.normalizedAnalytics?.trend_summary || {};
-  const statementResults = Array.isArray(results.statementResults) ? results.statementResults : [];
-
   // Cash value efficiency estimate (cash value / estimated total premiums)
   const cashValueRaw = parseFloat(values.cash_value?.value || values.accumulation_value?.value || 0);
   const plannedPremiumRaw = parseFloat(funding.planned_premium?.value || funding.annual_target_premium?.value || 0);

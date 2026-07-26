@@ -17,7 +17,7 @@ export function getRealPropertyValuationProviderDiagnostics() {
     import.meta.env.VITE_PROPERTY_VALUATION_API_URL ||
     (typeof window !== "undefined" ? "/api/property-comps" : "");
   const providerKind = (import.meta.env.VITE_PROPERTY_VALUATION_PROVIDER || "attom_proxy").trim().toLowerCase();
-  const allowFallback = String(import.meta.env.VITE_PROPERTY_VALUATION_ALLOW_SIMULATED_FALLBACK || "true").toLowerCase() !== "false";
+  const allowFallback = String(import.meta.env.VITE_PROPERTY_VALUATION_ALLOW_SIMULATED_FALLBACK || "false").toLowerCase() === "true";
 
   return {
     enabled: Boolean(endpoint),

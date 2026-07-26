@@ -787,7 +787,7 @@ export default function RetirementAccountDetailPage({ retirementAccountId, onNav
   const retirementHeroScore = Math.round(
     Number.isFinite(Number(retirementRead.confidence)) ? Number(retirementRead.confidence) * 100 : 52
   );
-  const retirementHeroTone =
+  const _retirementHeroTone =
     retirementPageFascia?.status === "Strong"
       ? "good"
       : retirementPageFascia?.status === "Stable"

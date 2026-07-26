@@ -247,7 +247,7 @@ export default function RetirementUploadPage({ onNavigate }) {
         : readiness.readinessScore >= 40
           ? "warning"
           : "alert";
-  const retirementUploadHeadline =
+  const _retirementUploadHeadline =
     successful.length > 0
       ? "Retirement picture is beginning to take shape"
       : "Start with a few retirement statements first";
@@ -255,6 +255,30 @@ export default function RetirementUploadPage({ onNavigate }) {
     successful.length > 0
       ? `${successful.length} retirement statement${successful.length === 1 ? "" : "s"} have been read, and VaultedShield is using those values to build a first planning view.`
       : "This page is the easiest place to turn retirement PDFs into a plain-English planning read before you go deeper.";
+
+  function scrollToUploadSection() {
+    uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToGoalSection() {
+    goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToReadinessSection() {
+    readinessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleRetirementTileAction(action) {
+    if (action === "upload") {
+      scrollToUploadSection();
+      return;
+    }
+    if (action === "goal") {
+      scrollToGoalSection();
+      return;
+    }
+    scrollToReadinessSection();
+  }
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
@@ -293,10 +317,10 @@ export default function RetirementUploadPage({ onNavigate }) {
           ))}
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#6d28d9", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+          <button type="button" onClick={scrollToUploadSection} style={{ padding: "10px 16px", borderRadius: "12px", border: "none", background: "#6d28d9", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
             Add Retirement PDFs
           </button>
-          <button type="button" onClick={() => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+          <button type="button" onClick={scrollToGoalSection} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
             Adjust Planning Target
           </button>
           <button type="button" onClick={() => onNavigate?.("/retirement")} style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
@@ -315,7 +339,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             tone: successful.length > 0 ? "good" : "info",
             statusLabel: "Simple Read",
             actionLabel: "Open Intake",
-            onAction: () => uploadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "upload",
           },
           {
             kicker: "What To Adjust",
@@ -325,7 +349,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             tone: "warning",
             statusLabel: "Guided Focus",
             actionLabel: "Open Goal Inputs",
-            onAction: () => goalSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "goal",
           },
           {
             kicker: "What This Produces",
@@ -335,7 +359,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             tone: readinessTone,
             statusLabel: "Needs Review",
             actionLabel: "See Readiness",
-            onAction: () => readinessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "readiness",
           },
         ].map((tile) => (
           <div key={tile.kicker} style={{ padding: "20px", borderRadius: "18px", background: "#ffffff", border: "1px solid #e2e8f0", display: "grid", gap: "12px", alignContent: "start" }}>
@@ -346,7 +370,7 @@ export default function RetirementUploadPage({ onNavigate }) {
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleRetirementTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

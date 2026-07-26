@@ -8,8 +8,11 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
     householdName: "",
     email: "",
     password: "",
+    confirmPassword: "",
+    acceptedTerms: false,
     tier: "free",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitNote, setSubmitNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -29,6 +32,22 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
     setSubmitError("");
     setSubmitNote("");
     setPendingConfirmation(null);
+    if (!form.householdName.trim() || !form.email.trim()) {
+      setSubmitError("Enter a household name and primary email address.");
+      return;
+    }
+    if (form.password.length < 8) {
+      setSubmitError("Use a password with at least 8 characters.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setSubmitError("The passwords do not match.");
+      return;
+    }
+    if (!form.acceptedTerms) {
+      setSubmitError("Review and accept the Terms of Service and Privacy Policy.");
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await accessPortal?.signUp(form);
@@ -39,7 +58,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
             householdName: form.householdName.trim() || "Working Household",
             tierLabel: ACCESS_TIERS[form.tier]?.label || "Free",
           });
-          setForm((current) => ({ ...current, password: "" }));
+          setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
           setSubmitNote(result.message || "Check your email to confirm your VaultedShield account before signing in.");
           return;
         }
@@ -55,7 +74,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
           householdName: form.householdName.trim() || "Working Household",
           tierLabel: ACCESS_TIERS[form.tier]?.label || "Free",
         });
-        setForm((current) => ({ ...current, password: "" }));
+        setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
         return;
       }
       setSubmitError(result?.error || "Account creation could not be completed.");
@@ -171,25 +190,71 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                 >
                   Create your VaultedShield account to unlock the protected workspace, policy review flow, and guided household operating system.
                 </div>
-                <input
-                  value={form.householdName}
-                  onChange={(event) => setForm((current) => ({ ...current, householdName: event.target.value }))}
-                  placeholder="Household name"
-                  style={authInputStyle()}
-                />
-                <input
-                  value={form.email}
-                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                  placeholder="Primary email"
-                  style={authInputStyle()}
-                />
-                <input
-                  value={form.password}
-                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                  placeholder="Password"
-                  type="password"
-                  style={authInputStyle()}
-                />
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  Household name
+                  <input
+                    value={form.householdName}
+                    onChange={(event) => setForm((current) => ({ ...current, householdName: event.target.value }))}
+                    autoComplete="organization"
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  Primary email
+                  <input
+                    value={form.email}
+                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                    type="email"
+                    autoComplete="email"
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  Password
+                  <input
+                    value={form.password}
+                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={8}
+                    aria-describedby="signup-password-requirements"
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <div id="signup-password-requirements" style={{ color: "#64748b", fontSize: "13px" }}>
+                  Use at least 8 characters. A longer, unique password is recommended.
+                </div>
+                <label style={{ display: "grid", gap: "6px", color: "#334155", fontWeight: 700 }}>
+                  Confirm password
+                  <input
+                    value={form.confirmPassword}
+                    onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    style={authInputStyle()}
+                  />
+                </label>
+                <button type="button" onClick={() => setShowPassword((current) => !current)} style={authActionStyle(false)}>
+                  {showPassword ? "Hide passwords" : "Show passwords"}
+                </button>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", color: "#334155", lineHeight: 1.6 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.acceptedTerms}
+                    onChange={(event) => setForm((current) => ({ ...current, acceptedTerms: event.target.checked }))}
+                    required
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <button type="button" onClick={() => onNavigate("/terms-of-service")} style={{ border: 0, padding: 0, minHeight: 0, background: "transparent", color: "#1d4ed8", cursor: "pointer", textDecoration: "underline" }}>Terms of Service</button>
+                    {" "}and acknowledge the{" "}
+                    <button type="button" onClick={() => onNavigate("/privacy-policy")} style={{ border: 0, padding: 0, minHeight: 0, background: "transparent", color: "#1d4ed8", cursor: "pointer", textDecoration: "underline" }}>Privacy Policy</button>.
+                  </span>
+                </label>
                 <button
                   type="submit"
                   disabled={submitting || retryCountdown > 0}
@@ -215,7 +280,7 @@ export default function AuthSignupPage({ onNavigate, accessPortal, returnPath = 
                   </div>
                 ) : null}
                 {submitNote && retryCountdown <= 0 ? <div style={{ color: "#166534", fontSize: "14px" }}>{submitNote}</div> : null}
-                {submitError ? <div style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
+                {submitError ? <div role="alert" style={{ color: "#991b1b", fontSize: "14px" }}>{submitError}</div> : null}
               </form>
             )}
           </AuthPrimaryShell>

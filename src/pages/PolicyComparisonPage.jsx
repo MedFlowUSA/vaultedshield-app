@@ -853,6 +853,27 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
     }
   }
 
+  function scrollToComparisonSection() {
+    comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function toggleComparisonReport() {
+    setShowComparisonReport((current) => !current);
+    reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleComparisonTileAction(action) {
+    if (action === "comparison") {
+      scrollToComparisonSection();
+      return;
+    }
+    if (action === "report") {
+      toggleComparisonReport();
+      return;
+    }
+    onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance");
+  }
+
   const comparisonHeroTone = getTone(comparisonPolicy?.interpretation?.label || basePolicy?.interpretation?.label);
   const strongerPolicyLabel = comparisonPolicy?.product || "The comparison policy";
   const currentPolicyLabel = basePolicy?.product || "the current policy";
@@ -925,10 +946,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
           </button>
           <button
             type="button"
-            onClick={() => {
-              setShowComparisonReport((current) => !current);
-              reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
+            onClick={toggleComparisonReport}
             style={{ padding: "10px 16px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#ffffff", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}
           >
             {showComparisonReport ? "Hide Comparison Report" : "Open Comparison Report"}
@@ -959,7 +977,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             tone: comparisonHeroTone,
             statusLabel: "Simple Read",
             actionLabel: "Open Comparison",
-            onAction: () => comparisonSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            action: "comparison",
           },
           {
             kicker: "Evidence Path",
@@ -969,10 +987,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             tone: "info",
             statusLabel: "Well Supported",
             actionLabel: showComparisonReport ? "Hide Report" : "Open Report",
-            onAction: () => {
-              setShowComparisonReport((current) => !current);
-              reportSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-            },
+            action: "report",
           },
           {
             kicker: "Best Next Step",
@@ -982,7 +997,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             tone: "warning",
             statusLabel: "Guided Action",
             actionLabel: policyId ? "Back To Policy" : "Open Insurance",
-            onAction: () => onNavigate?.(policyId ? `/insurance/${policyId}` : "/insurance"),
+            action: "policy",
           },
         ].map((tile) => (
           <div
@@ -996,7 +1011,7 @@ export default function PolicyComparisonPage({ policyId, comparePolicyId = "", o
             <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>{tile.title}</div>
             <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>{tile.detail}</div>
             <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>{tile.metric}</div>
-            <button type="button" onClick={tile.onAction} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
+            <button type="button" onClick={() => handleComparisonTileAction(tile.action)} style={{ padding: "9px 14px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", fontWeight: 700, fontSize: "13px", color: "#0f172a", cursor: "pointer", textAlign: "left" }}>
               {tile.actionLabel}
             </button>
           </div>

@@ -1,3 +1,4 @@
+-- Ordered migration: child-table RLS.
 create or replace function public.vs_can_access_asset(target_asset_id uuid)
 returns boolean
 language sql

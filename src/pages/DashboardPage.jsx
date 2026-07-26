@@ -1272,6 +1272,54 @@ export default function DashboardPage({ onNavigate }) {
       { id: "fallback-retirement", title: "Retirement check-in", dueLabel: "Review soon", route: "/retirement" },
     ];
   }, [householdPriorityEngine.priorities]);
+  const firstChangedReviewItem = changedSinceReviewItems[0] || null;
+  const firstPriorityRow = priorityRows[0] || null;
+  const reviewPulseRows = [
+    {
+      id: "changed",
+      label: "Changed Since Review",
+      value: displayValue(changedSinceReviewItems.length),
+      detail: firstChangedReviewItem
+        ? firstChangedReviewItem.label || firstChangedReviewItem.title || "A reviewed item has new evidence and needs another look."
+        : "No reviewed item has new evidence yet.",
+      actionLabel: changedSinceReviewItems.length > 0 ? "Open Changes" : "Save Snapshot",
+      action: changedSinceReviewItems.length > 0 ? "digest" : "snapshot",
+      tone: changedSinceReviewItems.length > 0 ? "warning" : "good",
+    },
+    {
+      id: "active",
+      label: "Open Review Queue",
+      value: displayValue(activeQueueItems.length),
+      detail: firstPriorityRow?.title || "No urgent cross-household review item is standing out right now.",
+      actionLabel: "Open Priorities",
+      action: "priorities",
+      tone: activeQueueItems.length > 0 ? "info" : "good",
+    },
+    {
+      id: "documents",
+      label: "Document Blockers",
+      value: displayValue(pendingDocumentsCount),
+      detail:
+        pendingDocumentsCount > 0
+          ? "Some household reads are waiting on stronger document support."
+          : "No pending-document workflow blockers are active.",
+      actionLabel: pendingDocumentsCount > 0 ? "Upload" : "Vault",
+      action: pendingDocumentsCount > 0 ? "upload" : "vault",
+      tone: pendingDocumentsCount > 0 ? "warning" : "good",
+    },
+    {
+      id: "followup",
+      label: "Follow-Ups",
+      value: displayValue(followUpCount),
+      detail:
+        followUpCount > 0
+          ? "Follow-up items are ready for a second pass."
+          : "No follow-up items are waiting right now.",
+      actionLabel: followUpCount > 0 ? "Review" : "Reports",
+      action: followUpCount > 0 ? "workspace" : "reports",
+      tone: followUpCount > 0 ? "warning" : "info",
+    },
+  ];
   const showLoadingShell =
     (loadingStates.household || loadingStates.householdData) && !counts && !intelligenceBundle;
   const sectionPadding = isMobile ? "20px 16px" : isTablet ? "24px 22px" : "28px 30px";
@@ -1338,6 +1386,33 @@ export default function DashboardPage({ onNavigate }) {
     if (typeof window !== "undefined") {
       window.setTimeout(() => window.print(), 80);
     }
+  }
+
+  function handleReviewPulseAction(action) {
+    if (action === "priorities") {
+      scrollToDashboardSection("household-priority");
+      return;
+    }
+    if (action === "digest" || action === "snapshot") {
+      if (action === "snapshot") {
+        handleRefreshDigestSnapshot();
+      }
+      scrollToDashboardSection("household-review-digest");
+      return;
+    }
+    if (action === "upload") {
+      onNavigate?.("/upload-center");
+      return;
+    }
+    if (action === "vault") {
+      onNavigate?.("/vault");
+      return;
+    }
+    if (action === "reports") {
+      onNavigate?.("/reports");
+      return;
+    }
+    onNavigate?.("/review-workspace");
   }
 
   const blankHousehold = useMemo(
@@ -2135,6 +2210,82 @@ export default function DashboardPage({ onNavigate }) {
                   ))}
                 </div>
               </div>
+            </div>
+          </DashboardCard>
+        </section>
+
+        <section>
+          <DashboardCard
+            style={{
+              padding: isMobile ? "20px 18px" : "22px 24px",
+              display: "grid",
+              gap: "18px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "14px",
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "grid", gap: "6px", maxWidth: "620px" }}>
+                <div style={{ fontSize: "12px", color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 800 }}>
+                  Review Pulse
+                </div>
+                <div style={{ fontSize: "21px", fontWeight: 800, color: "#0f172a", lineHeight: "1.3" }}>
+                  What changed, what is still open, and where to go next.
+                </div>
+              </div>
+              <button type="button" onClick={() => handleReviewPulseAction("workspace")} style={{ ...fasciaButtonStyle(false), width: isMobile ? "100%" : "auto" }}>
+                Open Review Workspace
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+                gap: "12px",
+              }}
+            >
+              {reviewPulseRows.map((item) => {
+                const palette = getReadinessPalette(item.tone);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleReviewPulseAction(item.action)}
+                    style={{
+                      minHeight: "172px",
+                      padding: "16px",
+                      borderRadius: "18px",
+                      border: `1px solid ${palette.border}`,
+                      background: palette.soft,
+                      display: "grid",
+                      gap: "10px",
+                      alignContent: "space-between",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                        <div style={{ color: palette.text, fontSize: "12px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          {item.label}
+                        </div>
+                        <div style={{ color: palette.text, fontSize: "22px", fontWeight: 900, lineHeight: 1 }}>
+                          {item.value}
+                        </div>
+                      </div>
+                      <div style={{ color: "#334155", fontSize: "13px", lineHeight: "1.55" }}>{item.detail}</div>
+                    </div>
+                    <div style={{ color: palette.text, fontSize: "13px", fontWeight: 800 }}>{item.actionLabel}</div>
+                  </button>
+                );
+              })}
             </div>
           </DashboardCard>
         </section>
